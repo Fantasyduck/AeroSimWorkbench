@@ -1,0 +1,2 @@
+PySide6-Essentials>=6.10,<7
+vtk>=9.6,<10
