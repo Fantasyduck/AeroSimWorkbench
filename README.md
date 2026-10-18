@@ -22,7 +22,7 @@ cmake --build build-cli --parallel
 ./build-cli/aerosim_cli --mock-once
 ```
 
-Windows 上将可执行文件路径改为 `build\Debug\aerosim_cli.exe` 等实际构建配置路径。找不到 Qt 时，设置 `CMAKE_PREFIX_PATH` 到 Qt 安装根目录，或设置 `Qt5_DIR` 到 `lib/cmake/Qt5`。VTK 8.2 和 SARibbon 的查找与链接由 C/B 模块提交时加入其独立目标；它们缺失不会被误报为本阶段的成功验证。
+Windows 上将可执行文件路径改为 `build\Release\aerosim_cli.exe` 等实际构建配置路径。CMake 3.18 的 CTest 需先进入 `build` 目录，再运行 `ctest -C Release --output-on-failure`。找不到 Qt 时，设置 `CMAKE_PREFIX_PATH` 到 Qt 安装根目录，或设置 `Qt5_DIR` 到 `lib/cmake/Qt5`。VTK 8.2 和 SARibbon 的查找与链接由 C/B 模块提交时加入其独立目标；它们缺失不会被误报为本阶段的成功验证。
 
 ## 模块边界
 

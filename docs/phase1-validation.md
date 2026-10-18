@@ -14,4 +14,6 @@
 
 本机没有可用于 macOS 构建的 VTK 8.2 或 SARibbon，也没有 Qt 5.12.12。下载目录可见 Windows 平台的 SARibbon 二进制包，但不能用于本机 arm64 构建。因此本次只能证明 Qt 5.15.19 下的 A 阶段骨架，不能宣称目标版本全栈构建通过。正式接入 B/C 前，应安装同一编译器/架构的 Qt 5.12.12、VTK 8.2 和 SARibbon，并分别提供 `Qt5_DIR`、`VTK_DIR`、`SARibbonBar_DIR` 或 `CMAKE_PREFIX_PATH`，由 B/C 的独立 CMake 目标完成链接验证。
 
+目标 Windows 10 主机 `10.129.62.253`：`F:\AeroSimWorkbench` 更新到提交 `627cc4c` 后，使用 CMake 3.18.2、Visual Studio 2017/MSVC 19.16 和 `C:\Qt\5.12.12\msvc2017_64` 配置成功；Release 模式编译 GUI、CLI 成功。在 `F:\AeroSimWorkbench\build` 运行 `ctest -C Release --output-on-failure`，2/2 测试通过。此记录仅覆盖 Qt 5.12.12 骨架，不覆盖 VTK 8.2 或 SARibbon 的正式模块。
+
 以上 Mock 事件不代表真实参数校验、求解器执行、任务持久化或结果有效性。
