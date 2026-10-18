@@ -10,11 +10,11 @@ namespace aerosim {
 
 MockWindow::MockWindow(QWidget *parent) : QMainWindow(parent)
 {
-    setWindowTitle(QStringLiteral("AeroSimWorkbench — MOCK GUI shell"));
+    setWindowTitle(QStringLiteral("AeroSimWorkbench - MOCK GUI shell"));
     resize(960, 620);
     auto *central = new QWidget(this);
     auto *layout = new QVBoxLayout(central);
-    layout->addWidget(new QLabel(QStringLiteral("A-owned startup shell · B's MainWindow will replace this"), central));
+    layout->addWidget(new QLabel(QStringLiteral("A-owned startup shell; B's MainWindow will replace this"), central));
     sendButton_ = new QPushButton(QStringLiteral("Send MOCK TaskCommand"), central);
     sendButton_->setEnabled(false);
     layout->addWidget(sendButton_);
