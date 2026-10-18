@@ -23,6 +23,7 @@
 │   ├── mock/MockWorkflowService.{h,cpp}
 │   ├── mock/MockTaskService.{h,cpp}
 │   ├── ui_mock/MockWindow.{h,cpp}
+│   ├── infrastructure/demo/PostprocessDemoLauncher.{h,cpp}
 │   ├── main.cpp
 │   └── cli_main.cpp
 ├── postprocess_demo/  # 原 Python/Vtk 演示，未改动
@@ -30,6 +31,8 @@
 ```
 
 `aerosim_contracts` 只依赖 Qt Core；`aerosim_application` 和 `aerosim_mock` 也只依赖 Qt Core。`aerosim_ui_mock` 只依赖公共契约和 Qt Widgets。CLI 不链接 Qt Widgets。模块可单独替换，顶层只负责装配。
+
+原有 Python/PySide6/VTK 后处理窗口由 `PostprocessDemoLauncher` 在独立进程中启动；MockWindow 只发出用户操作信号，`main.cpp` 完成系统级连接。启动器从可执行文件目录向上寻找项目根目录，可用 `AEROSIM_PROJECT_ROOT` 指定根目录；并使用项目 `.venv` 中的 Python。主窗口退出时会结束其启动的子进程。该适配只服务现有 UI 演示，不取代 C/B 的正式 VTK/SARibbon 模块。
 
 ## 公共契约
 

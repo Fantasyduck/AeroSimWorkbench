@@ -26,8 +26,9 @@ target_link_libraries(aerosim_cli PRIVATE aerosim_application aerosim_mock Qt5::
 
 if(AEROSIM_BUILD_GUI)
     add_subdirectory(src/ui_mock)
+    add_subdirectory(src/infrastructure/demo)
     add_executable(aerosim_gui src/main.cpp)
-    target_link_libraries(aerosim_gui PRIVATE aerosim_application aerosim_mock aerosim_ui_mock Qt5::Widgets)
+    target_link_libraries(aerosim_gui PRIVATE aerosim_application aerosim_mock aerosim_ui_mock aerosim_postprocess_demo_launcher Qt5::Widgets)
 endif()
 
 if(AEROSIM_BUILD_TESTS)

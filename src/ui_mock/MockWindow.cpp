@@ -18,6 +18,9 @@ MockWindow::MockWindow(QWidget *parent) : QMainWindow(parent)
     sendButton_ = new QPushButton(QStringLiteral("Send MOCK TaskCommand"), central);
     sendButton_->setEnabled(false);
     layout->addWidget(sendButton_);
+    postprocessButton_ = new QPushButton(QStringLiteral("Open post-processing VTK demo"), central);
+    layout->addWidget(postprocessButton_);
+    connect(postprocessButton_, &QPushButton::clicked, this, &MockWindow::postprocessDemoRequested);
     auto *viewport = new QWidget(central);
     viewportLayout_ = new QVBoxLayout(viewport);
     layout->addWidget(viewport, 1);
@@ -26,6 +29,11 @@ MockWindow::MockWindow(QWidget *parent) : QMainWindow(parent)
     events_->setMaximumHeight(150);
     layout->addWidget(events_);
     setCentralWidget(central);
+}
+
+void MockWindow::appendMessage(const QString &message)
+{
+    events_->append(message.toHtmlEscaped());
 }
 
 bool MockWindow::insertWidget(WidgetSlot slot, QWidget *widget)

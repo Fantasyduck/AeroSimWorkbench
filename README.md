@@ -1,6 +1,6 @@
 # AeroSimWorkbench
 
-本仓库当前包含两部分：A 负责的 C++/Qt 主工程骨架，以及此前的 [Python 后处理前端 Demo](postprocess_demo/README.md)。后者保留作独立原型，尚未接入 C++ 主工程。
+本仓库当前包含 A 负责的 C++/Qt 主工程骨架，以及此前的 [Python 后处理前端 Demo](postprocess_demo/README.md)。骨架窗口提供入口，通过独立进程打开原有 PySide6/VTK 演示窗口；这仍是前端原型，不是正式 C++ 后处理模块。
 
 ## 第一阶段运行
 
@@ -35,5 +35,7 @@ GUI / CLI entry ──> ApplicationController ──> contracts <── Mock ser
 ```
 
 `ApplicationController` 只拥有服务对象并建立 G→F、F→G 的排队连接，不执行任何工作流判断或任务调度。GUI/CLI 都使用 `IWorkflowService` 和 `ITaskService`。跨线程消息按值传递，Qt 自定义类型在连接前注册；界面必须留在 GUI 线程。Mock 任务不会启动求解器，也不持久化记录。
+
+运行 GUI 时点击 **Open post-processing VTK demo** 可打开独立的后处理窗口。需先在项目根目录的 `.venv` 安装 `postprocess_demo/requirements.txt`；Windows 使用 `.venv\Scripts\pythonw.exe`，其他平台使用 `.venv/bin/python`。C++ 的 Qt 5 与 Python Demo 的 Qt 6/VTK 9 分属不同进程，不会混装。可用 `aerosim_gui --postprocess-smoke` 验证跨进程启动及原 Demo 自测；该命令测试完会自动退出。
 
 详细契约、目录结构、接入方法和未完成工作见 [第一阶段集成说明](docs/phase1-integration.md)；实际测试结果见 [构建与运行记录](docs/phase1-validation.md)。Windows 运行目录的打包与启动步骤见 [部署说明](docs/windows-deployment.md)。
