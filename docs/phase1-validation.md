@@ -16,4 +16,6 @@
 
 目标 Windows 10 主机：`F:\AeroSimWorkbench` 更新后，使用 CMake 3.18.2、Visual Studio 2017/MSVC 19.16 和 `C:\Qt\5.12.12\msvc2017_64` 配置成功；Release 模式编译 GUI、CLI 成功。在 `F:\AeroSimWorkbench\build` 运行 `ctest -C Release --output-on-failure`，2/2 测试通过。用 `windeployqt` 将 Qt 运行库打包到 `dist`；在未设置 Qt PATH 的新会话运行 `dist\aerosim_cli.exe --mock-once` 成功。`dist\aerosim_gui.exe` 通过交互式任务在登录用户的桌面会话 1 中持续运行。此记录仅覆盖 Qt 5.12.12 骨架，不覆盖 VTK 8.2 或 SARibbon 的正式模块。
 
+后处理 Demo 接入后重新编译了 Qt 5.12.12 Release 目标，CTest 仍为 2/2 通过。在桌面会话 1 中从打包后的 `dist\aerosim_gui.exe --postprocess-smoke` 发起 Python 子进程，观察到子进程运行，原 Demo 自测完成且整体退出码为 0；随后恢复了常驻 C++ 主窗口。后处理仍为单独的 PySide6/VTK 9 演示进程，不属于正式 C++ VTK 8.2 模块。
+
 以上 Mock 事件不代表真实参数校验、求解器执行、任务持久化或结果有效性。
