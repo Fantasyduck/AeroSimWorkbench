@@ -5,8 +5,8 @@
 
 namespace aerosim {
 
-// Transitional adapter for the existing Python/PySide6/VTK prototype.
-// It runs in a separate process so Qt 5 and Qt 6 libraries never share one process.
+// Transitional adapter for the Python/PySide2/VTK prototype.
+// It runs in a separate process so the Qt installations remain isolated.
 class PostprocessDemoLauncher final : public QObject {
     Q_OBJECT
 public:

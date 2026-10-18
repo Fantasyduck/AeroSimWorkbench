@@ -3,8 +3,8 @@
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from PySide6.QtCore import QTimer
-from PySide6.QtWidgets import QApplication
+from PySide2.QtCore import QTimer, qVersion
+from PySide2.QtWidgets import QApplication
 from vtkmodules.vtkIOXML import vtkXMLPolyDataReader
 
 from main import MainWindow, STYLE
@@ -14,6 +14,8 @@ def main():
     app = QApplication([])
     app.setStyle("Fusion")
     app.setStyleSheet(STYLE)
+    print("Qt runtime: {}".format(qVersion()), flush=True)
+    assert qVersion() == "5.12.12", "Run postprocess_demo\\use_qt_5_12_12.cmd before smoke testing"
     print("Creating window...", flush=True)
     window = MainWindow()
     print("Showing window...", flush=True)
@@ -50,7 +52,7 @@ def main():
             app.quit()
 
     QTimer.singleShot(500, check)
-    app.exec()
+    app.exec_()
     if error:
         raise error
 

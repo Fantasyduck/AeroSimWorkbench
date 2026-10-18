@@ -1,13 +1,12 @@
 """Standalone Qt/VTK post-processing UI prototype with synthetic flow data."""
 
-from __future__ import annotations
-
 import sys
 
 import numpy as np
-from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QAction, QKeySequence
-from PySide6.QtWidgets import (
+from PySide2.QtCore import Qt, QTimer
+from PySide2.QtGui import QKeySequence
+from PySide2.QtWidgets import (
+    QAction,
     QApplication,
     QButtonGroup,
     QCheckBox,
@@ -117,7 +116,7 @@ def color_table(style: str) -> vtkLookupTable:
 
 
 class VTKViewer(QVTKRenderWindowInteractor):
-    def __init__(self, parent: QWidget | None = None):
+    def __init__(self, parent=None):
         super().__init__(parent)
         self.data = synthetic_flow()
         self.renderer = vtkRenderer()
@@ -384,8 +383,8 @@ class MainWindow(QMainWindow):
         self.ribbon.addTab(self._ribbon_views(), "视图")
         root_layout.addWidget(self.ribbon)
 
-        vertical = QSplitter(Qt.Orientation.Vertical)
-        horizontal = QSplitter(Qt.Orientation.Horizontal)
+        vertical = QSplitter(Qt.Vertical)
+        horizontal = QSplitter(Qt.Horizontal)
         horizontal.addWidget(self._tree_panel())
         self.viewer = VTKViewer()
         horizontal.addWidget(self.viewer)
@@ -458,7 +457,7 @@ class MainWindow(QMainWindow):
 
     def _separator(self):
         line = QFrame()
-        line.setFrameShape(QFrame.Shape.VLine)
+        line.setFrameShape(QFrame.VLine)
         line.setObjectName("separator")
         return line
 
@@ -476,13 +475,13 @@ class MainWindow(QMainWindow):
         task.addChild(dataset)
         for name, (label, unit) in VARIABLES.items():
             item = QTreeWidgetItem([f"    {label}  [{unit}]"])
-            item.setData(0, Qt.ItemDataRole.UserRole, name)
+            item.setData(0, Qt.UserRole, name)
             dataset.addChild(item)
         views = QTreeWidgetItem(["▾  显示对象"])
         task.addChild(views)
         for mode in ("云图", "切面", "等值面", "流线"):
             item = QTreeWidgetItem([f"    {mode}"])
-            item.setData(0, Qt.ItemDataRole.UserRole, mode)
+            item.setData(0, Qt.UserRole, mode)
             views.addChild(item)
         self.tree.addTopLevelItem(task)
         self.tree.expandAll()
@@ -519,7 +518,7 @@ class MainWindow(QMainWindow):
         self.axis_combo.addItems(["X", "Y", "Z"])
         self.axis_combo.setCurrentText("Z")
         slice_form.addRow("法向", self.axis_combo)
-        self.slice_slider = QSlider(Qt.Orientation.Horizontal)
+        self.slice_slider = QSlider(Qt.Horizontal)
         self.slice_slider.setRange(0, 100)
         self.slice_slider.setValue(50)
         slice_form.addRow("位置", self.slice_slider)
@@ -529,7 +528,7 @@ class MainWindow(QMainWindow):
 
         self.iso_group = QGroupBox("等值面参数")
         iso_form = QFormLayout(self.iso_group)
-        self.iso_slider = QSlider(Qt.Orientation.Horizontal)
+        self.iso_slider = QSlider(Qt.Horizontal)
         self.iso_slider.setRange(5, 95)
         self.iso_slider.setValue(55)
         iso_form.addRow("阈值", self.iso_slider)
@@ -564,7 +563,7 @@ class MainWindow(QMainWindow):
     def _build_menu(self):
         file_menu = self.menuBar().addMenu("文件")
         shot = QAction("导出视图 PNG", self)
-        shot.setShortcut(QKeySequence.StandardKey.SaveAs)
+        shot.setShortcut(QKeySequence.SaveAs)
         shot.triggered.connect(self._export_png)
         file_menu.addAction(shot)
         data = QAction("导出当前几何 VTP", self)
@@ -590,7 +589,7 @@ class MainWindow(QMainWindow):
         self.viewer.pick_callback = self._show_pick
 
     def _tree_clicked(self, item, column):
-        value = item.data(0, Qt.ItemDataRole.UserRole)
+        value = item.data(0, Qt.UserRole)
         if value in VARIABLES:
             self.variable_combo.setCurrentIndex(list(VARIABLES).index(value))
         elif value in self.mode_buttons:
@@ -657,7 +656,7 @@ class MainWindow(QMainWindow):
         self.status.setText(f"就绪  |  示例任务 001  |  {label}  |  {self.viewer.mode}")
 
     def _log(self, text):
-        from PySide6.QtCore import QDateTime
+        from PySide2.QtCore import QDateTime
         self.messages.append(f"[{QDateTime.currentDateTime().toString('HH:mm:ss')}]  {text}")
 
     def _export_png(self):
@@ -686,7 +685,7 @@ QMenuBar::item:selected, QMenu::item:selected { background: #dce8f8; }
 #header { background: #1f3654; }
 #header QLabel { color: #e8eef7; background: transparent; }
 #header #title { font-size: 19px; font-weight: 700; }
-#header #tag { color: #9ab2d0; font-size: 10px; margin-left: 12px; letter-spacing: 1px; }
+#header #tag { color: #9ab2d0; font-size: 10px; margin-left: 12px; }
 #ribbon { background: #edf2f8; border-bottom: 1px solid #d1dce9; }
 #ribbon::pane { border: 0; background: #edf2f8; }
 #ribbon QTabBar::tab { padding: 6px 18px; background: transparent; }
@@ -719,7 +718,7 @@ def main():
     app.setStyleSheet(STYLE)
     window = MainWindow()
     window.show()
-    return app.exec()
+    return app.exec_()
 
 
 if __name__ == "__main__":

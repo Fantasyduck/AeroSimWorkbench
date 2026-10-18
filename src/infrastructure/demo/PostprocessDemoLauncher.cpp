@@ -76,10 +76,10 @@ bool PostprocessDemoLauncher::launch(bool smoke)
     const QDir project(root);
 #ifdef Q_OS_WIN
     const QString python = project.filePath(smoke
-        ? QStringLiteral(".venv/Scripts/python.exe")
-        : QStringLiteral(".venv/Scripts/pythonw.exe"));
+        ? QStringLiteral(".venv-qt5/Scripts/python.exe")
+        : QStringLiteral(".venv-qt5/Scripts/pythonw.exe"));
 #else
-    const QString python = project.filePath(QStringLiteral(".venv/bin/python"));
+    const QString python = project.filePath(QStringLiteral(".venv-qt5/bin/python"));
 #endif
     const QString script = project.filePath(smoke
         ? QStringLiteral("postprocess_demo/smoke.py")
