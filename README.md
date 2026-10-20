@@ -2,27 +2,28 @@
 
 本仓库当前包含 A 负责的 C++/Qt 主工程骨架，以及此前的 [Python 后处理前端 Demo](postprocess_demo/README.md)。骨架窗口提供入口，通过独立进程打开 PySide2/VTK 演示窗口；这仍是前端原型，不是正式 C++ 后处理模块。
 
-## 第一阶段运行
+## 快速开始
 
-骨架最低构建依赖为 CMake 3.16、C++14 编译器、Qt 5.12+ 的 Core 和 Widgets。架构目标版本为 Qt 5.12.12、VTK 8.2、SARibbon；本阶段没有 B/C 的实现，因此不链接 VTK 或 SARibbon，也不将占位界面称为正式主窗口。正式接入时应统一并验证这些版本。
+统一开发基线为 C++14、CMake 3.18.2、Qt 5.12.12、Windows VS2017 v141 x64 **Debug**。当前 B/C 正式模块尚未交付，普通骨架只查找 Qt Core/Widgets；目标机 VTK 8.2.0 仅提供 Debug 导出，因此完整 C++ 技术栈只在 Debug 配置下验证。团队配置和 Linux 模板见 [开发环境说明](docs/DevelopmentEnvironment.md)，协作边界见 [开发规范](docs/DevelopmentGuide.md)。
 
-```sh
-cmake -S . -B build -DCMAKE_PREFIX_PATH=/path/to/Qt/5.12.12
-cmake --build build --parallel
-ctest --test-dir build --output-on-failure
-./build/aerosim_cli --mock-once
-./build/aerosim_gui
+Windows（VS2017 开发者命令提示符）：
+
+```bat
+set "AEROSIM_QT_ROOT=C:\Qt\5.12.12\msvc2017_64"
+scripts\build-windows.cmd all Debug
+build-windows\Debug\aerosim_cli.exe --mock-once
+build-windows\Debug\aerosim_gui.exe
 ```
 
-在纯命令行环境可以关闭 GUI，服务层无需 Qt Widgets：
+Linux（需自行准备同版本 Qt；当前尚未实机验证）：
 
-```sh
-cmake -S . -B build-cli -DAEROSIM_BUILD_GUI=OFF -DCMAKE_PREFIX_PATH=/path/to/Qt/5.12.12
-cmake --build build-cli --parallel
-./build-cli/aerosim_cli --mock-once
+```bash
+export AEROSIM_QT_ROOT=/path/to/qt-5.12.12
+./scripts/build-linux.sh all
+./build-linux/aerosim_cli --mock-once
 ```
 
-Windows 上将可执行文件路径改为 `build\Release\aerosim_cli.exe` 等实际构建配置路径。CMake 3.18 的 CTest 需先进入 `build` 目录，再运行 `ctest -C Release --output-on-failure`。找不到 Qt 时，设置 `CMAKE_PREFIX_PATH` 到 Qt 安装根目录，或设置 `Qt5_DIR` 到 `lib/cmake/Qt5`。VTK 8.2 和 SARibbon 的查找与链接由 C/B 模块提交时加入其独立目标；它们缺失不会被误报为本阶段的成功验证。
+无界面构建设置 `AEROSIM_BUILD_GUI=OFF`；仅编译某个当前模块时将 `all` 换为 `aerosim_contracts`、`aerosim_application`、`aerosim_mock`、`aerosim_ui_mock` 或 `aerosim_postprocess_demo_launcher`。CMake 3.18 不支持 Presets，因此统一使用脚本。VTK/SARibbon 只在显式启用 `AEROSIM_BUILD_STACK_PROBE=ON` 时查找；缺少它们不会阻断普通骨架构建。
 
 ## 模块边界
 

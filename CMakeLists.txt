@@ -12,9 +12,11 @@ endif()
 option(AEROSIM_BUILD_GUI "Build the temporary Qt Widgets GUI shell" ON)
 option(AEROSIM_BUILD_TESTS "Build and register skeleton smoke tests" ON)
 
-find_package(Qt5 5.12 REQUIRED COMPONENTS Core)
+option(AEROSIM_BUILD_STACK_PROBE "Build the optional Qt/VTK/SARibbon compatibility probe" OFF)
+
+find_package(Qt5 5.12.12 EXACT REQUIRED COMPONENTS Core)
 if(AEROSIM_BUILD_GUI)
-    find_package(Qt5 5.12 REQUIRED COMPONENTS Widgets)
+    find_package(Qt5 5.12.12 EXACT REQUIRED COMPONENTS Widgets)
 endif()
 
 add_subdirectory(contracts)
@@ -38,6 +40,10 @@ if(AEROSIM_BUILD_TESTS)
         add_test(NAME gui_mock_smoke COMMAND aerosim_gui --smoke)
         set_tests_properties(gui_mock_smoke PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
     endif()
+endif()
+
+if(AEROSIM_BUILD_STACK_PROBE)
+    add_subdirectory(cmake/stack_probe)
 endif()
 
 # B/C modules add their own subdirectories and dependencies when delivered.

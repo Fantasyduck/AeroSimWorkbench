@@ -20,4 +20,18 @@
 
 2026-10-18：后处理 Demo 已迁移到 PySide2 5.12.6，并在隔离虚拟环境中使用目标机 Qt 5.12.12 SDK 的运行 DLL。目标机运行时打印 `Qt runtime: 5.12.12`；交互式桌面任务自测退出码为 0，12 组变量/显示模式及 PNG、VTP 导出全部通过。Python VTK 为 9.3.0；正式 C++ VTK 8.2 仍待对应模块接入。
 
+## 2026-10-20 开发环境统一验证
+
+目标机为 Windows 10 `10.0.19045.6466`，VS2017 Community/MSVC `19.16.27043.0`、x64、Windows SDK `10.0.17763.0`，CMake `3.18.2`。Qt 为 `5.12.12 msvc2017_64`。`D:\Project\VTK\lib\cmake\vtk-8.2\VTKConfigVersion.cmake` 报告 `8.2.0` 且指针宽度 8 字节；SARibbon 源码 CMake 报告 `2.9.3`，Git 提交 `0cba0ca`。
+
+| 验证 | 实际结果 |
+| --- | --- |
+| 现有 `RibbonDemo` Qt/VTK/SARibbon Release 目标 | **编译和链接通过**；未据此宣称 Release 运行安全 |
+| 主仓库完整技术栈探针，MSVC x64 Debug | 创建 `SARibbonMainWindow`、`QVTKOpenGLNativeWidget` 和 `vtkGenericOpenGLRenderWindow`，编译链接及最小对象装配运行通过；未显示/渲染场景 |
+| 主仓库 Debug 全量构建与 CTest | `aerosim_gui`、`aerosim_cli`、探针均成功；CTest **3/3** 通过 |
+| 关闭 GUI 的 Debug 独立构建 | 仅要求 Qt Core，`aerosim_cli` 构建成功；CTest **1/1** 通过；单独编译 `aerosim_contracts` 目标成功 |
+| 原 VTK 包用于 Release 探针运行 | **失败**，退出码 `0xc0000374`；调查看到 VTK 只导出 `VTKTargets-debug.cmake`，`vtkGUISupportQt-8.2.dll` 依赖 `Qt5Widgetsd.dll` 和 `MSVCP140D.dll`。新增保护后，Release 探针按预期以清晰的 `#error` 拒绝编译 |
+
+目标机现有 C++ VTK 8.2.0 **只能作为 Debug 开发依赖**。完整 Release 集成尚需同编译器、x64 的 VTK 8.2.0 Release 库并重新验证。探针不包含正式 C 模块或渲染正确性测试；B～G 业务模块尚未交付。检查主仓库和已知第三方目录未找到可确认的 nlohmann/json 与 log4cpp 安装，具体版本/日志库方案仍待确定。Linux 与本机 macOS Qt 5.12.12 全栈本轮未验证。
+
 以上 Mock 事件不代表真实参数校验、求解器执行、任务持久化或结果有效性。
