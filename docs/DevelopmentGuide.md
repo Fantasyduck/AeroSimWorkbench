@@ -33,6 +33,7 @@
 - 统一 C++14、Qt 5.12.12、MSVC v141 x64 Debug 开发基线。公共头文件放在 `include/aerosim/<module>/`；实现放在模块 `src/`。现有骨架目录保留，迁移须独立 PR。
 - 类型名用 `PascalCase`，函数/局部变量用 `camelCase`，成员变量用尾随下划线（如 `taskService_`），常量用清晰的 `kPascalCase` 或项目已有命名。接口类型沿用现有 `I...` 契约；不要为未交付业务预先堆叠抽象。
 - 一个主要类对应一个 `.h`/`.cpp`；头文件只包含必要依赖，优先前置声明。实现文件包含所需头，不依赖间接包含。Qt `QObject` 类需由 CMake `AUTOMOC` 处理。
+- 脚本换行由根目录 `.gitattributes` 固定：`.sh` 为 LF，Windows `.cmd/.bat` 为 CRLF；不要因编辑器自动转换而提交整文件换行差异。
 - 缩进 4 空格；遵循相邻文件现有格式。新增目标使用 `target_*` 声明 include、宏和链接依赖，不使用全局 `include_directories`/`link_directories`。Windows MSVC 源码按 UTF-8 编译。
 - 明确对象所有权和线程归属；跨线程 Signal/Slot 用 `Qt::QueuedConnection`，按值传递并注册自定义类型。界面对象只在 GUI 线程使用，长时间运行的求解器通过 F 的异步执行端处理。
 
