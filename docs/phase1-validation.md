@@ -47,4 +47,4 @@
 | 同一 Windows worktree，关闭 GUI 与探针，独立 Debug 构建目录 | 只使用 Qt Core，CLI 构建成功，CTest **1/1** |
 | 同一 Windows worktree，使用现有 `.venv-qt5` 目录联接，在登录用户的交互式桌面运行新 GUI 的 `--postprocess-smoke` | 退出码 **0**；验证 Demo 从 `demos/postprocess/` 定位并完成子进程自测 |
 
-Windows 验证使用的是临时 worktree `F:\AeroSimWorkbenchRuntime\layout-check`；正式仓库的后续同步和运行目录更新另行核对。B～G 的业务模块仍未交付，本记录不涵盖真实工作流、求解、VTK 数据分析正确性或 Linux 构建。
+上述首轮 Windows 验证使用临时 worktree `F:\AeroSimWorkbenchRuntime\layout-check`。随后将正式仓库 `F:\AeroSimWorkbench` 更新到 `066e776`：同配置 Debug 完整构建及 CTest **3/3** 通过；关闭 VTK/SARibbon 探针后的 Qt 骨架 Release 构建及 CTest **2/2** 通过。新 Release GUI/CLI 已复制到 `dist/` 并重新运行 `windeployqt`；打包 CLI 的 `--mock-once` 退出码为 0，登录用户交互式桌面中从 `dist/` 运行 GUI `--postprocess-smoke` 的 `EXIT_CODE=0`。Release 验证只覆盖不链接 VTK 的骨架，**不代表 VTK 8.2 Release 全栈可用**。B～G 的业务模块仍未交付，本记录不涵盖真实工作流、求解、VTK 数据分析正确性或 Linux 构建。
