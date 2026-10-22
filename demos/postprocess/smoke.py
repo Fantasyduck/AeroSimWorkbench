@@ -15,7 +15,7 @@ def main():
     app.setStyle("Fusion")
     app.setStyleSheet(STYLE)
     print("Qt runtime: {}".format(qVersion()), flush=True)
-    assert qVersion() == "5.12.12", "Run postprocess_demo\\use_qt_5_12_12.cmd before smoke testing"
+    assert qVersion() == "5.12.12", "Run demos\\postprocess\\use_qt_5_12_12.cmd before smoke testing"
     print("Creating window...", flush=True)
     window = MainWindow()
     print("Showing window...", flush=True)

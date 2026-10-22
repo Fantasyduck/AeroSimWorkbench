@@ -1,7 +1,7 @@
 @echo off
 setlocal
 set "SDK=C:\Qt\5.12.12\msvc2017_64"
-set "VENV=%~dp0..\.venv-qt5"
+set "VENV=%~dp0..\..\.venv-qt5"
 set "PYSIDE=%VENV%\Lib\site-packages\PySide2"
 set "BACKUP=%VENV%\pyside2-qt-5.12.6-backup"
 
@@ -10,7 +10,7 @@ if not exist "%SDK%\bin\Qt5Core.dll" (
     exit /b 1
 )
 if not exist "%PYSIDE%\Qt5Core.dll" (
-    echo Install postprocess_demo\requirements.txt into .venv-qt5 first.
+    echo Install demos\postprocess\requirements.txt into .venv-qt5 first.
     exit /b 1
 )
 

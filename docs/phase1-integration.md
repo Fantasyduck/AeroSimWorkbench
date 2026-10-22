@@ -7,32 +7,30 @@
 ```text
 .
 ├── CMakeLists.txt
-├── contracts/
-│   ├── CMakeLists.txt
+├── app/                       # A：GUI/CLI 入口与 ApplicationController
+├── contracts/                 # A：Qt Core 契约与 UI 插入契约
 │   ├── include/aerosim/contracts/
-│   │   ├── References.h
-│   │   ├── WorkflowModels.h
-│   │   ├── TaskModels.h
-│   │   ├── Telemetry.h
-│   │   ├── DataAccess.h
-│   │   └── TaskPorts.h
+│   ├── include/aerosim/ui/IntegrationPorts.h
 │   └── src/RegisterMetaTypes.cpp
-├── ui/include/aerosim/ui/IntegrationPorts.h
-├── src/
-│   ├── application/ApplicationController.{h,cpp}
-│   ├── mock/MockWorkflowService.{h,cpp}
-│   ├── mock/MockTaskService.{h,cpp}
-│   ├── ui_mock/MockWindow.{h,cpp}
-│   ├── infrastructure/demo/PostprocessDemoLauncher.{h,cpp}
-│   ├── main.cpp
-│   └── cli_main.cpp
-├── postprocess_demo/  # 原 Python/Vtk 演示，未改动
-└── docs/phase1-integration.md
+├── modules/                   # B～G：正式模块，当前仅有交接说明
+│   ├── ui/                    # B
+│   ├── visualization/         # C
+│   ├── configuration/         # D
+│   ├── logging_ui/            # E
+│   ├── runtime/               # F
+│   ├── project/               # G
+│   └── workflow/              # G
+├── mocks/services/            # G/F 服务的临时实现
+├── mocks/ui/                  # B 主窗口的临时实现
+├── demos/postprocess/         # 独立 Python/VTK Demo 与 C++ 启动适配
+├── cmake/stack_probe/         # 可选 Qt/VTK/SARibbon 兼容性探针
+├── scripts/                   # 统一构建脚本
+└── docs/                      # 开发、集成和验证说明
 ```
 
-`aerosim_contracts` 只依赖 Qt Core；`aerosim_application` 和 `aerosim_mock` 也只依赖 Qt Core。`aerosim_ui_mock` 只依赖公共契约和 Qt Widgets。CLI 不链接 Qt Widgets。模块可单独替换，顶层只负责装配。
+`aerosim_contracts` 只依赖 Qt Core；UI 插入契约只有 `QWidget` 前置声明，不使 CLI 链接 Widgets。`aerosim_application` 和 `aerosim_mock` 也只依赖 Qt Core；`aerosim_ui_mock` 依赖 Qt Widgets。CLI 不链接 Qt Widgets。`modules/` 中的正式目标待各负责人交付后由 A 接入，当前不能宣称已经构建。
 
-Python/PySide2/VTK 后处理窗口由 `PostprocessDemoLauncher` 在独立进程中启动；MockWindow 只发出用户操作信号，`main.cpp` 完成系统级连接。启动器从可执行文件目录向上寻找项目根目录，可用 `AEROSIM_PROJECT_ROOT` 指定根目录；并使用项目 `.venv-qt5` 中的 Python。主窗口退出时会结束其启动的子进程。该适配只服务现有 UI 演示，不取代 C/B 的正式 VTK/SARibbon 模块。
+Python/PySide2/VTK 后处理窗口由 `PostprocessDemoLauncher` 在独立进程中启动；MockWindow 只发出用户操作信号，`app/gui_main.cpp` 完成系统级连接。启动器从可执行文件目录向上寻找项目根目录，可用 `AEROSIM_PROJECT_ROOT` 指定根目录；并使用项目 `.venv-qt5` 中的 Python。主窗口退出时会结束其启动的子进程。该适配只服务现有 UI 演示，不取代 C/B 的正式 VTK/SARibbon 模块。
 
 ## 公共契约
 
@@ -57,7 +55,7 @@ Python/PySide2/VTK 后处理窗口由 `PostprocessDemoLauncher` 在独立进程�
 | F | 实现 `ITaskService`、TaskRecord 可靠保存、去重、求解器进程/适配器和日志后端；保留 `taskEventOccurred` 契约。真实 Shell 命令解析与执行也归 F，当前 CLI 只是入口示范。 |
 | G | 实现 `IWorkflowService`、ProjectManager、工作流校验/恢复；只有 G 在规则通过后发出 TaskCommand。 |
 
-A 在各模块提供构建目标后，把它们传给 `ApplicationController`，替换 `src/mock` 的两个对象；GUI 入口换成 B 的窗口，并将 C/E widget 插入。目标依赖保持 UI→Service→Infrastructure，服务不链接 Qt Widgets 或 VTK 窗口。系统级 G→F、F→G 连接只由 A 在控制器建立一次，模块内部连接由模块负责人负责。
+A 在各模块提供构建目标后，把它们传给 `ApplicationController`，替换 `mocks/services/` 的两个对象；GUI 入口换成 B 的窗口，并将 C/E widget 插入。目标依赖保持 UI→Service→Infrastructure，服务不链接 Qt Widgets 或 VTK 窗口。系统级 G→F、F→G 连接只由 A 在控制器建立一次，模块内部连接由模块负责人负责。
 
 设计文档后部的“模块归属与交接表”将 `WorkflowManager` 和 `ProjectManager` 写为 B，与前面的七人分工、G 专节以及本阶段任务描述冲突。本说明按明确的七人分工采用 **G 负责工程与工作流，B 负责界面**；正式接口评审时需统一文档。
 

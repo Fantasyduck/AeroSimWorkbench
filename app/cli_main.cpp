@@ -1,6 +1,6 @@
-#include "application/ApplicationController.h"
-#include "mock/MockTaskService.h"
-#include "mock/MockWorkflowService.h"
+#include "ApplicationController.h"
+#include "MockTaskService.h"
+#include "MockWorkflowService.h"
 
 #include <QCoreApplication>
 #include <QTextStream>

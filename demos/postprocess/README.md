@@ -10,10 +10,10 @@ Windows 目标机使用 Python 3.6 x64；PySide2 5.12.6 的 Windows 预编译包
 
 ```bat
 "C:\Program Files (x86)\Microsoft Visual Studio\Shared\Python36_64\python.exe" -m venv .venv-qt5
-.venv-qt5\Scripts\python.exe -m pip install -r postprocess_demo\requirements.txt
-postprocess_demo\use_qt_5_12_12.cmd
-.venv-qt5\Scripts\python.exe postprocess_demo\smoke.py
-.venv-qt5\Scripts\pythonw.exe postprocess_demo\main.py
+.venv-qt5\Scripts\python.exe -m pip install -r demos\postprocess\requirements.txt
+demos\postprocess\use_qt_5_12_12.cmd
+.venv-qt5\Scripts\python.exe demos\postprocess\smoke.py
+.venv-qt5\Scripts\pythonw.exe demos\postprocess\main.py
 ```
 
 PySide2 5.12.6 的预编译包自带 Qt 5.12.6 DLL。`use_qt_5_12_12.cmd` 把虚拟环境中的 Qt Core/Gui/Widgets/OpenGL DLL 和 Windows 平台插件替换为本机 Qt 5.12.12 SDK 的版本，同时在虚拟环境内备份原文件；它不会修改 C++ SDK。脚本要求 SDK 位于 `C:\Qt\5.12.12\msvc2017_64`。后处理自测会断言运行时版本为 5.12.12。

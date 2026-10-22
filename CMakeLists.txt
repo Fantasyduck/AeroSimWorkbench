@@ -20,18 +20,13 @@ if(AEROSIM_BUILD_GUI)
 endif()
 
 add_subdirectory(contracts)
-add_subdirectory(src/mock)
-add_subdirectory(src/application)
-
-add_executable(aerosim_cli src/cli_main.cpp)
-target_link_libraries(aerosim_cli PRIVATE aerosim_application aerosim_mock Qt5::Core)
+add_subdirectory(mocks/services)
 
 if(AEROSIM_BUILD_GUI)
-    add_subdirectory(src/ui_mock)
-    add_subdirectory(src/infrastructure/demo)
-    add_executable(aerosim_gui src/main.cpp)
-    target_link_libraries(aerosim_gui PRIVATE aerosim_application aerosim_mock aerosim_ui_mock aerosim_postprocess_demo_launcher Qt5::Widgets)
+    add_subdirectory(mocks/ui)
+    add_subdirectory(demos/postprocess/launcher)
 endif()
+add_subdirectory(app)
 
 if(AEROSIM_BUILD_TESTS)
     enable_testing()
@@ -46,5 +41,5 @@ if(AEROSIM_BUILD_STACK_PROBE)
     add_subdirectory(cmake/stack_probe)
 endif()
 
-# B/C modules add their own subdirectories and dependencies when delivered.
+# B-G modules add their own targets and dependencies under modules/ when delivered.
 # VTK 8.2 and SARibbon are intentionally not linked by this A-owned placeholder.

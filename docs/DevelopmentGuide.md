@@ -6,18 +6,18 @@
 
 | 目录或目标 | 维护方 | 作用 |
 | --- | --- | --- |
-| 根 `CMakeLists.txt`、`cmake/`、`scripts/`、`contracts/`、`src/application/` | A | 统一构建、公共契约、装配、系统级异步连接和集成验收 |
-| `ui/include/aerosim/ui/` | A 协调接口，B 实现宿主 | Widget 插入与服务绑定契约 |
-| `src/ui_mock/`、`src/mock/` | A 临时维护 | B～G 未交付前的明确占位目标 |
-| `src/infrastructure/demo/`、`postprocess_demo/` | A 临时集成 | 独立进程 Python/Vtk 前端演示，不是正式 C++ 后处理 |
-| B 后续目录/目标 | B | SARibbon 主窗口、WorkflowPanel、任务/监控/曲线 UI |
-| C 后续目录/目标 | C | VTK 8.2 viewer、网格/结果读取与空间后处理 |
-| D 后续目录/目标 | D | 参数、工况、输入快照、JSON 与专业校验 |
-| E 后续目录/目标 | E | 日志与错误显示控件 |
-| F 后续目录/目标 | F | SolverManager、TaskRecord、运行适配器、日志后端 |
-| G 后续目录/目标 | G | WorkflowManager、ProjectManager 和工程关联 |
+| 根 `CMakeLists.txt`、`cmake/`、`scripts/`、`contracts/`、`app/` | A | 统一构建、公共契约、装配、系统级异步连接和集成验收 |
+| `contracts/include/aerosim/ui/` | A 协调接口，B 实现宿主 | Widget 插入与服务绑定契约 |
+| `mocks/ui/`、`mocks/services/` | A 临时维护 | B～G 未交付前的明确占位目标 |
+| `demos/postprocess/launcher/`、`demos/postprocess/` | A 临时集成 | 独立进程 Python/Vtk 前端演示，不是正式 C++ 后处理 |
+| `modules/ui/` | B | SARibbon 主窗口、WorkflowPanel、任务/监控/曲线 UI |
+| `modules/visualization/` | C | VTK 8.2 viewer、网格/结果读取与空间后处理 |
+| `modules/configuration/` | D | 参数、工况、输入快照、JSON 与专业校验 |
+| `modules/logging_ui/` | E | 日志与错误显示控件 |
+| `modules/runtime/` | F | SolverManager、TaskRecord、运行适配器、日志后端 |
+| `modules/project/`、`modules/workflow/` | G | ProjectManager、WorkflowManager 与工程关联 |
 
-新模块使用独立子目录、`CMakeLists.txt`、库目标和测试目标。A 将交付目标接入根 CMake，模块负责人负责本模块的实现、依赖和自测。UI 依赖公共契约与 Service；Service 不依赖 `QWidget`、主窗口或 VTK 显示控件；Infrastructure 提供文件、进程、数据等适配。CLI 只要求 Qt Core。
+`modules/` 目前仅有归属说明，没有正式业务代码或目标。新模块使用独立子目录、`CMakeLists.txt`、库目标和测试目标。A 将交付目标接入根 CMake，模块负责人负责本模块的实现、依赖和自测。UI 依赖公共契约与 Service；Service 不依赖 `QWidget`、主窗口或 VTK 显示控件；Infrastructure 提供文件、进程、数据等适配。CLI 只要求 Qt Core。
 
 设计文档后段“模块归属与交接表”把 WorkflowManager/ProjectManager 归 B，与七人分工及 G 专节冲突。本阶段按**G 负责工程与工作流业务，B 负责界面展示**执行，最终接口评审时由 A 统一修订该冲突。
 
@@ -30,7 +30,7 @@
 
 ## C++ 与文件组织
 
-- 统一 C++14、Qt 5.12.12、MSVC v141 x64 Debug 开发基线。公共头文件放在 `include/aerosim/<module>/`；实现放在模块 `src/`。现有骨架目录保留，迁移须独立 PR。
+- 统一 C++14、Qt 5.12.12、MSVC v141 x64 Debug 开发基线。公共头文件放在 `contracts/include/aerosim/`；模块公开头文件放在本模块的 `include/aerosim/<module>/`，实现放在模块 `src/`。骨架代码已按职责迁入 `app/`、`mocks/` 和 `demos/`；后续目录调整单独提交。
 - 类型名用 `PascalCase`，函数/局部变量用 `camelCase`，成员变量用尾随下划线（如 `taskService_`），常量用清晰的 `kPascalCase` 或项目已有命名。接口类型沿用现有 `I...` 契约；不要为未交付业务预先堆叠抽象。
 - 一个主要类对应一个 `.h`/`.cpp`；头文件只包含必要依赖，优先前置声明。实现文件包含所需头，不依赖间接包含。Qt `QObject` 类需由 CMake `AUTOMOC` 处理。
 - 脚本换行由根目录 `.gitattributes` 固定：`.sh` 为 LF，Windows `.cmd/.bat` 为 CRLF；不要因编辑器自动转换而提交整文件换行差异。
@@ -39,7 +39,7 @@
 
 ## 公共契约与第三方依赖
 
-`contracts/` 与 `ui/include/aerosim/ui/` 的公共接口由 A 维护。需要改动时，在 PR 中说明调用方、数据生命周期、线程语义与兼容影响；先由相关 B～G 成员和 A 确认，再修改契约和 Mock，最后更新实现。不得在自己的模块复制一份相似的 TaskCommand、TaskEvent、WorkflowView 等公共类型。
+`contracts/` 中的 Core 与 UI 插入公共接口均由 A 维护。需要改动时，在 PR 中说明调用方、数据生命周期、线程语义与兼容影响；先由相关 B～G 成员和 A 确认，再修改契约和 Mock，最后更新实现。不得在自己的模块复制一份相似的 TaskCommand、TaskEvent、WorkflowView 等公共类型。
 
 第三方依赖由使用模块单独声明。新增或变更前记录准确版本、来源、许可证、编译器/架构、Debug/Release 包、CMake 包名及集成测试结果；由 A 审核根构建和交付影响。禁止提交个人绝对路径、静默下载未知版本或把 Python Demo 的 VTK 9.3 当成 C++ VTK 8.2。目标机现有 VTK 8.2.0 仅有 Debug 导出，禁止将其链接到 Release 模块。nlohmann/json 版本和日志库方案未定前，不得擅自升级/替换技术选型。可用 `Qt5_DIR`、`VTK_DIR`、`SARIBBON_SOURCE_DIR` 等配置变量传入本机位置。
 

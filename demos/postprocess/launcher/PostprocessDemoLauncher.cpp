@@ -43,12 +43,12 @@ PostprocessDemoLauncher::~PostprocessDemoLauncher()
 QString PostprocessDemoLauncher::findProjectRoot() const
 {
     const QString overrideRoot = qEnvironmentVariable("AEROSIM_PROJECT_ROOT");
-    if (!overrideRoot.isEmpty() && QFileInfo::exists(QDir(overrideRoot).filePath(QStringLiteral("postprocess_demo/main.py"))))
+    if (!overrideRoot.isEmpty() && QFileInfo::exists(QDir(overrideRoot).filePath(QStringLiteral("demos/postprocess/main.py"))))
         return QDir(overrideRoot).absolutePath();
 
     QDir dir(QCoreApplication::applicationDirPath());
     for (int i = 0; i < 5; ++i) {
-        if (QFileInfo::exists(dir.filePath(QStringLiteral("postprocess_demo/main.py"))))
+        if (QFileInfo::exists(dir.filePath(QStringLiteral("demos/postprocess/main.py"))))
             return dir.absolutePath();
         if (!dir.cdUp())
             break;
@@ -82,8 +82,8 @@ bool PostprocessDemoLauncher::launch(bool smoke)
     const QString python = project.filePath(QStringLiteral(".venv-qt5/bin/python"));
 #endif
     const QString script = project.filePath(smoke
-        ? QStringLiteral("postprocess_demo/smoke.py")
-        : QStringLiteral("postprocess_demo/main.py"));
+        ? QStringLiteral("demos/postprocess/smoke.py")
+        : QStringLiteral("demos/postprocess/main.py"));
     if (!QFileInfo::exists(python)) {
         emit statusMessage(QStringLiteral("Post-processing Python environment not found: ") + python);
         return false;
@@ -97,7 +97,7 @@ bool PostprocessDemoLauncher::launch(bool smoke)
     environment.remove(QStringLiteral("QT_PLUGIN_PATH"));
     environment.remove(QStringLiteral("QT_QPA_PLATFORM_PLUGIN_PATH"));
     process_.setProcessEnvironment(environment);
-    process_.setWorkingDirectory(project.filePath(QStringLiteral("postprocess_demo")));
+    process_.setWorkingDirectory(project.filePath(QStringLiteral("demos/postprocess")));
     process_.setProcessChannelMode(QProcess::MergedChannels);
     process_.start(python, QStringList{script});
     return true; // Process startup and exit errors arrive through signals.

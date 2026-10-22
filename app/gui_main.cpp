@@ -1,8 +1,8 @@
-#include "application/ApplicationController.h"
-#include "infrastructure/demo/PostprocessDemoLauncher.h"
-#include "mock/MockTaskService.h"
-#include "mock/MockWorkflowService.h"
-#include "ui_mock/MockWindow.h"
+#include "ApplicationController.h"
+#include "PostprocessDemoLauncher.h"
+#include "MockTaskService.h"
+#include "MockWorkflowService.h"
+#include "MockWindow.h"
 
 #include <QApplication>
 #include <QLabel>

@@ -83,7 +83,7 @@ scripts\build-windows.cmd all Debug
 
 上述 VTK/SARibbon 路径仅为目标机实例；团队各自设置自己的路径。探针检查 Qt 5.12.12、VTK 8.2.0、64 位，并创建 `SARibbonMainWindow`、`QVTKOpenGLNativeWidget` 和 `vtkGenericOpenGLRenderWindow` 以验证最小 C++ 对象装配；它不显示或渲染正式场景。默认关闭，不影响只安装 Qt 的成员。若只需编译探针：`scripts\build-windows.cmd aerosim_stack_probe Debug`。目标机只有 VTK Debug 导出，探针的 Release 编译会明确失败，避免链接到错误配置。
 
-后处理 Python Demo 可按 [Demo 说明](../postprocess_demo/README.md) 创建 `.venv-qt5`。它不参与 CMake 目标，不作为正式 C++ VTK 模块；主窗口通过独立进程启动它。
+后处理 Python Demo 可按 [Demo 说明](../demos/postprocess/README.md) 创建 `.venv-qt5`。它不参与 CMake 目标，不作为正式 C++ VTK 模块；主窗口通过独立进程启动它。
 
 ## Linux：配置模板（尚未实机验证）
 
