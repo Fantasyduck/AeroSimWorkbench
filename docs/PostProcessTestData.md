@@ -27,3 +27,9 @@ ctest --test-dir build-windows -C Debug --output-on-failure
 ```
 
 生成脚本不会产出 MSH/CAS/CGNS、Tecplot/Plot3D 或 Excel 文件。这些格式需要成员提供确切版本、合法生成/读取库和往返测试。大型真实仿真数据仅记录“求解器及版本、文件格式版本、Zone/边界/单位、许可/脱敏、获取位置、期望结果”，保存在受控位置；不要提交到 Git，也不要给普通文本改一个专业后缀。AI 仅用四组数据验证列映射和错误路径，不声称训练/泛化达标。
+
+## 本次实测（2026-10-22）
+
+- 目标 Windows 10 / VS2017 v141 x64 / Qt 5.12.12：`scripts\build-windows.cmd all Debug` 配置与编译通过；CTest **3/3**，其中 `postprocess_fixture_check` 通过。Demo 虚拟环境 Python VTK **9.3.0** 运行 `verify_vtk.py`，三帧、四字段、切面/等值面/流线数值检查通过。
+- 本地 macOS：生成器 `--check` 通过；Python VTK **9.7.1** 的同一读取/几何检查通过。本地 CMake 配置因仅安装 Qt **5.15.19**，不符合工程的 `Qt 5.12.12 EXACT` 而失败；没有宣称本机 C++ 构建成功。
+- **尚未验证**：正式 C++ VTK 8.2 读取这些文件、真实 CGNS/MSH/CAS、Windows Release、成员的任何算法实现或界面集成。上述 Python VTK 检查只证明夹具是可读取的解析数据，并能触发对应的 VTK 功能。
