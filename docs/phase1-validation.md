@@ -35,3 +35,16 @@
 目标机现有 C++ VTK 8.2.0 **只能作为 Debug 开发依赖**。完整 Release 集成尚需同编译器、x64 的 VTK 8.2.0 Release 库并重新验证。探针不包含正式 C 模块或渲染正确性测试；B～G 业务模块尚未交付。检查主仓库和已知第三方目录未找到可确认的 nlohmann/json 与 log4cpp 安装，具体版本/日志库方案仍待确定。Linux 与本机 macOS Qt 5.12.12 全栈本轮未验证。
 
 以上 Mock 事件不代表真实参数校验、求解器执行、任务持久化或结果有效性。
+
+## 2026-10-22 目录统一后的验证
+
+在提交 `6644d6d` 中，仅迁移 A 的入口与装配、公共 UI 契约、Mock 和独立后处理 Demo，保留既有可执行目标名及构建输出位置。`modules/` 目前是 B～G 的交接目录，尚无正式业务目标。
+
+| 验证环境与项目 | 实际结果 |
+| --- | --- |
+| 本机 macOS arm64 临时源码副本；只在副本中将 CMake 的 Qt 精确版本改为已安装的 5.15.19，以检查目录迁移 | GUI/CLI 编译成功，CTest **2/2**；GUI 关闭时 CLI 编译成功，CTest **1/1**。此项不代表 Qt 5.12.12 本机验证 |
+| 目标 Windows 10、VS2017 v141 x64、Qt 5.12.12；独立 Git worktree，VTK 8.2.0/SARibbon 2.9.3 探针开启，Debug | `scripts\build-windows.cmd all Debug` 配置及编译成功，CTest **3/3**（CLI、GUI、技术栈探针） |
+| 同一 Windows worktree，关闭 GUI 与探针，独立 Debug 构建目录 | 只使用 Qt Core，CLI 构建成功，CTest **1/1** |
+| 同一 Windows worktree，使用现有 `.venv-qt5` 目录联接，在登录用户的交互式桌面运行新 GUI 的 `--postprocess-smoke` | 退出码 **0**；验证 Demo 从 `demos/postprocess/` 定位并完成子进程自测 |
+
+Windows 验证使用的是临时 worktree `F:\AeroSimWorkbenchRuntime\layout-check`；正式仓库的后续同步和运行目录更新另行核对。B～G 的业务模块仍未交付，本记录不涵盖真实工作流、求解、VTK 数据分析正确性或 Linux 构建。

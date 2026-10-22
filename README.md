@@ -6,7 +6,7 @@
 
 ## 快速开始
 
-统一开发基线为 C++14、CMake 3.18.2、Qt 5.12.12、Windows VS2017 v141 x64 **Debug**。当前 B/C 正式模块尚未交付，普通骨架只查找 Qt Core/Widgets；目标机 VTK 8.2.0 仅提供 Debug 导出，因此完整 C++ 技术栈只在 Debug 配置下验证。团队配置和 Linux 模板见 [开发环境说明](docs/DevelopmentEnvironment.md)，协作边界见 [开发规范](docs/DevelopmentGuide.md)。
+统一开发基线为 C++14、CMake 3.18.2、Qt 5.12.12、Windows VS2017 v141 x64 **Debug**。当前 B～G 正式模块尚未交付，普通骨架只查找 Qt Core/Widgets；目标机 VTK 8.2.0 仅提供 Debug 导出，因此完整 C++ 技术栈只在 Debug 配置下验证。团队配置和 Linux 模板见 [开发环境说明](docs/DevelopmentEnvironment.md)，协作边界见 [开发规范](docs/DevelopmentGuide.md)。
 
 Windows（VS2017 开发者命令提示符）：
 
