@@ -42,3 +42,7 @@ GUI / CLI entry ──> ApplicationController ──> contracts <── Mock ser
 运行 GUI 时点击 **Open post-processing VTK demo** 可打开独立的后处理窗口。需先在项目根目录的 `.venv-qt5` 安装 `demos/postprocess/requirements.txt`，并在目标 Windows 主机运行 `demos\postprocess\use_qt_5_12_12.cmd`；Windows 使用 `.venv-qt5\Scripts\pythonw.exe`，其他平台使用 `.venv-qt5/bin/python`。C++ 和 Python Demo 在目标机均运行 Qt 5.12.12，后者继续使用 VTK 9 演示数据。可用 `aerosim_gui --postprocess-smoke` 验证跨进程启动及 Demo 自测；该命令测试完会自动退出。
 
 详细契约、目录结构、接入方法和未完成工作见 [第一阶段集成说明](docs/phase1-integration.md)；实际测试结果见 [构建与运行记录](docs/phase1-validation.md)。Windows 运行目录的打包与启动步骤见 [部署说明](docs/windows-deployment.md)。
+
+## 后处理专项集成准备
+
+五名后处理专项成员的 16 项工作仍在开发，不能视作已合并功能。A 已准备[总体接入方案](docs/PostProcessIntegrationGuide.md)、[公共数据与场景契约草案](docs/PostProcessContracts.md)、[任务交接表](docs/PostProcessTaskHandoff.md)及[解析测试数据](docs/PostProcessTestData.md)。`contracts/` 目前仅补充身份引用类型；场景操作、网格数组和算法接口须由相关成员评审后确定。执行 `python3 tests/fixtures/postprocess/generate.py --check` 可校验已提交夹具；在安装 Python VTK 的环境中再执行 `python3 tests/fixtures/postprocess/verify_vtk.py` 检查 VTK 文件、切面、等值面和流线测试条件。

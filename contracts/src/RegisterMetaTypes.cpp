@@ -1,5 +1,6 @@
 #include "aerosim/contracts/TaskPorts.h"
 #include "aerosim/contracts/Telemetry.h"
+#include "aerosim/contracts/PostProcessRefs.h"
 
 #include <QMetaType>
 
@@ -13,6 +14,8 @@ void registerContractMetaTypes()
     qRegisterMetaType<LogEntry>("aerosim::LogEntry");
     qRegisterMetaType<ErrorInfo>("aerosim::ErrorInfo");
     qRegisterMetaType<MonitorSample>("aerosim::MonitorSample");
+    qRegisterMetaType<DatasetRef>("aerosim::DatasetRef");
+    qRegisterMetaType<SceneObjectRef>("aerosim::SceneObjectRef");
 }
 
 } // namespace aerosim

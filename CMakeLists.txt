@@ -35,6 +35,13 @@ if(AEROSIM_BUILD_TESTS)
         add_test(NAME gui_mock_smoke COMMAND aerosim_gui --smoke)
         set_tests_properties(gui_mock_smoke PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
     endif()
+    find_package(Python3 COMPONENTS Interpreter QUIET)
+    if(Python3_Interpreter_FOUND)
+        add_test(NAME postprocess_fixture_check
+            COMMAND "${Python3_EXECUTABLE}"
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/postprocess/generate.py"
+                    --check)
+    endif()
 endif()
 
 if(AEROSIM_BUILD_STACK_PROBE)

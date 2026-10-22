@@ -1,0 +1,62 @@
+{
+  "schema": "fixture-index-v1",
+  "mesh": "mesh.json",
+  "coordinateFrame": "body-xyz",
+  "fields": [
+    {
+      "name": "Pressure",
+      "unit": "Pa",
+      "components": 1,
+      "association": "point"
+    },
+    {
+      "name": "Temperature",
+      "unit": "K",
+      "components": 1,
+      "association": "point"
+    },
+    {
+      "name": "Phi",
+      "unit": "m",
+      "components": 1,
+      "association": "point"
+    },
+    {
+      "name": "Velocity",
+      "unit": "m/s",
+      "components": 3,
+      "association": "point"
+    }
+  ],
+  "frames": [
+    {
+      "datasetId": "cube-run-1",
+      "fileId": "cube-t00",
+      "frameOrder": 0,
+      "timeValue": 0,
+      "timeUnit": "s",
+      "valid": true,
+      "file": "cube_t00.vtk"
+    },
+    {
+      "datasetId": "cube-run-1",
+      "fileId": "cube-t01",
+      "frameOrder": 1,
+      "timeValue": 1,
+      "timeUnit": "s",
+      "valid": true,
+      "file": "cube_t01.vtk"
+    },
+    {
+      "datasetId": "cube-run-1",
+      "fileId": "cube-t02",
+      "frameOrder": 2,
+      "timeValue": 2,
+      "timeUnit": "s",
+      "valid": true,
+      "file": "cube_t02.vtk"
+    }
+  ],
+  "cases": "cases.csv",
+  "curves": "curves.csv"
+}

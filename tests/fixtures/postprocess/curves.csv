@@ -1,0 +1,5 @@
+seriesId,caseId,xName,xUnit,x,yName,yUnit,y
+body-z-coefficient,case-00,alpha,deg,0,Cz,1,0.00000
+body-z-coefficient,case-01,alpha,deg,5,Cz,1,0.05000
+body-z-coefficient,case-02,alpha,deg,5,Cz,1,0.06500
+body-z-coefficient,case-03,alpha,deg,10,Cz,1,0.10000
