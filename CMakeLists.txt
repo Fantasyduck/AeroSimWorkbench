@@ -13,7 +13,8 @@ option(AEROSIM_BUILD_GUI "Build the temporary Qt Widgets GUI shell" ON)
 option(AEROSIM_BUILD_TESTS "Build and register skeleton smoke tests" ON)
 
 option(AEROSIM_BUILD_STACK_PROBE "Build the optional Qt/VTK/SARibbon compatibility probe" OFF)
-option(AEROSIM_BUILD_SPATIAL_FEATURES "Build slice/contour/isosurface/VTP algorithms" OFF)
+# Owns optional VTK-backed post-processing targets under modules/visualization.
+option(AEROSIM_BUILD_VISUALIZATION "Build optional visualization/post-processing modules" OFF)
 
 find_package(Qt5 5.12.12 EXACT REQUIRED COMPONENTS Core)
 if(AEROSIM_BUILD_GUI)
@@ -45,9 +46,8 @@ if(AEROSIM_BUILD_STACK_PROBE)
     add_subdirectory(cmake/stack_probe)
 endif()
 
-if(AEROSIM_BUILD_SPATIAL_FEATURES)
+if(AEROSIM_BUILD_VISUALIZATION)
     add_subdirectory(modules/visualization)
 endif()
 
-# B-G modules add their own targets and dependencies under modules/ when delivered.
-# VTK 8.2 and SARibbon are intentionally not linked by this A-owned placeholder.
+# Other modules add their own targets and dependencies under modules/ when delivered.

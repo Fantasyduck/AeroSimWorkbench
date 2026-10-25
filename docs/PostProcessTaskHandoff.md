@@ -1,6 +1,6 @@
 # 后处理功能交接表（16 项）
 
-本表按功能与依赖组织，保留原任务编号。它说明待接入能力的输入、输出、接口和测试条件，**不表示功能已经实现或接口已冻结**。`modules/visualization/` 目前没有正式 C++ 构建目标；下表的 data/features/scene/analysis/ui 是建议的能力位置，不是已存在的 CMake Target。复用 `ResourceRef`、`MeshRef`、`ResultRef`、`DatasetRef`、`SceneObjectRef`；三维结果拟经统一 Viewer/场景入口显示，具体 API 待评审。
+本表按功能与依赖组织，保留原任务编号。它说明待接入能力的输入、输出、接口和测试条件，**不表示接口已经冻结**。`modules/visualization/` 已有正式 C++ 目标 `aerosim_spatial_features`，实现了 ④⑤⑥⑭ 的模块内算法与 VTP 导出；它不含数据读取、场景或 UI。下表的 data/features/scene/analysis/ui 仍用于标示其余能力位置，不表示相应 CMake Target 已存在。复用 `ResourceRef`、`MeshRef`、`ResultRef`、`DatasetRef`、`SceneObjectRef`；三维结果仍须经统一 Viewer/场景入口显示，具体 API 待评审。
 
 ## 网格、读取与格式
 

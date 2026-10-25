@@ -1,6 +1,32 @@
 # 可视化与网格/结果
 
-本模块包含正式 C++/Qt 5.12.12/VTK 8.2 视图、网格/结果和空间后处理的接入位置。当前分支新增 `aerosim_spatial_features` 算法库及 `aerosim_spatial_features_test` 命令行测试，覆盖任务 ④⑤⑥⑭ 的几何处理和 VTP 导出。**Viewer、对象显隐/删除、工程数据访问及完整界面尚未接入。**
+本模块是后处理核心的实现位置：网格/结果数据、空间特征、三维场景和非 UI 分析能力都归入这里。后处理工作区窗口放在 `modules/ui/`，`app/` 只做装配，`contracts/` 只放跨模块的轻量标识和元信息，不能放 VTK 对象或大数组。
+
+当前已交付 `aerosim_spatial_features` 算法库及 `aerosim_spatial_features_test` 命令行测试，覆盖任务 ④⑤⑥⑭ 的几何处理和 VTP 导出。**Viewer、对象显隐/删除、工程数据访问及完整界面尚未接入。**
+
+## 模块架构与目录
+
+```text
+data/     文件读取、网格/字段规范化、数据集与帧索引
+    ↓ 只读数据快照
+features/ 切面、等值线/面、流线、迹线、特征导出
+    ↓ 不可变特征几何
+scene/    VTK Viewer、Actor/Mapper、场景对象、显隐与渲染（仅 GUI 线程）
+    ↑
+modules/ui/ 后处理工作区、文件列表和参数面板
+
+analysis/ 多工况表、公式、曲线、模型；读取 data 的元数据，不依赖 scene 或 QWidget
+```
+
+| 能力层 | 目录与未来目标 | 当前状态 | 依赖边界 |
+| --- | --- | --- | --- |
+| 数据 | `include/.../data`、`src/data`；`aerosim_visualization_data` | 未实现 | 读取与规范化可依赖 VTK/格式库；不依赖 scene/UI。 |
+| 空间特征 | `include/.../features`、`src/features`；`aerosim_spatial_features` | 已实现 ④⑤⑥⑭ 的算法和 VTP 导出 | 接收数据快照，返回私有几何副本；不依赖 QWidget、Renderer 或场景对象。 |
+| 场景 | `include/.../scene`、`src/scene`；`aerosim_visualization_scene` | 未实现 | 唯一持有 Viewer、renderer 和 actor；接收 feature 结果，所有渲染操作在 GUI 线程。 |
+| 分析 | `include/.../analysis`、`src/analysis`；`aerosim_postprocess_analysis` | 未实现 | 服务层，不依赖 scene/UI；Excel、公式、曲线和 AI 在此拆分为独立目标。 |
+| UI | `modules/ui/` | 未实现 | 通过经评审的服务/场景接口操作，不直接操纵 VTK pipeline。 |
+
+除 `features/` 外的目录与目标尚未创建；表中名称用于后续统一命名，不表示接口已经冻结。每个新层必须先作为独立 CMake 目标和测试交付，再加入本模块的 CMake。
 
 ## 交付接口
 
@@ -64,7 +90,9 @@ cmake -S modules/visualization -B build-spatial-features -G "Visual Studio 15 20
 cmake --build build-spatial-features --config Debug --target aerosim_spatial_features_test
 ```
 
-根工程可选 `-DAEROSIM_BUILD_SPATIAL_FEATURES=ON` 接入同一目标和测试，默认 OFF，保证不安装 VTK 的骨架和 CLI 不受影响。通过统一脚本构建时，先在该构建目录配置此选项及 `VTK_DIR`，脚本后续沿用 CMake 缓存；或直接使用独立测试脚本。
+根工程可选 `-DAEROSIM_BUILD_VISUALIZATION=ON` 接入本模块的已交付目标和测试，默认 OFF，保证不安装 VTK 的骨架和 CLI 不受影响。通过统一脚本构建时，先在该构建目录配置此选项及 `VTK_DIR`，脚本后续沿用 CMake 缓存；或直接使用独立测试脚本。
+
+模块内 `AEROSIM_BUILD_VISUALIZATION_FEATURES` 默认为 ON；将其设为 OFF 时，不会查找 VTK，可为未来纯数据索引或分析目标保留同一模块入口。
 
 依赖：C++14、Qt Core 5.12.12（项目既有依赖，按原 Qt 授权）、VTK 8.2.0（BSD-3-Clause，Kitware 官方发行及项目既有安装）、平台线程库。没有新增第三方库。只有使用该模块时查找 VTK，不链接 Widgets/OpenGL/SARibbon。MSVC 仅允许 Debug，对应目标机已有库。
 

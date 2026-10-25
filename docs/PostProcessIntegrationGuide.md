@@ -6,10 +6,10 @@
 
 - 已有 `References.h` 的 `ResourceRef`、`MeshRef`、`ResultRef` 和 `ScopeRef`，`DataAccess.h` 的 `IMeshAccess`/`IResultAccess`，以及 `TaskModels.h` 的任务/结果事件。继续用这些类型指代工程、文件、网格版本、任务和工况；不要在后处理再造工程或任务记录。
 - `IntegrationPorts.h` 的 `IWidgetHost` 可将最终三维控件插入主窗口；`WidgetSlot::Viewport` 已定义。`ValidationResult`、`ErrorInfo` 可承载校验和错误说明。`PostProcessRefs.h` 已提供轻量 `DatasetRef`、`SceneObjectRef`；多文件/时序元信息、字段描述、场景操作、六分量/曲线数据协议仍待评审。
-- `modules/visualization/` 目前只有 README，没有正式 C++/VTK 8.2 源码或构建目标。现有 Mock 窗口的视口只是占位控件，不提供后处理算法。正式工作区需通过主窗口插入接口与统一场景入口集成。
+- `modules/visualization/` 已有 `aerosim_spatial_features`：提供多切面、二维等值线、三维等值面和 VTP 特征导出，且可独立测试。它是无界面的 features 层，不创建 renderer 或场景对象。现有 Mock 窗口的视口仍是占位控件；数据读取、统一场景入口和正式工作区仍待接入。
 - 设计中的 `VTKViewer` + `VisualizationManager` 构成统一显示链路。若各功能独占 `vtkRenderer`、另存完整网格或自行控制主窗口，会造成重复、互相覆盖或版本漂移。建议接入时共用数据目录与场景入口；具体操作协议见[契约草案](PostProcessContracts.md)。
 
-## 目标依赖方向与建议目标（名称待评审）
+## 目标依赖方向与模块目标
 
 ```text
 modules/ui/ 主窗口与后处理工作区
@@ -18,7 +18,7 @@ modules/ui/ 主窗口与后处理工作区
 app/ 应用装配 -> 各服务及 IWidgetHost；CLI 只依赖 Core 服务
 ```
 
-建议按能力拆分独立目标：数据读取/规范化与数据集/帧索引、空间特征、统一场景入口、非 UI 多工况分析、后处理工作区。`aerosim_postprocess_data`、`aerosim_postprocess_features`、`aerosim_postprocess_scene`、`aerosim_postprocess_analysis`、`aerosim_postprocess_ui` **仅是建议名称，当前 CMake 均未定义**；分析能力与 `modules/configuration/` 的边界也待评审。实际目标需在模块独立构建后再接入顶层 CMake。无 VTK 的数据索引、公式元信息不应强制链接 VTK；CLI 不依赖 Widgets。
+模块按数据读取/规范化与数据集/帧索引、空间特征、统一场景入口、非 UI 多工况分析、后处理工作区拆分。当前已定义 `aerosim_spatial_features`；`aerosim_visualization_data`、`aerosim_visualization_scene`、`aerosim_postprocess_analysis` 是后续统一命名，尚未定义。后处理工作区归 `modules/ui/`，不在 visualization 中创建第二套主窗口。无 VTK 的数据索引、公式元信息不应强制链接 VTK；CLI 不依赖 Widgets。
 
 ## 场景及数据所有权草案
 
