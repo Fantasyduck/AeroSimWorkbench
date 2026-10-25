@@ -13,6 +13,7 @@ option(AEROSIM_BUILD_GUI "Build the temporary Qt Widgets GUI shell" ON)
 option(AEROSIM_BUILD_TESTS "Build and register skeleton smoke tests" ON)
 
 option(AEROSIM_BUILD_STACK_PROBE "Build the optional Qt/VTK/SARibbon compatibility probe" OFF)
+option(AEROSIM_BUILD_SPATIAL_FEATURES "Build slice/contour/isosurface/VTP algorithms" OFF)
 
 find_package(Qt5 5.12.12 EXACT REQUIRED COMPONENTS Core)
 if(AEROSIM_BUILD_GUI)
@@ -42,6 +43,10 @@ endif()
 
 if(AEROSIM_BUILD_STACK_PROBE)
     add_subdirectory(cmake/stack_probe)
+endif()
+
+if(AEROSIM_BUILD_SPATIAL_FEATURES)
+    add_subdirectory(modules/visualization)
 endif()
 
 # B-G modules add their own targets and dependencies under modules/ when delivered.
