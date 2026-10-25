@@ -227,6 +227,8 @@ const char *featureErrorName(FeatureError error)
     case FeatureError::FileExists: return "FileExists";
     case FeatureError::IoError: return "IoError";
     case FeatureError::Cancelled: return "Cancelled";
+    case FeatureError::NoSeeds: return "NoSeeds";
+    case FeatureError::SeedOutsideDomain: return "SeedOutsideDomain";
     }
     return "Unknown";
 }

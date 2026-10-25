@@ -17,7 +17,8 @@ namespace visualization {
 enum class FeatureError {
     None, InvalidInput, InvalidParameter, MissingField, NonFiniteData,
     UnsupportedGeometry, DegenerateField, EmptyResult, ProcessingFailed,
-    UnsupportedFormat, FileExists, IoError, Cancelled
+    UnsupportedFormat, FileExists, IoError, Cancelled,
+    NoSeeds, SeedOutsideDomain
 };
 
 struct FeatureStatus {

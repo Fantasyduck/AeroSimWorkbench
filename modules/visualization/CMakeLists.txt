@@ -13,14 +13,15 @@ option(AEROSIM_BUILD_VISUALIZATION_FEATURES
 
 if(AEROSIM_BUILD_VISUALIZATION_FEATURES)
     find_package(VTK 8.2.0 EXACT REQUIRED COMPONENTS
-        vtkCommonCore vtkCommonDataModel vtkFiltersCore vtkFiltersGeneral
-        vtkFiltersGeometry vtkIOXML vtkIOLegacy)
+        vtkCommonCore vtkCommonDataModel vtkFiltersCore vtkFiltersFlowPaths
+        vtkFiltersGeneral vtkFiltersGeometry vtkIOXML vtkIOLegacy)
     find_package(Threads REQUIRED)
 
     add_library(aerosim_spatial_features STATIC
         src/features/FeatureProcessor.cpp
         src/features/FeatureExporter.cpp
-        src/features/FeatureJob.cpp)
+        src/features/FeatureJob.cpp
+        src/features/StreamlineProcessor.cpp)
     add_library(aerosim::spatial_features ALIAS aerosim_spatial_features)
     target_include_directories(aerosim_spatial_features PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>)
@@ -44,7 +45,16 @@ if(AEROSIM_BUILD_VISUALIZATION_FEATURES AND AEROSIM_BUILD_TESTS)
     if(MSVC)
         target_compile_options(aerosim_spatial_features_test PRIVATE /utf-8)
     endif()
+    add_executable(aerosim_streamline_test tests/StreamlineTests.cpp)
+    target_link_libraries(aerosim_streamline_test PRIVATE aerosim_spatial_features)
+    set_target_properties(aerosim_streamline_test PROPERTIES
+        CXX_STANDARD 14 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF AUTOMOC OFF)
+    if(MSVC)
+        target_compile_options(aerosim_streamline_test PRIVATE /utf-8)
+    endif()
     get_filename_component(_fixture_dir "${CMAKE_CURRENT_SOURCE_DIR}/../../tests/fixtures/postprocess" ABSOLUTE)
     add_test(NAME spatial_features COMMAND aerosim_spatial_features_test "${_fixture_dir}")
     set_tests_properties(spatial_features PROPERTIES TIMEOUT 120)
+    add_test(NAME streamlines COMMAND aerosim_streamline_test "${_fixture_dir}")
+    set_tests_properties(streamlines PROPERTIES TIMEOUT 120)
 endif()

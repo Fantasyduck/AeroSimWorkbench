@@ -1,0 +1,326 @@
+# 表面流线与迹线 实施方案（⑦ / ⑧）
+
+> 状态：**待评审草案**。本文只描述实施方案与决策点，不代表接口已冻结。
+> 对应交接表条目：`docs/PostProcessTaskHandoff.md` 第 20 行（⑦ 表面流线）、第 21 行（⑧ 迹线显示）。
+> 编写依据：当前 `main`（ae29d72）与未合并 PR #1 的实现，以及本机 VTK 语义实测（见第 3 节）。
+
+## 1. 范围
+
+### 1.1 本方案要交付的
+
+| 编号 | 功能 | 本方案产出 |
+| --- | --- | --- |
+| ⑦ | 表面流线 | 在指定 2D 物面/切片上积分速度场，产出曲线几何 + 每条线的终止原因 + 筛选诊断 |
+| ⑧ | 迹线显示 | 定义轨迹数据的组织形态与来源适配（读取已有轨迹 / 非定常帧计算），产出可显示、可导出的轨迹几何 |
+
+### 1.2 本方案明确不做
+
+- **不做 UI 交互面板**。种子拾取、参数滑块属 `modules/ui/`，依赖尚未实现的 `scene/` 层（见 4.4）。
+- **不新建独立渲染链路**。按 `docs/PostProcessIntegrationGuide.md` 第 10 行，禁止功能独占 `vtkRenderer`。
+- **不修改 PR #1 已有实现**。⑦⑧ 在其接口上增量扩展（见 2.2）。
+- **不引入新第三方库**。只允许 C++14、Qt 5.12.12、VTK 8.2.0。
+
+## 2. 仓库现状核对（决定方案形态的事实）
+
+### 2.1 可用基础
+
+- 契约层已有轻量标识：`contracts/include/aerosim/contracts/PostProcessRefs.h` 的 `DatasetRef{datasetId,fileId}`、`SceneObjectRef{sceneObjectId,datasetId}`，且已由 `contracts/src/RegisterMetaTypes.cpp` 注册为 Qt 元类型。⑦⑧ 的句柄直接复用这两个类型，**不新增契约**。
+- 线程与所有权规则已在 `docs/PostProcessContracts.md` 第 33 行定死：`contracts/` 不放 `vtkDataObject`、`vtkRenderer` 或节点大数组。
+
+### 2.2 PR #1 提供、可直接复用的接口
+
+路径：`modules/visualization/include/aerosim/visualization/features/`
+
+- `FeatureStatus` / `FeatureError`：现成的错误码体系，⑦⑧ 只做**追加**，不改语义。
+- `FeatureGeometry`：私有深拷贝持有 `vtkPolyData`，`copyData()` 返回独立副本。⑦ 的流线、⑧ 的轨迹都是 `vtkPolyData`，**可直接复用该类型作为返回载体**。
+- `FeatureResult{status, std::shared_ptr<const FeatureGeometry> geometry}`。
+- `FeatureProcessor::snapshot(vtkPolyData*)`：注释明确 Accept externally generated lines/surfaces (e.g. streamlines) for export —— 即 ⑦ 的输出接入 ⑭ 的通道**已经预留**。
+- `FeatureExporter::writeVtp()`：QSaveFile 原子提交、拒绝默认覆盖，⑦⑧ 的导出无需自写。
+- `FeatureJob`：后台提交/取消适配器，⑦⑧ 的耗时积分复用同一套取消与结果所有权语义。
+
+### 2.3 关键缺口
+
+1. **`scene/` 层未实现**（PR #1 的 README 明确：Viewer、对象显隐/删除、工程数据访问及完整界面尚未接入）。因此 ⑦⑧ 本次只能交付到 `features/`，场景接入是后续阶段。
+2. **`FeatureOperation` 枚举只有 `Slice/ContourLines/Isosurface`**，需追加 `SurfaceStreamline` / `Trajectory` 两个值才能走 `FeatureJob`。
+3. **物面来源缺失**：夹具 `cube_t00.vtk` 是 `STRUCTURED_POINTS 3x3x3`，**文件本身不编码任何边界 ID**；六个边界只存在于 `tests/fixtures/postprocess/mesh.json` 的 `boundaries` 段（6 个具名面，各含 `boundaryId` 与 quad 的 `faceNodeIds`，每面 4 个 quad / 9 个节点）。
+4. **VTK 8.2.0 原为缺失**，已于 P0 阶段编译补齐（见 7.1）。本方案第 3 节的探针结论仍产生于 VTK 9.5.2，但已在 VTK 8.2.0 Debug 上用 PR #1 的 9 组既有测试间接验证了该构建可用。
+
+## 3. 实测结论（本机 VTK 9.5.2 语义探针，脚本在 `.tools\probe_*.py`）
+
+这些结论直接决定实现方式，不是推测：
+
+### 3.1 表面投影：VTK 自带，无需自研
+
+做法：造 5x5 点、16 个 `vtkQuad`（`GetCellDimension()==2`）的 z=0 平面，速度场**故意**设为 v=(1,0,5)（法向分量是切向的 5 倍），种子 (0,2,0)，RK2 前向，`MaximumPropagation=10`：
+
+| `SetSurfaceStreamlines` | 输出点数 | 轨迹 | 结论 |
+| --- | --- | --- | --- |
+| `true` | 6 | z 恒为 0，x = 0 / 0.707 / 1.414 / 2.121 / 2.828 / 3.536 | 速度被**投影到切平面并归一化**后积分 |
+| `false` | 8 | z 涨到 4.854，x 只到 0.971 | 沿真实 3D 方向跑出平面 |
+
+**结论**：物面投影由 `vtkStreamTracer` 内部完成，我们只需保证输入是**全 2D 单元**的曲面。这与 PR #1 中 `contourLines` 的校验（`validate(ds, 2)` 逐单元核 `GetCellDimension()==2`）完全一致，可直接复用同一校验思路。
+
+### 3.2 终止原因：VTK 直接写 cell array
+
+`vtkStreamTracer` 会把 `ReasonForTermination` 写成 **cell 数组**，取值即 `enum ReasonForTermination`：`OUT_OF_DOMAIN=1`、`NOT_INITIALIZED=2`、`UNEXPECTED_VALUE=3`、`OUT_OF_LENGTH=4`、`OUT_OF_STEPS=5`、`STAGNATION=6`。
+
+**夹具实测**：用 `mesh.json` 的 `y_plus` 面（法向 +y）+ 恒定速度 (1,0,0)，从该面首节点出发：
+
+- 输出 3 点 1 条线，x 从 -1 单调增到 0.414，**x 单调递增成立**（正好对上 `PostProcessTestData.md` 第 15 行的断言要求）；
+- `ReasonForTermination` 存在，值 = 1（OUT_OF_DOMAIN），因为 3x3x3 网格在 x 方向只覆盖 [-1,1]，一步后就出域。
+
+**副产品**：从 `x_plus` 面（法向 +x、与速度平行）出发输出 1 点 0 条线 —— **法向与速度平行的面产生退化线**，这正是自动筛选要处理的第一类情况。
+
+### 3.3 非定常迹线：问题所在
+
+`vtkParticleTracer` + 自建时间管线（`TIME_STEPS`/`WHOLE_EXTENT` 均正确设置，种子为 `vtkProgrammableSource`）在夹具三帧上**只输出 1 个点、0 条线**，且该点落在 (1,0,0) 而非种子点 (-1,0,0)；把时间采样加密到 21 帧、41 帧后结果仍是 1 点或 0 线。
+
+对照实验：用同样的三帧数据手写**跨帧插值 + 定步长积分**，得到 41 个点、x 从 -1 单调增到 1（在域边界 x=1 停住）。
+
+**结论**：
+
+- 夹具速度场三帧恒为 (1,0,0)，**没有真实的非定常内容**，`vtkParticleTracer` 在这种退化输入上不可靠；
+- 若要交付计算迹线，**必须先解决帧数据的时间插值**（`vtkTemporalInterpolatedVelocityField`），并且**需要能真正验证的非定常夹具**，否则交付物无法验收；
+- 这印证了 `docs/PostProcessContracts.md` 第 52 行把 轨迹是读入已有数据还是非定常计算 列为**待确认项**是正确的。
+
+## 4. 接口设计
+
+### 4.1 ⑦ 表面流线
+
+新增 `modules/visualization/include/aerosim/visualization/features/StreamlineProcessor.h`：
+
+```cpp
+namespace aerosim { namespace visualization {
+
+enum class StreamlineTermination {            // 与 vtkStreamTracer::ReasonForTermination 一一对应
+  OutOfDomain = 1, NotInitialized = 2, UnexpectedValue = 3,
+  OutOfLength = 4, OutOfSteps = 5, Stagnation = 6, Unknown = -1
+};
+
+enum class SeedMode { ExplicitPoints, Line, SurfacePoints };
+
+struct StreamlineSeeds {
+  SeedMode mode = SeedMode::ExplicitPoints;
+  std::vector<std::array<double,3>> points;   // ExplicitPoints
+  std::array<double,3> lineStart{{0,0,0}};    // Line
+  std::array<double,3> lineEnd{{0,0,0}};      // Line
+  int lineResolution = 20;                    // Line
+  int surfaceStride = 1;                      // SurfacePoints：按点序号抽稀
+};
+
+struct StreamlineParameters {
+  std::string velocityField = "Velocity";     // 显式字段名，禁止隐式取第一个向量
+  StreamlineSeeds seeds;
+  bool surfaceStreamlines = true;             // 关掉就是自由空间流线
+  int integrationDirection = 0;               // 0=forward 1=backward 2=both
+  int integrator = 2;                         // 0=RK2 1=RK4 2=RK45
+  double maximumPropagation = 1.0e6;
+  double initialStep = 0.1;                   // <=0 表示交给 VTK 按单元长度自适应
+  double minimumStep = 0.01;
+  double maximumStep = 1.0;
+  int stepUnit = 2;                           // 1=LENGTH_UNIT 2=CELL_LENGTH_UNIT
+  long long maximumSteps = 2000;
+  double terminalSpeed = 1e-12;
+};
+
+struct RejectedLine {                          // 自动筛选的诊断输出
+  enum class Reason { zeroLength, belowMinLength, seedOutsideDomain,
+                      parallelToSurfaceNormal, duplicate, overLineLimit } reason;
+  int seedIndex = -1;
+  double arcLength = 0.0;
+  std::string detail;
+};
+
+struct StreamlineResult {
+  FeatureStatus status;
+  std::shared_ptr<const FeatureGeometry> geometry;   // 复用 PR #1 类型
+  std::vector<StreamlineTermination> terminations;   // 与几何中的线一一对应，顺序稳定
+  std::vector<RejectedLine> rejected;                // 被筛选掉的线及原因
+  std::size_t acceptedCount() const;
+};
+
+struct StreamlineFilter {
+  double minimumArcLength = 0.0;      // 0 = 不过滤
+  std::size_t maximumLines = 0;       // 0 = 不限制；超出时按弧长降序保留
+  bool dropParallelToNormal = true;   // 剔除种子处速度与法向平行的退化线
+  bool deduplicateOverlapping = true; // 起点距离 + 方向夹角双阈值
+  double dedupDistanceTolerance = 1e-6;
+  double dedupAngleToleranceDeg = 1.0;
+};
+
+class StreamlineProcessor {
+public:
+  static StreamlineResult surfaceStreamlines(vtkDataSet *surface, const StreamlineParameters &p,
+                                             const StreamlineFilter &f = {});
+  static StreamlineResult volumeStreamlines(vtkDataSet *volume, const StreamlineParameters &p,
+                                            const StreamlineFilter &f = {});
+};
+
+const char *streamlineTerminationName(StreamlineTermination t);
+}}
+```
+
+要点：
+
+- 输入是**调用方明确选中的 2D 曲面**（物面或切片结果），与 PR #1 `contourLines` 约定一致；`surfaceStreamlines` 内部先做 `GetCellDimension()==2` 全量校验，失败返回 `UnsupportedGeometry` 并提示请传入 2D 物面或切片结果。
+- 输出走 `FeatureGeometry`，**天然接入 ⑭**：`FeatureProcessor::snapshot(geometry.copyData())` 后 `FeatureExporter::writeVtp`。
+- 终止原因**不塞进点数据**，而是平行数组随结果返回，避免污染导出文件。
+
+### 4.2 ⑦ 自动筛选规则（用户来文明确要求 具体筛选规则需约定，此处提出具体规则）
+
+按以下顺序执行，每条被剔除的线记入 `rejected` 并附原因，**不做静默丢弃**：
+
+1. **零长度**：点数 < 2 或弧长 == 0 → `zeroLength`（对应 3.2 中 `x_plus` 面的实测现象）。
+2. **最短弧长**：弧长 < `minimumArcLength` → `belowMinLength`。默认 0 即关闭，由调用方按物理尺度设定，**不设魔数默认值**。
+3. **种子在域外**：`vtkStreamTracer` 返回 `NOT_INITIALIZED` → `seedOutsideDomain`。
+4. **与法向平行**：种子处速度在切平面上的投影 < 1e-9 → `parallelToSurfaceNormal`（同样来自 3.2 实测）。
+5. **重合去重**：起点距离 < `dedupDistanceTolerance` 且方向夹角 < `dedupAngleToleranceDeg` → `duplicate`。
+6. **数量上限**：保留数超过 `maximumLines` 时按弧长降序截断，其余标记 `overLineLimit`。
+
+这 6 条是**建议值**，需要评审确认；尤其 2 的默认值与 6 的排序键（弧长 vs 种子序号）会影响用户预期。
+
+### 4.3 ⑧ 迹线
+
+核心设计：**先把 轨迹数据 与 轨迹来源 解耦**，这样 读取 还是 计算 的决策不会返工显示侧。
+
+`modules/visualization/include/aerosim/visualization/features/TrajectorySet.h`：
+
+```cpp
+struct TrajectorySet {                       // 统一内存表示，与来源无关
+  FeatureStatus status;
+  std::shared_ptr<const FeatureGeometry> geometry;  // vtkPolyData，线 + 点
+  // 必需点数组（缺失即 InvalidInput）："Time"(1), "ParticleId"(1)
+  // 可选点数组："ParticleAge"(1), "SeedId"(1)
+  // 必需 cell 数组："TerminationReason"(1)，取值同 StreamlineTermination
+  std::string timeUnit = "s";
+  std::string coordinateFrame;              // 与 index.json 的 body-xyz 对齐
+  double startTime = 0.0;
+  double endTime = 0.0;
+  std::size_t trajectoryCount() const;
+};
+```
+
+两个来源适配器（同一 `TrajectorySet` 出口）：
+
+- **P1 读取**：`TrajectoryReader::readVtpTrajectories(const QString &path)` / `readLegacyTrajectories(...)`，同时接受 `vtkPolyData` 内存输入。**轨迹文件格式当前仓库无任何夹具**，格式需评审确定。
+- **P2 计算**：`TrajectoryProcessor::integrate(const std::vector<vtkDataSet*> &frames, const double *times, ...)`，内部用 `vtkTemporalInterpolatedVelocityField` + `vtkParticleTracer`；**在 3.3 的退化输入问题解决前不纳入 P1 交付**。
+
+### 4.4 场景接入（后续阶段，非本次）
+
+按 `docs/PostProcessContracts.md` 第 39-46 行，特征层只产出**不可变结果**，由场景服务 `submitObject(ownerTaskId, datasetId, featureKind, handle, initialStyle) -> Result<SceneObjectRef, PostProcessError>` 接管。⑦⑧ 各自只操作自己的 `sceneObjectId`。**该契约尚未实现，本次不落地**。
+
+## 5. 分层与文件清单
+
+严格遵循 `modules/visualization/AGENTS.md`：`data -> features -> scene`，不得反向包含。
+
+| 文件 | 层 | 说明 |
+| --- | --- | --- |
+| `modules/visualization/include/aerosim/visualization/features/StreamlineProcessor.h` | features | ⑦ 接口 |
+| `modules/visualization/src/features/StreamlineProcessor.cpp` | features | `vtkStreamTracer` 封装 + 6 条筛选 |
+| `modules/visualization/include/aerosim/visualization/features/TrajectorySet.h` | features | ⑧ 数据形态 |
+| `modules/visualization/src/features/TrajectoryReader.cpp` | features | ⑧ 读取 |
+| `modules/visualization/src/features/TrajectoryProcessor.cpp` | features | ⑧ 计算（P2） |
+| `modules/visualization/tests/StreamlineTests.cpp` | tests | ⑦ 单测 |
+| `modules/visualization/tests/TrajectoryTests.cpp` | tests | ⑧ 单测 |
+
+同时需要**追加**（不修改既有语义）：
+
+- `FeatureProcessor.h`：**只需**在 `FeatureError` 追加 `NoSeeds`、`SeedOutsideDomain` 两个值。原计划的 `NotSurfaceGeometry` 用现成的 `UnsupportedGeometry` 即可（P0 核对后更正），`InvalidVelocityField` 用现成的 `MissingField` 即可。`FeatureOperation` 追加 `SurfaceStreamline`、`Trajectory`。
+- `modules/visualization/CMakeLists.txt`：新增两个 cpp、两个测试目标，链接 `vtkFiltersFlowPaths`（`vtkStreamTracer` 所在模块）与 `vtkFiltersCore`。
+
+## 6. 测试计划
+
+### 6.1 ⑦ 的表面流线断言（全部可用现有夹具）
+
+| 用例 | 输入 | 断言 |
+| --- | --- | --- |
+| 平面上单调推进 | `y_plus` 面 + Velocity(1,0,0) | 线数 >= 1；x 严格单调递增；`terminations` 全为 `OutOfDomain` |
+| 出域即停 | 同上 | 所有点 x <= 1.0 + 1e-9 |
+| 贴面无穿透 | `y_plus` 面 | 所有点 y 等于面上 y（1e-9 容差） |
+| 法向平行退化 | `x_plus` 面 + Velocity(1,0,0) | 线数 0，`rejected` 含 `parallelToSurfaceNormal` 或 `zeroLength` |
+| 非法输入 | 传入未切片的 3x3x3 体网格 | 返回 `UnsupportedGeometry`，message 指向 2D 物面 |
+| 缺字段 | 字段名写 `Nope` | 返回 `MissingField` |
+| 边界法向投影 | 自造平面 + v=(1,0,5) | 点 z 恒为 0（复现 3.1 表） |
+
+读取夹具时必须沿用 PR #1 的 `ReadAllScalarsOn()` + `ReadAllVectorsOn()`，否则 Velocity 载不进来（`PostProcessTestData.md` 第 17 行）。
+
+### 6.2 ⑧ 的断言
+
+- 读取路径：用 ⑦ 产出的轨迹写 VTP 再读回，round-trip 后点/线数与 `Time` 数组一致。
+- 显示数据契约：`TrajectorySet` 缺 `Time` 或缺 `TerminationReason` 时报 `InvalidInput`。
+- 计算路径（P2）：**需要新的非定常夹具**，现有三帧恒定速度不足以验证（3.3 实测）。建议新增一个速度随 t 变化的最小夹具（例如 v=(1, t, 0)，3~5 帧），断言轨迹在 y 上有非零位移。
+
+## 7. 分阶段实施
+
+| 阶段 | 内容 | 依赖 | 预估 |
+| --- | --- | --- | --- |
+| **P0** | ~~装 VTK 8.2.0 Debug~~ **已完成**；~~从 PR #1 分支切 `feature/streamline-trajectory`~~ **已完成** | — | 完成 |
+| **P1** | ~~⑦ `StreamlineProcessor` + 6 条筛选 + `StreamlineTests`~~ **已完成** | P0 | 完成 |
+| **P2** | ⑧ `TrajectorySet` + 读取适配器 + 组织/显示数据契约 + 测试 | P1（复用 FeatureGeometry） | 2-3d |
+| **P3** | ⑧ 非定常计算（仅当 D1 选 计算） | 新非定常夹具 + 时间插值 | 4-6d |
+| **P4** | 场景接入（`scene/`）与 UI 种子交互 | PR #1 合并 + `scene/` 落地 | 待定 |
+| **P5** | 与 ⑭ 导出联调 | P1 | 0.5d |
+
+**P0 已完成的实际结果（供 P1 直接依赖）**：
+
+| 项 | 值 |
+| --- | --- |
+| 分支 | `feature/streamline-trajectory`，从 PR #1 分支 `feature/slices-contours-isosurfaces-export-wzy`（**bb34fd3**）切出 |
+| VTK | `8.2.0` Debug，自源码编译，装在项目内 `.tools\vtk-install`（225 MB）。**VTK 官方不提供 Windows C++ 预编译 SDK**，只能自编译 |
+| modules/visualization 独立构建 | 6/6 目标通过 |
+| PR #1 既有测试 | `aerosim_spatial_features_test` **9/9 通过**（VS2022 v142 + Qt 5.12.12 + VTK 8.2.0 Debug） |
+| PR #1 的 `CMakeLists.txt` | **不含 `vtkFiltersFlowPaths`**，P1 必须在 `find_package` 的 COMPONENTS 里追加 |
+| PR #1 的 `FeatureError` | 已够用：`NotSurfaceGeometry` 用现成 `UnsupportedGeometry`，`InvalidVelocityField` 用现成 `MissingField`，只需再加 `NoSeeds`、`SeedOutsideDomain` |
+| 导出通道 | `FeatureProcessor::snapshot()` 注释已明确 "Accept externally generated lines/surfaces (e.g. streamlines) for export"，⑦ 输出可直接走 ⑭ |
+
+**P0 期间发现的坑（P1 会踩，先记下）**：VTK 8.2 的 CMake 变量名与 VTK 9 完全不同——`Module_vtkFiltersFlowPaths`（非 `VTK_MODULE_ENABLE_VTK_FiltersFlowPaths`）、`VTK_Group_Qt`（非 `VTK_GROUP_ENABLE_Qt`）、`BUILD_TESTING`（非 `VTK_BUILD_TESTING`）。传错名字**不报错**，只在日志末尾给一句 dev warning，结果是缺模块的 VTK。
+
+**P1 已完成的实际结果**：
+
+| 项 | 值 |
+| --- | --- |
+| 新增文件 | `modules/visualization/include/aerosim/visualization/features/StreamlineProcessor.h`（118 行）、`src/features/StreamlineProcessor.cpp`（707 行）、`tests/StreamlineTests.cpp`（328 行） |
+| 改动文件 | 模块 `CMakeLists.txt`（加 `vtkFiltersFlowPaths` 组件、加源文件、加 `aerosim_streamline_test` 目标与 ctest 条目）、`FeatureProcessor.h`（加 `NoSeeds`/`SeedOutsideDomain`）、`FeatureProcessor.cpp`（`featureErrorName` 补两个 case） |
+| 构建 | 独立构建 9/9 目标通过，零错误零警告 |
+| 测试 | `aerosim_streamline_test` **9/9 通过**；PR #1 的 `aerosim_spatial_features_test` 仍 **9/9 通过**（无回归）；`ctest` 2/2 通过 0.84s |
+| 头文件调整 | 删除了草案里的 `StreamlineContext`（含跨帧复用 `vtkCellLocator`）。VTK 8.2 的 `SetCellLocatorPrototype` 只做 `NewInstance` 复制，**不复用已构建的加速结构**，留着等于假承诺 |
+
+**P1 实现期间核实并固化的 VTK 8.2 行为（后续阶段直接依赖，不必再读源码）**：
+
+| 事实 | 出处 |
+| --- | --- |
+| 表面投影**只对 point locator 生效**；用 cell locator 时 VTK 打一条 warning 并静默关掉投影 | `Filters/FlowPaths/vtkStreamTracer.cxx:702-718` |
+| 投影数学是「先投影到切平面、再归一化」（`f -= n*dot(n,f)` 后 `Normalize`），所以步长按归一化速度走 | `Common/DataModel/vtkAbstractInterpolatedVelocityField.cxx:147-189` |
+| **点数 ≤1 的线被静默丢弃**，域外种子在输出里毫无痕迹 ⇒ 判域必须在调 tracer 之前自己做 | `vtkStreamTracer.cxx:1136-1145` |
+| 每条 polyline 一个 cell，`ReasonForTermination`/`SeedIds` 是 **cell 数组**，索引 == 线索引 | `vtkStreamTracer.cxx:1179-1186` |
+| `BOTH` 方向时 `SeedIds` 长度翻倍，后半是 `numSeeds+i` | `vtkStreamTracer.cxx:330-338` |
+| `vtkCellLocator::FindCell` 的 `tol2` 参数是 `vtkNotUsed`，**传容差不生效**；判「点是否在面上」必须用 `FindClosestPoint` + `dist2` | `vtkCellLocator.cxx:1671-1673` |
+| `MinimumIntegrationStep`/`MaximumIntegrationStep` 传 0 表示「让 VTK 自适应」 | `vtkStreamTracer.cxx:257-296` |
+| `vtkCell` **没有** `ComputeNormal`，只有 `vtkPolygon`/`vtkTriangle` 的静态版本 ⇒ 法向要自己叉积 | `Common/DataModel/vtkCell.h` |
+
+**P1 测试与夹具说明**：⑦ 的 9 组断言全部用**自建曲面**——从 `cube_t00.vtk` 的 3×3×3 结构点网格手工抽出 y=-1 / y=+1 两个平面（`tests/StreamlineTests.cpp` 的 `wall()`），不依赖 `mesh.json` 的 `boundaryId` 读取（那属于 ① 的职责，见风险 4）。其中「投影去掉法向分量」一组把壁面速度改写成 `(1,5,0)`，若投影失效线会立刻冲出 y 平面，因此该断言真正验证了投影而非仅碰巧满足。
+
+**分支策略（重要）**：PR #1 未合并，而 ⑦⑧ 必须依赖它提供的 `FeatureGeometry`/`FeatureStatus`/`FeatureJob` 与 `modules/visualization/CMakeLists.txt`。因此 `feature/streamline-trajectory` 应**从 PR #1 分支 `feature/slices-contours-isosurfaces-export-wzy` 切出**，而不是从 `main` 切出。若 PR #1 先合并，则改为从 `main` 切出。
+
+## 8. 风险与未验证项
+
+1. ~~**VTK 8.2 与 9.5 的 API 差异**~~ —— **⑦ 部分已解除**：P1 的表面流线已在 VTK 8.2.0 Debug 上实测通过（投影、终止原因、多方向、筛选规则 9 组全过），第 3.1/3.2 节的 9.5.2 探针结论在 8.2 上成立。**⑧ 部分仍未验证**：`vtkParticleTracer` 尚未在 8.2 上跑过，第 3.3 节的退化输入问题也仍在。
+2. ~~**本机无 VTK C++ 库**~~ —— **已解除**：P0 已把 VTK 8.2.0 Debug 编译到项目内 `.tools`，且 PR #1 的 9 组测试在该构建上通过，证明工具链可用。
+3. **Windows 仅 VTK Debug**（`docs/DevelopmentEnvironment.md` 第 22 行：Release 探针运行时报 `0xc0000374`）。
+4. **物面选择的上游尚不存在**：`mesh.json` 的 `boundaryId` 目前无任何 C++ 代码读取，属于 ① 网格导入的范围。P1 的测试可以自建曲面绕过，但正式使用时物面从哪来需随 ① 一并定。
+5. **⑧ 的格式未定**：轨迹文件格式仓库无任何夹具与约定。
+
+## 9. 需要评审拍板的决策点
+
+| 编号 | 决策 | 选项 | 建议 |
+| --- | --- | --- | --- |
+| **D1** | 迹线是 读取 还是 计算 | A 只读取 / B 只计算 / C 两者都要（内部解耦） | **C，但分阶段**：P2 先交付读取与数据组织，P3 再交付计算。理由：现有夹具无法验证跨界追踪（3.3），先交付可验收的部分 |
+| **D2** | 种子交互形态优先级 | 点 / 线 / 面 三者排序 | **面优先**（最贴合表面流线语义，且与切片结果天然衔接），点次之，线最后 |
+| **D3** | 4.2 的 6 条筛选规则是否成立 | 采纳 / 调整阈值 / 删减 | 采纳结构，**规则 2 与 6 的默认值改为显式必填**，避免魔数 |
+| **D4** | 场景接入是否进本次范围 | 进 / 不进 | **不进**。`scene/` 未实现，硬接会违反 每个功能只操作自己的 sceneObjectId 的所有权约定 |
+| **D5** | 是否安装 VTK 8.2.0 Debug | 装（约 1-2 GB，可放 `.tools\`） / 不装并标注未验证 | **装**，否则 P1/P2 无法自证 |
+| **D6** | 物面来源 | `mesh.json` boundaryId / 切片结果 / 两者 | **两者都支持**，接口只收 2D 数据集，来源由调用方决定 |
+
+## 10. 一句话总结
+
+⑦ 的核心风险比预想低：**表面投影和终止原因都由 VTK 直接给出**，我们要做的是 2D 物面校验 + 6 条筛选规则 + 结果封装。⑧ 的核心风险在于**夹具无法验证跨帧追踪**，因此建议先交付 读取与数据组织，把 非定常计算 作为独立阶段等夹具就绪。
