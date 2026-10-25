@@ -247,8 +247,8 @@ struct TrajectorySet {                       // 统一内存表示，与来源�
 ### 6.2 ⑧ 的断言
 
 - 读取路径：用 ⑦ 产出的轨迹写 VTP 再读回，round-trip 后点/线数与 `Time` 数组一致。
-- 显示数据契约：`TrajectorySet` 缺 `Time` 或缺 `TerminationReason` 时报 `InvalidInput`。
-- 计算路径（P2）：**需要新的非定常夹具**，现有三帧恒定速度不足以验证（3.3 实测）。建议新增一个速度随 t 变化的最小夹具（例如 v=(1, t, 0)，3~5 帧），断言轨迹在 y 上有非零位移。
+- 显示数据契约：`TrajectorySet` 缺 `Time` 或 `ParticleId` 时报 `MissingField`；缺 `TerminationReason` **不报错**，按 `Unknown(-1)` 记录（P2 实测后修正：终止原因是可选元数据，缺它不影响动画面，报错会误拒合法的第三方轨迹文件）。
+- 计算路径（P3）：**需要新的非定常夹具**，现有三帧恒定速度不足以验证（3.3 实测）。建议新增一个速度随 t 变化的最小夹具（例如 v=(1, t, 0)，3~5 帧），断言轨迹在 y 上有非零位移。
 
 ## 7. 分阶段实施
 
@@ -256,7 +256,7 @@ struct TrajectorySet {                       // 统一内存表示，与来源�
 | --- | --- | --- | --- |
 | **P0** | ~~装 VTK 8.2.0 Debug~~ **已完成**；~~从 PR #1 分支切 `feature/streamline-trajectory`~~ **已完成** | — | 完成 |
 | **P1** | ~~⑦ `StreamlineProcessor` + 6 条筛选 + `StreamlineTests`~~ **已完成** | P0 | 完成 |
-| **P2** | ⑧ `TrajectorySet` + 读取适配器 + 组织/显示数据契约 + 测试 | P1（复用 FeatureGeometry） | 2-3d |
+| **P2** | ~~⑧ `TrajectorySet` + 读取适配器 + 组织/显示数据契约 + 测试~~ **已完成** | P1（复用 FeatureGeometry） | 完成 |
 | **P3** | ⑧ 非定常计算（仅当 D1 选 计算） | 新非定常夹具 + 时间插值 | 4-6d |
 | **P4** | 场景接入（`scene/`）与 UI 种子交互 | PR #1 合并 + `scene/` 落地 | 待定 |
 | **P5** | 与 ⑭ 导出联调 | P1 | 0.5d |
@@ -300,6 +300,25 @@ struct TrajectorySet {                       // 统一内存表示，与来源�
 
 **P1 测试与夹具说明**：⑦ 的 9 组断言全部用**自建曲面**——从 `cube_t00.vtk` 的 3×3×3 结构点网格手工抽出 y=-1 / y=+1 两个平面（`tests/StreamlineTests.cpp` 的 `wall()`），不依赖 `mesh.json` 的 `boundaryId` 读取（那属于 ① 的职责，见风险 4）。其中「投影去掉法向分量」一组把壁面速度改写成 `(1,5,0)`，若投影失效线会立刻冲出 y 平面，因此该断言真正验证了投影而非仅碰巧满足。
 
+**P2 已完成的实际结果**：
+
+| 项 | 值 |
+| --- | --- |
+| 新增文件 | `modules/visualization/include/aerosim/visualization/features/TrajectorySet.h`（75 行）、`src/features/TrajectoryReader.cpp`（231 行）、`tests/TrajectoryTests.cpp`（289 行） |
+| 改动文件 | 模块 `CMakeLists.txt`（加 `TrajectoryReader.cpp`、`aerosim_trajectory_test` 目标与 ctest 条目）。**未改动** `FeatureProcessor.h`：`MissingField`/`UnsupportedGeometry`/`UnsupportedFormat`/`NonFiniteData` 均已存在，P2 不需要新错误码 |
+| 构建 | 独立构建 6/6 目标通过，零错误零警告 |
+| 测试 | `aerosim_trajectory_test` **9/9 通过**；`aerosim_streamline_test` 9/9、`aerosim_spatial_features_test` 9/9 无回归；`ctest` **3/3 通过** 1.22s |
+| 读取路径 | `.vtp`（`vtkXMLPolyDataReader`）与 legacy `.vtk`（`vtkDataSetReader`）均支持，按后缀分派；其它后缀 `UnsupportedFormat`，不做猜测 |
+| Unicode 路径 | 沿用写端的做法：Qt `QFile` 读全字节 → `SetInputString` 交给 VTK。**不经过 VTK 的窄字符文件名接口** |
+
+**P2 实现期间核实并固化的行为（P3 直接依赖）**：
+
+| 事实 | 出处 |
+| --- | --- |
+| legacy `.vtk` 读取器**默认丢弃数组**，不调 `ReadAllScalarsOn()`/`ReadAllVectorsOn()`/`ReadAllFieldsOn()` 会连 `Time` 都读不到，症状是「文件明明有数据却报字段缺失」 | `IO/Legacy/vtkDataReader.h:252-308`；`docs/PostProcessTestData.md:17` |
+| `vtkXMLReader::SetInputString(const std::string&)` 与 `vtkDataReader::SetInputString(const char*, int)` 是两条不同签名，legacy 端必须显式传长度 | `IO/XML/vtkXMLReader.h:69-72`、`IO/Legacy/vtkDataReader.h:104-109` |
+| `vtkParticleTracerBase` 产出的是**点云 + `SetVerts`**，不是 polyline；`ParticleId`/`ParticleAge` 是它自己的数组名，但 cell 级的 `TerminationReason` 它**不产出** ⇒ P3 必须自行按 `ParticleId` 分组组装 cell 数组 | `Filters/FlowPaths/vtkParticleTracerBase.cxx:762-797` |
+| `FeatureGeometry` 构造函数是 private + `friend FeatureProcessor`，任何模块外代码都只能经 `FeatureProcessor::snapshot(vtkPolyData*)` 构造 | `FeatureProcessor.h:45-56` |
 **分支策略（重要）**：PR #1 未合并，而 ⑦⑧ 必须依赖它提供的 `FeatureGeometry`/`FeatureStatus`/`FeatureJob` 与 `modules/visualization/CMakeLists.txt`。因此 `feature/streamline-trajectory` 应**从 PR #1 分支 `feature/slices-contours-isosurfaces-export-wzy` 切出**，而不是从 `main` 切出。若 PR #1 先合并，则改为从 `main` 切出。
 
 ## 8. 风险与未验证项
@@ -308,7 +327,7 @@ struct TrajectorySet {                       // 统一内存表示，与来源�
 2. ~~**本机无 VTK C++ 库**~~ —— **已解除**：P0 已把 VTK 8.2.0 Debug 编译到项目内 `.tools`，且 PR #1 的 9 组测试在该构建上通过，证明工具链可用。
 3. **Windows 仅 VTK Debug**（`docs/DevelopmentEnvironment.md` 第 22 行：Release 探针运行时报 `0xc0000374`）。
 4. **物面选择的上游尚不存在**：`mesh.json` 的 `boundaryId` 目前无任何 C++ 代码读取，属于 ① 网格导入的范围。P1 的测试可以自建曲面绕过，但正式使用时物面从哪来需随 ① 一并定。
-5. **⑧ 的格式未定**：轨迹文件格式仓库无任何夹具与约定。
+5. **⑧ 的格式未定** —— **读取侧已收窄**：P2 把可接受的输入定义为「polyline + 必需点数组 `Time`/`ParticleId` + 可选 cell 数组 `TerminationReason`」，`.vtp`/`.vtk` 均可读。**仍缺的是夹具**：仓库至今没有任何轨迹文件样本，P2 的 9 组断言全部用运行时构造的假数据（`makeTrajectories()`），没有一份来自真实求解器。真实文件的数组命名、时间单位、是否带 `SeedId` 都还是假设。
 
 ## 9. 需要评审拍板的决策点
 
