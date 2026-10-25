@@ -14,13 +14,10 @@ MockWindow::MockWindow(QWidget *parent) : QMainWindow(parent)
     resize(960, 620);
     auto *central = new QWidget(this);
     auto *layout = new QVBoxLayout(central);
-    layout->addWidget(new QLabel(QStringLiteral("A-owned startup shell; B's MainWindow will replace this"), central));
+    layout->addWidget(new QLabel(QStringLiteral("Temporary startup shell; formal MainWindow will replace this"), central));
     sendButton_ = new QPushButton(QStringLiteral("Send MOCK TaskCommand"), central);
     sendButton_->setEnabled(false);
     layout->addWidget(sendButton_);
-    postprocessButton_ = new QPushButton(QStringLiteral("Open post-processing VTK demo"), central);
-    layout->addWidget(postprocessButton_);
-    connect(postprocessButton_, &QPushButton::clicked, this, &MockWindow::postprocessDemoRequested);
     auto *viewport = new QWidget(central);
     viewportLayout_ = new QVBoxLayout(viewport);
     layout->addWidget(viewport, 1);

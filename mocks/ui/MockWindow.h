@@ -21,14 +21,10 @@ public:
     void bindServices(const ServiceBindings &services) override;
     void appendMessage(const QString &message);
 
-signals:
-    void postprocessDemoRequested();
-
 private:
     QVBoxLayout *viewportLayout_ = nullptr;
     QTextEdit *events_ = nullptr;
     QPushButton *sendButton_ = nullptr;
-    QPushButton *postprocessButton_ = nullptr;
     ServiceBindings services_;
     bool bound_ = false;
 };

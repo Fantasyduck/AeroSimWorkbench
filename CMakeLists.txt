@@ -24,7 +24,6 @@ add_subdirectory(mocks/services)
 
 if(AEROSIM_BUILD_GUI)
     add_subdirectory(mocks/ui)
-    add_subdirectory(demos/postprocess/launcher)
 endif()
 add_subdirectory(app)
 
@@ -35,13 +34,10 @@ if(AEROSIM_BUILD_TESTS)
         add_test(NAME gui_mock_smoke COMMAND aerosim_gui --smoke)
         set_tests_properties(gui_mock_smoke PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
     endif()
-    find_package(Python3 COMPONENTS Interpreter QUIET)
-    if(Python3_Interpreter_FOUND)
-        add_test(NAME postprocess_fixture_check
-            COMMAND "${Python3_EXECUTABLE}"
-                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/postprocess/generate.py"
-                    --check)
-    endif()
+    add_test(NAME postprocess_fixture_check
+        COMMAND "${CMAKE_COMMAND}"
+                "-DPOSTPROCESS_FIXTURE_DIR=${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/postprocess"
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/postprocess/VerifyFixtures.cmake")
 endif()
 
 if(AEROSIM_BUILD_STACK_PROBE)
