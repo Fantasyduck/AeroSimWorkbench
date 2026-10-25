@@ -28,7 +28,7 @@
 └── docs/                      # 开发、集成和验证说明
 ```
 
-`aerosim_contracts` 只依赖 Qt Core；UI 插入契约只有 `QWidget` 前置声明，不使 CLI 链接 Widgets。`aerosim_application` 和 `aerosim_mock` 也只依赖 Qt Core；`aerosim_ui_mock` 依赖 Qt Widgets。CLI 不链接 Qt Widgets。顶层 CMake 默认只接入骨架、Mock、数据夹具检查和可选技术栈探针；开启 `AEROSIM_BUILD_VISUALIZATION=ON` 后会加入 `modules/visualization/` 已交付的空间特征目标。
+`aerosim_contracts` 只依赖 Qt Core；UI 插入契约只有 `QWidget` 前置声明，不使 CLI 链接 Widgets。`aerosim_application` 和 `aerosim_mock` 也只依赖 Qt Core；`aerosim_ui_mock` 依赖 Qt Widgets。CLI 不链接 Qt Widgets。顶层 CMake 当前只接入骨架、Mock、数据夹具检查和可选技术栈探针；`modules/` 中没有正式业务目标。
 
 MockWindow 只提供任务通信按钮和占位视口。正式后处理视口拟通过主窗口的 `IWidgetHost` 接入；具体场景接口仍待评审。主工程当前不会启动后处理子进程。
 

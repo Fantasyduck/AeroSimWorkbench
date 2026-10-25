@@ -1,6 +1,6 @@
 # 可视化与网格/结果
 
-本模块是后处理核心的实现位置：网格/结果数据、空间特征、三维场景和非 UI 分析能力都归入这里。后处理工作区窗口放在 `modules/ui/`，`app/` 只做装配，`contracts/` 只放跨模块的轻量标识和元信息，不能放 VTK 对象或大数组。
+本模块是后处理核心的实现位置：网格/结果数据、空间特征、三维场景和非 UI 分析能力都归入这里。后处理工作区只是 `modules/ui/` 中的一个 UI 组件；该模块同时承载前处理、运行监控和工程管理等系统界面。`app/` 只做装配，`contracts/` 只放跨模块的轻量标识和元信息，不能放 VTK 对象或大数组。
 
 当前已交付 `aerosim_spatial_features` 算法库及 `aerosim_spatial_features_test` 命令行测试，覆盖任务 ④⑤⑥⑭ 的几何处理和 VTP 导出。**Viewer、对象显隐/删除、工程数据访问及完整界面尚未接入。**
 
@@ -24,7 +24,7 @@ analysis/ 多工况表、公式、曲线、模型；读取 data 的元数据，�
 | 空间特征 | `include/.../features`、`src/features`；`aerosim_spatial_features` | 已实现 ④⑤⑥⑭ 的算法和 VTP 导出 | 接收数据快照，返回私有几何副本；不依赖 QWidget、Renderer 或场景对象。 |
 | 场景 | `include/.../scene`、`src/scene`；`aerosim_visualization_scene` | 未实现 | 唯一持有 Viewer、renderer 和 actor；接收 feature 结果，所有渲染操作在 GUI 线程。 |
 | 分析 | `include/.../analysis`、`src/analysis`；`aerosim_postprocess_analysis` | 未实现 | 服务层，不依赖 scene/UI；Excel、公式、曲线和 AI 在此拆分为独立目标。 |
-| UI | `modules/ui/` | 未实现 | 通过经评审的服务/场景接口操作，不直接操纵 VTK pipeline。 |
+| UI | `modules/ui/` 的后处理工作区 | 未实现 | `modules/ui/` 是全系统的 UI 模块；后处理工作区通过经评审的服务/场景接口操作，不直接操纵 VTK pipeline。 |
 
 除 `features/` 外的目录与目标尚未创建；表中名称用于后续统一命名，不表示接口已经冻结。每个新层必须先作为独立 CMake 目标和测试交付，再加入本模块的 CMake。
 

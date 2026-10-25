@@ -19,7 +19,7 @@
 | nlohmann/json | **尚无已验证的安装与版本** | 目前主工程不链接；待 D/G 确定版本与交付方式 |
 | 日志库 | **尚未定案或验证** | 设计文档同时提到 log4cpp 与 spdlog；F/A 需确认后再固定版本 |
 
-Qt C++ 和 VTK C++ 使用 MSVC x64，禁止混用 MinGW、x86 或不同编译器 ABI 的预编译库。目标机 `vtkGUISupportQt-8.2.dll` 依赖 `Qt5Widgetsd.dll`、`MSVCP140D.dll` 等 Debug DLL；Release 探针虽可链接，但运行时发生堆错误 `0xc0000374`。因此**正式 Qt/VTK/SARibbon 集成以 Debug 为已验证基线**；现有不链接 VTK 的 Release C++ 骨架可独立运行，但完整 Release 构建须等匹配的 VTK 8.2.0 Release 包安装后重测。`aerosim_spatial_features` 已作为可选模块目标提交，但尚未在目标 Windows 基线运行；C++ GUI 兼容性仍以 Debug `aerosim_stack_probe` 为当前证据。
+Qt C++ 和 VTK C++ 使用 MSVC x64，禁止混用 MinGW、x86 或不同编译器 ABI 的预编译库。目标机 `vtkGUISupportQt-8.2.dll` 依赖 `Qt5Widgetsd.dll`、`MSVCP140D.dll` 等 Debug DLL；Release 探针虽可链接，但运行时发生堆错误 `0xc0000374`。因此**正式 Qt/VTK/SARibbon 集成以 Debug 为已验证基线**；现有不链接 VTK 的 Release C++ 骨架可独立运行，但完整 Release 构建须等匹配的 VTK 8.2.0 Release 包安装后重测。C++ 兼容性以 Debug `aerosim_stack_probe` 为当前证据；正式业务模块仍未接入。
 
 SARibbon 2.9.3（目标机提交 `0cba0ca`）作为本阶段的可验证开发基线；源码获取与后续分发锁定方式待评审。nlohmann/json 的具体版本，以及 log4cpp 与 spdlog 的最终选择尚未确定；这些依赖不得在共享 CMake 中擅自固定或替换。
 

@@ -8,7 +8,7 @@
 - `features/` 负责从只读数据快照计算切面、等值线/面、流线、迹线和可导出的特征几何；不得持有场景状态或操作渲染器。
 - `scene/` 是唯一可以创建 Viewer、VTK renderer、mapper 和 actor 的位置；所有场景变更和 `Render()` 留在 GUI 线程。
 - `analysis/` 负责多工况表、公式、曲线和模型，读取数据/工况元信息但不依赖 `scene/`、QWidget 或主窗口。
-- 后处理工作区和参数控件属于 `modules/ui/`；`app/` 只装配对象。不要把 UI 代码放入本模块的 data/features/analysis。
+- 后处理工作区和参数控件属于 `modules/ui/`，它也是前处理、工程管理和运行监控等系统界面的统一位置；`app/` 只装配对象。不要把 UI 代码放入本模块的 data/features/analysis。
 
 依赖方向为 `data -> features -> scene`；`analysis` 可依赖数据元信息但不依赖 scene。不能从低层反向包含 UI 或 scene 头文件。当前只有 `features/` 已实现；创建其他层前先完成其最小 API、测试数据和独立 CMake 目标。
 

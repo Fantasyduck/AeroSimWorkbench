@@ -13,15 +13,15 @@
 
 | 文档 | 用途与适用范围 | 状态 |
 | --- | --- | --- |
-| [第一阶段主工程集成说明](phase1-integration.md) | 当前 GUI/CLI、ApplicationController、contracts、Mock 和正式模块接入边界 | 现行骨架说明；空间特征目标已可选接入 |
+| [第一阶段主工程集成说明](phase1-integration.md) | 当前 GUI/CLI、ApplicationController、contracts、Mock 和正式模块接入边界 | 现行骨架说明；正式业务目标尚未接入 |
 
 ## 后处理接口和功能规范
 
 | 文档 | 用途与适用范围 | 状态 |
 | --- | --- | --- |
-| [后处理集成准备](PostProcessIntegrationGuide.md) | 主窗口/工作区/VTKViewer 的关系、数据与场景所有权、分批接入路径 | 空间特征算法已实现；其余集成方案待评审 |
+| [后处理集成准备](PostProcessIntegrationGuide.md) | 主窗口/工作区/VTKViewer 的关系、数据与场景所有权、分批接入路径 | 集成方案待评审 |
 | [后处理公共契约](PostProcessContracts.md) | 区分已有引用/端口、已加入的轻量标识及待确认的数据/场景协议 | 部分已实现；其余为接口草案 |
-| [后处理功能交接表](PostProcessTaskHandoff.md) | 保留 16 项功能编号、输入输出、依赖、建议接入位置及测试条件 | ④⑤⑥⑭已有模块内算法；其余目标/API 待评审 |
+| [后处理功能交接表](PostProcessTaskHandoff.md) | 保留 16 项功能编号、输入输出、依赖、建议接入位置及测试条件 | 功能要求保留；目标/API 待评审 |
 
 ## 测试数据与验证
 
@@ -36,4 +36,4 @@
 | [第一阶段验证记录](phase1-validation.md) | 按日期保存曾执行的构建、CTest 和技术栈探针结果 | 历史记录；已退役原型的结果不代表当前功能 |
 | [Windows 骨架部署](windows-deployment.md) | 不链接 VTK 的 Qt GUI/CLI Release 骨架打包与启动 | 骨架范围有效；不适用于正式 VTK Release 集成 |
 
-当前根 CMake 默认只接入骨架、Mock、夹具检查和可选技术栈探针。开启 `AEROSIM_BUILD_VISUALIZATION=ON` 后接入可视化模块；目前其中只有空间特征算法目标。后处理其余目标和场景 API 仍须接口评审后再实现。
+当前根 CMake 只接入骨架、Mock、夹具检查和可选技术栈探针；`modules/` 的正式业务目标尚未定义。后处理建议目标名与场景 API 应在接口评审后再写入构建配置。
