@@ -349,7 +349,50 @@ struct TrajectorySet {                       // 统一内存表示，与来源�
 
 **P3 测试的一处踩坑（值得记住）**：`TrajectoryFrame` 只存裸指针，最初测试里写 `f.data = frame(...)` 让临时 `vtkSmartPointer` 在语句结束即析构，测试直接段错误（`0xC0000005`）。改为 `Fixture` 结构同时持有 `std::vector<vtkSmartPointer<vtkStructuredPoints>> owned` 与 frames。**这不是实现 bug，但任何调用方都必须保证数据集在 `integrate` 返回前存活**（头文件第 17-18 行已写明）。
 
-**分支策略（重要）**：PR #1 未合并，而 ⑦⑧ 必须依赖它提供的 `FeatureGeometry`/`FeatureStatus`/`FeatureJob` 与 `modules/visualization/CMakeLists.txt`。因此 `feature/streamline-trajectory` 应**从 PR #1 分支 `feature/slices-contours-isosurfaces-export-wzy` 切出**，而不是从 `main` 切出。若 PR #1 先合并，则改为从 `main` 切出。
+### 7.3 与 PR #1 的依赖关系（已实测，非推测）
+
+PR #1 未合并，而 ⑦⑧ 必须依赖它提供的 `FeatureGeometry`/`FeatureStatus`/`FeatureJob` 与 `modules/visualization/CMakeLists.txt`。因此 `feature/streamline-trajectory` **从 PR #1 分支 `feature/slices-contours-isosurfaces-export-wzy` 的 `bb34fd3` 切出**，而不是从 `main` 切出。
+
+#### PR #1 已经动过，但没动我们依赖的部分
+
+核实时间点：PR #1 的头提交已从 `bb34fd3` 前进到 `59caa79`（新增 14 个提交），因此「万一对方修改」不是假设而是已发生的事实。逐项核对结果：
+
+| 检查项 | 结果 |
+| --- | --- |
+| `bb34fd3` 是否仍是 PR #1 的祖先 | 是（`git merge-base --is-ancestor` 返回 0）⇒ 对方**追加提交，未改写历史** |
+| 14 个新提交是否改了 `features/` 下的头文件、源文件、测试 | **完全没有**（`git log bb34fd3..pr1-latest -- .../features .../src/features .../tests` 输出为空） |
+| 实际改了哪里 | `modules/ui/`（`PostProcessWorkbenchWindow.cpp` 411 行）、`modules/visualization/src/scene/VtkSceneViewer.cpp`、`app/gui_main.cpp`、docs、scripts |
+
+结构上的原因：我们依赖的是**算法内核**（`FeatureProcessor`/`FeatureGeometry`/`FeatureStatus`），对方加的是**界面外壳**（工作台窗口、场景查看器）。这两侧按 `AGENTS.md` 的 UI Layer → Service Layer 约束本就应当分离，Service 不依赖 `QWidget`/VTK 显示控件。
+
+#### rebase 已验证可无损执行
+
+在临时 worktree 里把我们的 3 个提交 rebase 到 `59caa79`：**零冲突，3/3 干净落地**；合并后 `CMakeLists.txt` 双方内容均在（第 13 行 `AEROSIM_BUILD_VISUALIZATION_SCENE` 选项、第 18 行 `vtkFiltersFlowPaths`、第 26-28 行我们的三个源文件、第 44 行 SCENE 块），4 个测试文件齐全；**重新编译 15/15 通过，`ctest` 4/4 通过 1.66s**。验证用的临时 worktree、临时分支、临时构建目录已全部删除。
+
+#### 已决定的推进方式：等 PR #1 合并后再开 PR（方案 A）
+
+当前分支相对 `origin/main` 有 **6 个提交，其中 3 个作者是 `moyoo0`**（`ecc7a20`/`4618b96`/`bb34fd3`），因为从 PR #1 头上切出必然继承其全部提交。若此刻开 PR，GitHub 会把它显示为 6 个提交，审阅者会看到重复内容，也可能连带把他人未合并的工作一起推进去。
+
+因此决定：**等 PR #1 合并进 `main` 后，再 rebase 到新 `main`，届时分支只剩自己那 3 个提交**。
+
+| 方案 | 内容 | 取舍 |
+| --- | --- | --- |
+| **A（已采用）** | 等 PR #1 合并 → rebase 到新 `main` → 开 PR | PR diff 只有自己的 3 个提交，最干净；代价是排期受对方控制。已实测 rebase 无损，随时可补做 |
+| B（未采用） | 现在就开 PR，base 指向 PR #1 的分支 | 可立即提交，但形成 PR 链；PR #1 一旦变动我们的 PR 会跟着漂移，审阅者也容易混淆 |
+
+执行脚本已固化为 `.tools/after-pr1-merge.cmd`（纯 ASCII + CRLF）：先校验工作区干净、`bb34fd3` 是否已成为 `origin/main` 祖先；未合并则**原样退出（exit 2）不做任何改动**；已合并则 rebase → 校验「仅剩自己的提交」→ 重新构建并跑全部测试 → 打印 `git push --force-with-lease` 提示。该保护逻辑已实测：当前运行返回 `exit 2` 且不修改仓库。
+
+#### 唯一真正耦合 PR #1 文件的地方：5 行、已刻意接受
+
+我们对 PR #1 自有文件的改动仅两处共 5 行，都在 `FeatureProcessor`：
+
+| 文件 | 改动 |
+| --- | --- |
+| `include/aerosim/visualization/features/FeatureProcessor.h` | `FeatureError` 枚举末尾追加 `NoSeeds, SeedOutsideDomain` |
+| `src/features/FeatureProcessor.cpp` | `featureErrorName` 的 switch 补两个 `case` |
+| `modules/visualization/CMakeLists.txt` | VTK 组件加 `vtkFiltersFlowPaths`；`add_library` 加 3 个源文件；新增 3 个测试目标与 ctest 条目 |
+
+刻意**不**为规避这点耦合而自建一套错误码体系：缺的确实只有两个值，若另立枚举，会让 ⑦⑧ 与 ①②④⑤⑥ 的错误语义分裂，是比 5 行冲突更糟的设计。即便对方日后重构 `FeatureError`（例如改为字符串或加分类），这 5 行手工修复也只需数分钟。
 
 ## 8. 风险与未验证项
 
@@ -372,4 +415,4 @@ struct TrajectorySet {                       // 统一内存表示，与来源�
 
 ## 10. 一句话总结
 
-⑦ 的核心风险比预想低：**表面投影和终止原因都由 VTK 直接给出**，我们要做的是 2D 物面校验 + 6 条筛选规则 + 结果封装。⑧ 的核心风险在于**夹具无法验证跨帧追踪**，因此建议先交付 读取与数据组织，把 非定常计算 作为独立阶段等夹具就绪。
+⑦ 的表面投影由 VTK 直接给出，我们要做的是 2D 物面校验 + 6 条筛选规则 + 结果封装；⑧ 的读取与计算两侧均已交付并产出同一个 `TrajectorySet`。**P3 已证伪早期「夹具退化导致 tracer 不可靠」的归因**：恒速场完全可用，问题是当时选了只产点云、不建折线的 `vtkParticleTracer`，正确选择是 `vtkParticlePathFilter`。当前唯一的实质缺口是**缺真实求解器轨迹样本**（风险 5），以及 ⑦⑧ 尚未接入场景层（决策 D4）。
