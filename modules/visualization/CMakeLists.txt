@@ -22,7 +22,8 @@ if(AEROSIM_BUILD_VISUALIZATION_FEATURES)
         src/features/FeatureExporter.cpp
         src/features/FeatureJob.cpp
         src/features/StreamlineProcessor.cpp
-        src/features/TrajectoryReader.cpp)
+        src/features/TrajectoryReader.cpp
+        src/features/TrajectoryProcessor.cpp)
     add_library(aerosim::spatial_features ALIAS aerosim_spatial_features)
     target_include_directories(aerosim_spatial_features PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>)
@@ -67,4 +68,13 @@ if(AEROSIM_BUILD_VISUALIZATION_FEATURES AND AEROSIM_BUILD_TESTS)
     set_tests_properties(streamlines PROPERTIES TIMEOUT 120)
     add_test(NAME trajectories COMMAND aerosim_trajectory_test "${_fixture_dir}")
     set_tests_properties(trajectories PROPERTIES TIMEOUT 120)
+    add_executable(aerosim_trajectory_processor_test tests/TrajectoryProcessorTests.cpp)
+    target_link_libraries(aerosim_trajectory_processor_test PRIVATE aerosim_spatial_features)
+    set_target_properties(aerosim_trajectory_processor_test PROPERTIES
+        CXX_STANDARD 14 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF AUTOMOC OFF)
+    if(MSVC)
+        target_compile_options(aerosim_trajectory_processor_test PRIVATE /utf-8)
+    endif()
+    add_test(NAME trajectory_processor COMMAND aerosim_trajectory_processor_test)
+    set_tests_properties(trajectory_processor PROPERTIES TIMEOUT 120)
 endif()

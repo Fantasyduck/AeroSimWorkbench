@@ -248,7 +248,7 @@ struct TrajectorySet {                       // 统一内存表示，与来源�
 
 - 读取路径：用 ⑦ 产出的轨迹写 VTP 再读回，round-trip 后点/线数与 `Time` 数组一致。
 - 显示数据契约：`TrajectorySet` 缺 `Time` 或 `ParticleId` 时报 `MissingField`；缺 `TerminationReason` **不报错**，按 `Unknown(-1)` 记录（P2 实测后修正：终止原因是可选元数据，缺它不影响动画面，报错会误拒合法的第三方轨迹文件）。
-- 计算路径（P3）：**需要新的非定常夹具**，现有三帧恒定速度不足以验证（3.3 实测）。建议新增一个速度随 t 变化的最小夹具（例如 v=(1, t, 0)，3~5 帧），断言轨迹在 y 上有非零位移。
+- 计算路径（P3，**已完成**）：用代码内构造的 3×3×3 常速时序帧（`TrajectoryProcessorTests.cpp` 的 `frame()` / `threeFrames()`），断言：单种子得单路径、点沿 x 严格递增、起止时间等于积分窗口、结果能被 P2 读回、`Time`/`ParticleId`/`SeedId`/`TerminationReason` 四个数组齐备且每个 cell 都是 polyline。第 3.3 节「需要速度随 t 变化的夹具」的前提**已被证伪**——恒定速度足以验证积分正确性，真正的问题是当时用错了滤波器（见风险 1）。
 
 ## 7. 分阶段实施
 
@@ -257,7 +257,7 @@ struct TrajectorySet {                       // 统一内存表示，与来源�
 | **P0** | ~~装 VTK 8.2.0 Debug~~ **已完成**；~~从 PR #1 分支切 `feature/streamline-trajectory`~~ **已完成** | — | 完成 |
 | **P1** | ~~⑦ `StreamlineProcessor` + 6 条筛选 + `StreamlineTests`~~ **已完成** | P0 | 完成 |
 | **P2** | ~~⑧ `TrajectorySet` + 读取适配器 + 组织/显示数据契约 + 测试~~ **已完成** | P1（复用 FeatureGeometry） | 完成 |
-| **P3** | ⑧ 非定常计算（仅当 D1 选 计算） | 新非定常夹具 + 时间插值 | 4-6d |
+| **P3** | ~~⑧ 非定常计算~~ **已完成** | P2 | 完成 |
 | **P4** | 场景接入（`scene/`）与 UI 种子交互 | PR #1 合并 + `scene/` 落地 | 待定 |
 | **P5** | 与 ⑭ 导出联调 | P1 | 0.5d |
 
@@ -319,21 +319,51 @@ struct TrajectorySet {                       // 统一内存表示，与来源�
 | `vtkXMLReader::SetInputString(const std::string&)` 与 `vtkDataReader::SetInputString(const char*, int)` 是两条不同签名，legacy 端必须显式传长度 | `IO/XML/vtkXMLReader.h:69-72`、`IO/Legacy/vtkDataReader.h:104-109` |
 | `vtkParticleTracerBase` 产出的是**点云 + `SetVerts`**，不是 polyline；`ParticleId`/`ParticleAge` 是它自己的数组名，但 cell 级的 `TerminationReason` 它**不产出** ⇒ P3 必须自行按 `ParticleId` 分组组装 cell 数组 | `Filters/FlowPaths/vtkParticleTracerBase.cxx:762-797` |
 | `FeatureGeometry` 构造函数是 private + `friend FeatureProcessor`，任何模块外代码都只能经 `FeatureProcessor::snapshot(vtkPolyData*)` 构造 | `FeatureProcessor.h:45-56` |
+**P3 已完成的实际结果**：
+
+| 项 | 值 |
+| --- | --- |
+| 新增文件 | `modules/visualization/include/aerosim/visualization/features/TrajectoryProcessor.h`（49 行）、`src/features/TrajectoryProcessor.cpp`（508 行）、`tests/TrajectoryProcessorTests.cpp`（约 250 行） |
+| 改动文件 | 模块 `CMakeLists.txt`（加 `TrajectoryProcessor.cpp` 源文件、`aerosim_trajectory_processor_test` 目标与 ctest 条目）。**未改动** `FeatureProcessor.h`：`NoSeeds`/`SeedOutsideDomain` 在 P1 已加，P3 不需要新错误码 |
+| 构建 | 独立构建 7/7 目标通过，零错误零警告 |
+| 测试 | `aerosim_trajectory_processor_test` **9/9 通过**；`aerosim_trajectory_test` 9/9、`aerosim_streamline_test` 9/9、`aerosim_spatial_features_test` 9/9 无回归；`ctest` **4/4 通过** 1.11s |
+| 接口 | `TrajectoryProcessor::integrate(const std::vector<TrajectoryFrame>&, const TrajectoryParameters&)` → `TrajectorySet`。`TrajectoryFrame{vtkDataSet* data; double time;}`，**复用 `StreamlineSeeds`** 让 ⑦⑧ 共用一种种子类型 |
+| 通道 | 直接产出 `TrajectorySet`（经 `FeatureProcessor::snapshot` 造 `FeatureGeometry`），**不需要落临时 VTP 再读回**。原计划的中转链路已被证明多余 |
+| 步长 | **不暴露**。`vtkParticleTracerBase` 的 `IntegrationStep`/`MaximumError` 是 protected 成员且无 setter（`vtkParticleTracerBase.h:502-503`），暴露就是假承诺 |
+
+**P3 实现期间核实并固化的 VTK 8.2 行为（后续阶段直接依赖，不必再读源码）**：
+
+| 事实 | 出处 |
+| --- | --- |
+| **必须用 `vtkParticlePathFilter`，不能用 `vtkParticleTracer`**：后者只输出点云 + `SetVerts`，不建折线。这是第 3.3 节「三帧恒定速度不可靠」的真正原因，恒速本身无害 | `vtkParticleTracerBase.cxx:797,1517`；`vtkParticlePathFilter.cxx:116-134` |
+| **`ErrorCode` 数组在输出里恒为 0**，原定的「ErrorCode→StreamlineTermination 映射表」方案不成立。所有赋值分支都在 `ParticleHistories.erase(it)` 之后，而 `AddParticle` 只在 `particle_good` 为真时调用 ⇒ 终止原因只能从末点几何与时间反推 | `vtkParticleTracerBase.cxx:1073,1126,1182,1470,1476,1482,1504,1517-1523` |
+| **出域与停滞的粒子被静默移除**，不留任何输出点。`SendParticleToAnotherProcess` 恒返回 true，`vtkParticlePathFilter` 未重写 ⇒ 域外种子、早停轨迹都必须由调用方自行判定与解释 | `vtkParticleTracerBase.h:403-408`；`.cxx:604-632,1192-1203` |
+| 种子域外时只打一条 `vtkDebugMacro`，不 push 也不留痕 ⇒ **判域必须在调 tracer 之前**（与 P1 同一条教训） | `vtkParticleTracerBase.cxx:604-632` |
+| `ParticleId` 是**通过 `TestPoint` 的种子的压缩序号**，不是原始种子下标 ⇒ 调用方若过滤了种子，必须自己维护回原始序的映射 | `vtkParticleTracerBase.cxx:682-693` |
+| **非定常只能接受 point 关联的速度数组**。`vtkParticleTracerBase` 调的是单参 `SelectVectors(name)`，`VectorsType` 恒为 `FIELD_ASSOCIATION_POINTS`；cell 关联数组会让每次求值报 "Can't evaluate dataset!"。对比：P1 的 `vtkStreamTracer` 用双参版本，两种关联都支持 | `vtkAbstractInterpolatedVelocityField.cxx:49,108,130`；`vtkTemporalInterpolatedVelocityField.h:94-95` |
+| 单帧输入只 `vtkWarningMacro` 不报错；起止时间超范围也只 `vtkErrorMacro` 并在 `RequestInformation` 里**静默夹取** ⇒ 这些前置校验必须由调用方自己做 | `vtkParticleTracerBase.cxx:239-252,288-292,301-319` |
+| 输出端口若声明抽象基类 `vtkDataSet`，执行管线实例化输出对象时崩 `0xC0000005`；必须声明具体类名（`.cpp` 里用 `frames[0].data->GetClassName()` 动态取） | 实测 |
+| `TIME_STEPS()` 必须用数组形式 `info->Set(key, &times[0], n)`；变参形式超过约 20 个参数会报 no overloads | 实测 |
+
+**P3 的三处终止原因判定（`classifyTermination`）**：末点时间到达 `terminationTime`（容差 `1e-9*max(1,|t|)`）→ `OutOfLength`；末点速度 ≤ `terminalSpeed` → `Stagnation`；末点在 bbox 某面 `sqrt(sum(span^2))*1e-3` 以内 → `OutOfDomain`；都不满足 → `Unknown`。**不设 `UnexpectedValue`/`NotInitialized`**，因为 `vtkParticlePathFilter` 没有可观测信号支持它们，硬造等于编数据。
+
+**P3 测试的一处踩坑（值得记住）**：`TrajectoryFrame` 只存裸指针，最初测试里写 `f.data = frame(...)` 让临时 `vtkSmartPointer` 在语句结束即析构，测试直接段错误（`0xC0000005`）。改为 `Fixture` 结构同时持有 `std::vector<vtkSmartPointer<vtkStructuredPoints>> owned` 与 frames。**这不是实现 bug，但任何调用方都必须保证数据集在 `integrate` 返回前存活**（头文件第 17-18 行已写明）。
+
 **分支策略（重要）**：PR #1 未合并，而 ⑦⑧ 必须依赖它提供的 `FeatureGeometry`/`FeatureStatus`/`FeatureJob` 与 `modules/visualization/CMakeLists.txt`。因此 `feature/streamline-trajectory` 应**从 PR #1 分支 `feature/slices-contours-isosurfaces-export-wzy` 切出**，而不是从 `main` 切出。若 PR #1 先合并，则改为从 `main` 切出。
 
 ## 8. 风险与未验证项
 
-1. ~~**VTK 8.2 与 9.5 的 API 差异**~~ —— **⑦ 部分已解除**：P1 的表面流线已在 VTK 8.2.0 Debug 上实测通过（投影、终止原因、多方向、筛选规则 9 组全过），第 3.1/3.2 节的 9.5.2 探针结论在 8.2 上成立。**⑧ 部分仍未验证**：`vtkParticleTracer` 尚未在 8.2 上跑过，第 3.3 节的退化输入问题也仍在。
+1. ~~**VTK 8.2 与 9.5 的 API 差异**~~ —— **已解除**：P1 的表面流线、P2 的读写适配器、P3 的非定常积分均已在 VTK 8.2.0 Debug 上实测通过。第 3.3 节「三帧恒定速度导致 tracer 不可靠」的归因**已被 P3 证伪**：恒速场照样能积分出轨迹，真正的原因是当时用了 `vtkParticleTracer`（只产点云 + `SetVerts`），必须用 `vtkParticlePathFilter`（自己建 polyline）。
 2. ~~**本机无 VTK C++ 库**~~ —— **已解除**：P0 已把 VTK 8.2.0 Debug 编译到项目内 `.tools`，且 PR #1 的 9 组测试在该构建上通过，证明工具链可用。
 3. **Windows 仅 VTK Debug**（`docs/DevelopmentEnvironment.md` 第 22 行：Release 探针运行时报 `0xc0000374`）。
 4. **物面选择的上游尚不存在**：`mesh.json` 的 `boundaryId` 目前无任何 C++ 代码读取，属于 ① 网格导入的范围。P1 的测试可以自建曲面绕过，但正式使用时物面从哪来需随 ① 一并定。
-5. **⑧ 的格式未定** —— **读取侧已收窄**：P2 把可接受的输入定义为「polyline + 必需点数组 `Time`/`ParticleId` + 可选 cell 数组 `TerminationReason`」，`.vtp`/`.vtk` 均可读。**仍缺的是夹具**：仓库至今没有任何轨迹文件样本，P2 的 9 组断言全部用运行时构造的假数据（`makeTrajectories()`），没有一份来自真实求解器。真实文件的数组命名、时间单位、是否带 `SeedId` 都还是假设。
+5. **⑧ 的格式未定** —— **读取侧已收窄**：P2 把可接受的输入定义为「polyline + 必需点数组 `Time`/`ParticleId` + 可选 cell 数组 `TerminationReason`」，`.vtp`/`.vtk` 均可读。**仍未解决的是真实样本**：仓库至今没有任何来自真实求解器的轨迹文件，P2 的 9 组断言用运行时构造的假数据（`makeTrajectories()`），P3 的 9 组用自建的 3×3×3 常速帧。真实文件的数组命名、时间单位、是否带 `SeedId` 仍是假设。
 
 ## 9. 需要评审拍板的决策点
 
 | 编号 | 决策 | 选项 | 建议 |
 | --- | --- | --- | --- |
-| **D1** | 迹线是 读取 还是 计算 | A 只读取 / B 只计算 / C 两者都要（内部解耦） | **C，但分阶段**：P2 先交付读取与数据组织，P3 再交付计算。理由：现有夹具无法验证跨界追踪（3.3），先交付可验收的部分 |
+| **D1** | 迹线是 读取 还是 计算 | A 只读取 / B 只计算 / C 两者都要（内部解耦） | **C，已按 C 落地**：P2 交付读取（`TrajectoryReader`），P3 交付计算（`TrajectoryProcessor`），两侧产出同一个 `TrajectorySet`，显示端无需知道数据来源。原建议里「先读取后计算」的排期理由是夹具不足，该前提已被 P3 证伪，但分阶段交付本身仍然成立 |
 | **D2** | 种子交互形态优先级 | 点 / 线 / 面 三者排序 | **面优先**（最贴合表面流线语义，且与切片结果天然衔接），点次之，线最后 |
 | **D3** | 4.2 的 6 条筛选规则是否成立 | 采纳 / 调整阈值 / 删减 | 采纳结构，**规则 2 与 6 的默认值改为显式必填**，避免魔数 |
 | **D4** | 场景接入是否进本次范围 | 进 / 不进 | **不进**。`scene/` 未实现，硬接会违反 每个功能只操作自己的 sceneObjectId 的所有权约定 |
