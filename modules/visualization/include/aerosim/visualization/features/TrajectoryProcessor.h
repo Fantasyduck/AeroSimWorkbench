@@ -27,7 +27,7 @@ struct TrajectoryParameters {
     StreamlineSeeds seeds;
     double startTime = 0.0;
     double terminationTime = 0.0;
-    int integrator = 1;  // RUNGE_KUTTA4, same numbering as StreamlineParameters
+    int integrator = 1;  // 0 RK2, 1 RK4, 2 RK45, 3 RK5; same codes as StreamlineParameters
     double terminalSpeed = 1.0e-12;
     bool computeVorticity = false;
 };

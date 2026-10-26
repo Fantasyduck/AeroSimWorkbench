@@ -4,6 +4,8 @@
 
 #include "aerosim/visualization/features/TrajectoryProcessor.h"
 
+#include "aerosim/visualization/features/RungeKutta5.h"
+
 #include <vtkAlgorithm.h>
 #include <vtkCellArray.h>
 #include <vtkCellData.h>
@@ -315,9 +317,10 @@ TrajectorySet TrajectoryProcessor::integrate(const std::vector<TrajectoryFrame> 
     if (parameters.terminationTime > lastTime)
         return failure(FeatureError::InvalidParameter,
                        "terminationTime must not exceed the last frame time");
-    if (parameters.integrator < 0 || parameters.integrator > 2)
+    // 0 RK2, 1 RK4, 2 RK45 (adaptive Cash-Karp), 3 RK5 (fixed-step).
+    if (parameters.integrator < 0 || parameters.integrator > 3)
         return failure(FeatureError::InvalidParameter,
-                       "Integrator must be 0 (RK2), 1 (RK4) or 2 (RK45)");
+                       "Integrator must be 0 (RK2), 1 (RK4), 2 (RK45) or 3 (RK5)");
     if (!(parameters.terminalSpeed >= 0.0))
         return failure(FeatureError::InvalidParameter, "terminalSpeed must not be negative");
 
@@ -373,7 +376,11 @@ TrajectorySet TrajectoryProcessor::integrate(const std::vector<TrajectoryFrame> 
     tracer->SetStartTime(parameters.startTime);
     tracer->SetTerminationTime(parameters.terminationTime);
     tracer->SetTerminalSpeed(parameters.terminalSpeed);
-    tracer->SetIntegratorType(parameters.integrator);
+    // SetIntegratorType only recognises 0..2 and silently keeps its previous
+    // solver for codes it does not know, so RK5 has to be injected directly.
+    vtkSmartPointer<vtkInitialValueProblemSolver> integrator =
+        createIntegrator(parameters.integrator);
+    tracer->SetIntegrator(integrator);
     tracer->SetComputeVorticity(parameters.computeVorticity ? 1 : 0);
     tracer->Update();
 

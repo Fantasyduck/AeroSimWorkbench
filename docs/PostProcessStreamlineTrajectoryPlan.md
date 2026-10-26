@@ -113,7 +113,7 @@ struct StreamlineParameters {
   StreamlineSeeds seeds;
   bool surfaceStreamlines = true;             // 关掉就是自由空间流线
   int integrationDirection = 0;               // 0=forward 1=backward 2=both
-  int integrator = 2;                         // 0=RK2 1=RK4 2=RK45
+  int integrator = 2;                         // 0=RK2 1=RK4 2=RK45 3=RK5（见 7 节 P3.5）
   double maximumPropagation = 1.0e6;
   double initialStep = 0.1;                   // <=0 表示交给 VTK 按单元长度自适应
   double minimumStep = 0.01;
@@ -258,6 +258,7 @@ struct TrajectorySet {                       // 统一内存表示，与来源�
 | **P1** | ~~⑦ `StreamlineProcessor` + 6 条筛选 + `StreamlineTests`~~ **已完成** | P0 | 完成 |
 | **P2** | ~~⑧ `TrajectorySet` + 读取适配器 + 组织/显示数据契约 + 测试~~ **已完成** | P1（复用 FeatureGeometry） | 完成 |
 | **P3** | ~~⑧ 非定常计算~~ **已完成** | P2 | 完成 |
+| **P3.5** | ~~⑦⑧ 积分器扩展：RK2 / RK4 / RK45 / RK5~~ **已完成** | P1、P3 | 完成 |
 | **P4** | 场景接入（`scene/`）与 UI 种子交互 | PR #1 合并 + `scene/` 落地 | 待定 |
 | **P5** | 与 ⑭ 导出联调 | P1 | 0.5d |
 
@@ -348,6 +349,36 @@ struct TrajectorySet {                       // 统一内存表示，与来源�
 **P3 的三处终止原因判定（`classifyTermination`）**：末点时间到达 `terminationTime`（容差 `1e-9*max(1,|t|)`）→ `OutOfLength`；末点速度 ≤ `terminalSpeed` → `Stagnation`；末点在 bbox 某面 `sqrt(sum(span^2))*1e-3` 以内 → `OutOfDomain`；都不满足 → `Unknown`。**不设 `UnexpectedValue`/`NotInitialized`**，因为 `vtkParticlePathFilter` 没有可观测信号支持它们，硬造等于编数据。
 
 **P3 测试的一处踩坑（值得记住）**：`TrajectoryFrame` 只存裸指针，最初测试里写 `f.data = frame(...)` 让临时 `vtkSmartPointer` 在语句结束即析构，测试直接段错误（`0xC0000005`）。改为 `Fixture` 结构同时持有 `std::vector<vtkSmartPointer<vtkStructuredPoints>> owned` 与 frames。**这不是实现 bug，但任何调用方都必须保证数据集在 `integrate` 返回前存活**（头文件第 17-18 行已写明）。
+
+**P3.5 积分器扩展（RK4 / RK5 / RK45）已完成的实际结果**：
+
+| 项 | 值 |
+| --- | --- |
+| 新增文件 | `modules/visualization/include/aerosim/visualization/features/RungeKutta5.h`（139 行）、`src/features/RungeKutta5.cpp`（248 行）、`tests/RungeKutta5Tests.cpp`（约 300 行，10 组） |
+| 改动文件 | `StreamlineProcessor.h`（`integrator` 注释补 RK5）、`TrajectoryProcessor.h`（同）、`StreamlineProcessor.cpp`（校验放宽到 0..3、改用 `createIntegrator`）、`TrajectoryProcessor.cpp`（同）、模块 `CMakeLists.txt`（加 `vtkCommonMath` 组件、`RungeKutta5.cpp` 源文件、`aerosim_runge_kutta_test` 目标与 ctest 条目） |
+| 构建 | 独立构建 10/10 目标通过，零错误零警告 |
+| 测试 | `aerosim_runge_kutta_test` **10/10**、`aerosim_trajectory_processor_test` **13/13**、`aerosim_streamline_test` 11/11、`aerosim_trajectory_test` 9/9、`aerosim_spatial_features_test` 9/9；`ctest` **5/5 通过** 1.20s，连跑 5 轮稳定 |
+| 公开接口 | `enum IntegratorCode { IntegratorRungeKutta2 = 0, IntegratorRungeKutta4 = 1, IntegratorRungeKutta45 = 2, IntegratorRungeKutta5 = 3 };`、`vtkSmartPointer<vtkInitialValueProblemSolver> createIntegrator(int code);`、`const char *integratorName(int code);` |
+| 编码 | `StreamlineParameters::integrator` 与 `TrajectoryParameters::integrator` 共用同一套 0..3 编号；越界传 `InvalidParameter`，消息列出全部四种 |
+
+**为什么 RK5 必须自研**：VTK 8.2.0 的 `Common/Math/` 只有 `vtkRungeKutta2` / `vtkRungeKutta4` / `vtkRungeKutta45` 三个求解器，**没有 `vtkRungeKutta5`**。`vtkRungeKutta45` 是 Cash-Karp 4(5) 自适应算法，与「固定步长的五阶方法」不是同一件东西。把它当 RK5 交付名不副实，因此实现了一个真正的五阶定步长子类（经典六阶段 Butcher 表，`kStageC = {0, 1/4, 1/4, 1/2, 3/4, 1}`，`kStageB = {7/90, 0, 32/90, 12/90, 32/90, 7/90}`），并让 `IsAdaptive()` 返回 0。
+
+**为什么 RK45 需要一个 bounded 子类**（这是本次唯一改变既有行为的地方）：`vtkParticleTracerBase.cxx:1065` 把 `minStep`/`maxStep` **硬编码为 0** 后原样转发给求解器，而 `vtkRungeKutta45.cxx:145-148` 在误差估计恰为 0 时执行 `tmp = delT < 0 ? -minStep : minStep`，于是 `delT` 被改成 0，紧接着 `:177-184` 的 `t + delT == t` 判定触发 `UNEXPECTED_VALUE`（返回 3）。⑧ 侧无法补救，因为 `:1167-1170` 的自适应分支是空壳注释 `// code removed. Put it back when this is stable`，且 `MaximumError` 是无 setter 的成员（`:128`）。实测症状是加速场里加速度项整段丢失（偏差 ≈ t²/2 的一半）。解决办法是 `BoundedRungeKutta45`：在转发前用本次请求的步长修补边界——`maxStep = (maxStep <= 0 || maxStep > |delT|) ? |delT| : maxStep`、`minStep = minStep <= 0 ? |delT| * 1e-6 : minStep`，再把 `minStep` 夹到不超过 `maxStep`。它仍是 `vtkRungeKutta45` 的子类且保持自适应，只修边界。
+
+| 事实 | 出处 |
+| --- | --- |
+| 模块层**不能**调 `SetIntegratorType(3)`：两个追踪器的 `SetIntegratorType` 只认 0..2，`default` 分支只 `vtkWarningMacro("Unrecognized integrator type. Keeping old one.")` 并**静默保留旧求解器** | `vtkStreamTracer.cxx:230-232`、`vtkParticleTracerBase.cxx:1295-1297` |
+| 两个追踪器都在 `RequestData` 里 `GetIntegrator()->NewInstance()` 克隆求解器 ⇒ 自研子类靠 `vtkTypeMacro` + `vtkStandardNewMacro` 就能正确复制，无需额外代码 | `vtkStreamTracer.cxx:697-700`、`vtkParticleTracerBase.cxx:808-810` |
+| 注入积分器后调用方必须自己管引用：`SetIntegrator` 是 `vtkCxxSetObjectMacro`，`New()` 出来的那份引用要由调用方释放 ⇒ 统一用 `vtkSmartPointer` 承接 | `vtkStreamTracer.cxx:53`、`vtkParticleTracerBase.cxx:57` |
+| 非自适应求解器在 ⑦ 侧每步固定用设定步长（`else { stepSize.Interval = step; }`），所以定步长 RK5 的行为可预期 | `vtkStreamTracer.cxx:1112-1128` |
+| ⑧ 侧自适应分支是空壳，RK45 的逐步长回退行为在粒子追踪器里不会发生；这也意味着 RK5 与 RK4 在 ⑧ 上驱动方式相同 | `vtkParticleTracerBase.cxx:1167-1170` |
+| `vtkFunctionSet` 的子类构造必须写 protected 成员 `NumFuncs` / `NumIndepVars`（不是 `NumberOfFunctions` / `NumberOfIndependentVariables`，那两个是 getter） | `Common/Math/vtkFunctionSet.h:69-70` |
+
+**RK5 精度实测（测试固化的数字，可回归对照）**：对 `y' = y, y(0)=1` 积到 t=1（精确解 e），`N=10` 时 RK5 误差 `3.776e-9`、RK4 `2.084e-6`、RK2 `4.201e-3`，RK4:RK5 ≈ **552×**；`N=20` 时分别为 `1.322e-10` / `1.358e-7` / `1.091e-3`，比值 ≈ **1027×**。步长减半的误差比落在 20..45 区间（理论 32），确认收敛阶为 5。
+
+**RK45 修补的探针验证**：完全复刻追踪器调用形态（`minStep=maxStep=0`）时修补前 `rc=3` 且第一步就失败；修补后线性场 `V=(1+t)` 在步长 0.5 / 1.0 / 0.25 下都得 `y(2)=3`（精确），非线性场 `V=cos(t)` 得 `0.909298105`，解析解 `0.909297`，误差约 7e-7。
+
+**一处需要提醒的集成风险**：`RungeKutta5` 与 `BoundedRungeKutta45` 都是 `vtkTypeMacro` 生成的类，`GetClassName()` 返回的是子类名。若有下游代码按 `"vtkRungeKutta45"` 字符串比较来识别积分器（例如统计/日志），`createIntegrator(2)` 现在给出的是 `"BoundedRungeKutta45"`。测试里已把这条写进断言，避免以后误改回去。
 
 ### 7.3 与 PR #1 的依赖关系（已实测，非推测）
 

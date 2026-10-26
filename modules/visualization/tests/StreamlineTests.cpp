@@ -123,6 +123,43 @@ void requireMonotonicInX(vtkPolyData *lines, double sign)
     }
 }
 
+// A tessellated cylinder wall carrying the inviscid potential-flow velocity of the
+// same cylinder. A curved wall is the interesting case: on a plane a wrong
+// projection still yields a plausible straight line.
+vtkSmartPointer<vtkPolyData> cylinderWall(int segments, int levels, double radius)
+{
+    const double pi = 3.14159265358979323846;
+    vtkSmartPointer<vtkPoints> points = vtkSmartPointer<vtkPoints>::New();
+    points->SetDataTypeToDouble();
+    vtkNew<vtkDoubleArray> velocity;
+    velocity->SetName("Velocity");
+    velocity->SetNumberOfComponents(3);
+    for (int j = 0; j <= levels; ++j) {
+        const double z = -1.0 + 2.0 * (double)j / (double)levels;
+        for (int i = 0; i < segments; ++i) {
+            const double angle = 2.0 * pi * (double)i / (double)segments;
+            const double x = radius * std::cos(angle);
+            const double y = radius * std::sin(angle);
+            points->InsertNextPoint(x, y, z);
+            velocity->InsertNextTuple3(1.0 - (x * x - y * y), -2.0 * x * y, 0.0);
+        }
+    }
+    vtkNew<vtkCellArray> quads;
+    for (int j = 0; j < levels; ++j) {
+        for (int i = 0; i < segments; ++i) {
+            const int next = (i + 1) % segments;
+            vtkIdType quad[4] = {j * segments + i, j * segments + next,
+                                 (j + 1) * segments + next, (j + 1) * segments + i};
+            quads->InsertNextCell(4, quad);
+        }
+    }
+    vtkSmartPointer<vtkPolyData> surface = vtkSmartPointer<vtkPolyData>::New();
+    surface->SetPoints(points);
+    surface->SetPolys(quads);
+    surface->GetPointData()->AddArray(velocity);
+    return surface;
+}
+
 } // namespace
 
 int main(int argc, char **argv)
@@ -320,6 +357,85 @@ int main(int argc, char **argv)
                 "Input geometry changed");
         require(surface->GetPointData()->GetArray("Velocity")->GetNumberOfTuples() == points,
                 "Input field changed");
+    });
+
+    test("07 a curved wall keeps every point on the wall at constant z", [&] {
+        const int segments = 64;
+        auto surface = cylinderWall(segments, 4, 1.0);
+        StreamlineParameters parameters;
+        parameters.seeds.mode = SeedMode::ExplicitPoints;
+        // Seeds must sit exactly on tessellation nodes: the module rejects seeds
+        // that do not lie on the selected surface, which is the intended
+        // behaviour, so a seed placed on the true circle between two nodes is
+        // outside the polygonal wall.
+        const int nodeIndices[3] = {22, 26, 30};
+        for (int i = 0; i < 3; ++i) {
+            const double t = 2.0 * 3.14159265358979323846 * (double)nodeIndices[i]
+                             / (double)segments;
+            parameters.seeds.points.push_back(
+                std::array<double, 3>{{std::cos(t), std::sin(t), 0.0}});
+        }
+        parameters.maximumPropagation = 6.0;
+        auto result = surfaceStreamlines(surface, parameters);
+        success(result);
+        require(result.acceptedCount() == 3, "Expected three wall streamlines");
+        auto lines = result.geometry->copyData();
+        require(result.terminations.size()
+                    == static_cast<std::size_t>(lines->GetNumberOfLines()),
+                "Expected one termination per line");
+
+        // Points must stay within the tessellation: never outside the
+        // circumscribed circle, never deeper than one chord.
+        const double chord = std::cos(3.14159265358979323846 / (double)segments);
+        for (vtkIdType i = 0; i < lines->GetNumberOfPoints(); ++i) {
+            double point[3];
+            lines->GetPoint(i, point);
+            const double radius = std::sqrt(point[0] * point[0] + point[1] * point[1]);
+            require(radius <= 1.0 + 1e-9, "Streamline left the cylinder wall");
+            require(radius >= chord - 1e-3, "Streamline fell inside the chord");
+        }
+
+        vtkNew<vtkIdList> ids;
+        for (vtkIdType cell = 0; cell < lines->GetNumberOfLines(); ++cell) {
+            lines->GetCellPoints(cell, ids);
+            require(ids->GetNumberOfIds() >= 2, "Line has fewer than two points");
+            double first[3];
+            lines->GetPoint(ids->GetId(0), first);
+            for (vtkIdType i = 1; i < ids->GetNumberOfIds(); ++i) {
+                double point[3];
+                lines->GetPoint(ids->GetId(i), point);
+                require(std::abs(point[2] - first[2]) < 1e-9,
+                        "A wall streamline drifted along the cylinder axis");
+            }
+        }
+    });
+
+    test("07 both integration directions give one line each from a single seed", [&] {
+        auto input = readFixture(QDir(fixtures).filePath(QStringLiteral("cube_t00.vtk")));
+        auto surface = wall(input, 1, 2);
+        StreamlineParameters parameters;
+        parameters.seeds.points.push_back(std::array<double, 3>{{0.0, 1.0, 0.0}});
+        parameters.integrationDirection = 2; // BOTH
+        auto result = surfaceStreamlines(surface, parameters);
+        success(result);
+        require(result.acceptedCount() == 2,
+                "BOTH must give a forward and a backward line");
+        auto lines = result.geometry->copyData();
+        int forward = 0;
+        int backward = 0;
+        vtkNew<vtkIdList> ids;
+        for (vtkIdType cell = 0; cell < lines->GetNumberOfLines(); ++cell) {
+            lines->GetCellPoints(cell, ids);
+            double start[3];
+            double finish[3];
+            lines->GetPoint(ids->GetId(0), start);
+            lines->GetPoint(ids->GetId(ids->GetNumberOfIds() - 1), finish);
+            if (finish[0] > start[0])
+                ++forward;
+            else if (finish[0] < start[0])
+                ++backward;
+        }
+        require(forward == 1 && backward == 1, "The two lines must head opposite ways");
     });
 
     std::cout << "RESULT: " << passed << " passed, " << failed << " failed\n";

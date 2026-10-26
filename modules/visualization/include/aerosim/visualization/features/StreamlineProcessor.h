@@ -48,7 +48,7 @@ struct StreamlineParameters {
     // leaves the surface immediately.
     bool surfaceStreamlines = true;
     int integrationDirection = 0; // 0 forward, 1 backward, 2 both
-    int integrator = 0;           // 0 RK2, 1 RK4, 2 RK45
+    int integrator = 0;           // 0 RK2, 1 RK4, 2 RK45, 3 RK5
     double maximumPropagation = 1.0e6;
     double initialStep = 0.1;
     double minimumStep = 0.01;

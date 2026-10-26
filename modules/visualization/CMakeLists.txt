@@ -13,14 +13,16 @@ option(AEROSIM_BUILD_VISUALIZATION_FEATURES
 
 if(AEROSIM_BUILD_VISUALIZATION_FEATURES)
     find_package(VTK 8.2.0 EXACT REQUIRED COMPONENTS
-        vtkCommonCore vtkCommonDataModel vtkFiltersCore vtkFiltersFlowPaths
-        vtkFiltersGeneral vtkFiltersGeometry vtkIOXML vtkIOLegacy)
+        vtkCommonCore vtkCommonDataModel vtkCommonMath vtkFiltersCore
+        vtkFiltersFlowPaths vtkFiltersGeneral vtkFiltersGeometry
+        vtkIOXML vtkIOLegacy)
     find_package(Threads REQUIRED)
 
     add_library(aerosim_spatial_features STATIC
         src/features/FeatureProcessor.cpp
         src/features/FeatureExporter.cpp
         src/features/FeatureJob.cpp
+        src/features/RungeKutta5.cpp
         src/features/StreamlineProcessor.cpp
         src/features/TrajectoryReader.cpp
         src/features/TrajectoryProcessor.cpp)
@@ -77,4 +79,13 @@ if(AEROSIM_BUILD_VISUALIZATION_FEATURES AND AEROSIM_BUILD_TESTS)
     endif()
     add_test(NAME trajectory_processor COMMAND aerosim_trajectory_processor_test)
     set_tests_properties(trajectory_processor PROPERTIES TIMEOUT 120)
+    add_executable(aerosim_runge_kutta_test tests/RungeKutta5Tests.cpp)
+    target_link_libraries(aerosim_runge_kutta_test PRIVATE aerosim_spatial_features)
+    set_target_properties(aerosim_runge_kutta_test PROPERTIES
+        CXX_STANDARD 14 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF AUTOMOC OFF)
+    if(MSVC)
+        target_compile_options(aerosim_runge_kutta_test PRIVATE /utf-8)
+    endif()
+    add_test(NAME integrators COMMAND aerosim_runge_kutta_test)
+    set_tests_properties(integrators PROPERTIES TIMEOUT 120)
 endif()

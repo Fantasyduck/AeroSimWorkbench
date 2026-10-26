@@ -4,6 +4,8 @@
 
 #include "aerosim/visualization/features/StreamlineProcessor.h"
 
+#include "aerosim/visualization/features/RungeKutta5.h"
+
 #include <vtkCell.h>
 #include <vtkCellArray.h>
 #include <vtkCellData.h>
@@ -18,6 +20,7 @@
 #include <vtkPointData.h>
 #include <vtkPoints.h>
 #include <vtkPolyData.h>
+#include <vtkSmartPointer.h>
 #include <vtkStreamTracer.h>
 
 #include <algorithm>
@@ -68,8 +71,10 @@ FeatureStatus validateParameters(const StreamlineParameters &parameters)
         return {FeatureError::InvalidParameter, "A velocity field name is required"};
     if (parameters.integrationDirection < 0 || parameters.integrationDirection > 2)
         return {FeatureError::InvalidParameter, "Integration direction must be 0, 1 or 2"};
-    if (parameters.integrator < 0 || parameters.integrator > 2)
-        return {FeatureError::InvalidParameter, "Integrator must be 0, 1 or 2"};
+    // 0 RK2, 1 RK4, 2 RK45 (adaptive Cash-Karp), 3 RK5 (fixed-step).
+    if (parameters.integrator < 0 || parameters.integrator > 3)
+        return {FeatureError::InvalidParameter,
+                "Integrator must be 0 (RK2), 1 (RK4), 2 (RK45) or 3 (RK5)"};
     if (parameters.stepUnit != 1 && parameters.stepUnit != 2)
         return {FeatureError::InvalidParameter, "Step unit must be a length or a cell length"};
     if (!std::isfinite(parameters.maximumPropagation) || parameters.maximumPropagation <= 0.0)
@@ -360,7 +365,11 @@ void configureTracer(vtkStreamTracer *tracer, const StreamlineParameters &parame
 {
     tracer->SetInputArrayToProcess(0, 0, 0, association, parameters.velocityField.c_str());
     tracer->SetSourceData(seeds);
-    tracer->SetIntegratorType(parameters.integrator);
+    // SetIntegratorType only recognises 0..2 and silently keeps the previous
+    // solver for anything else, so the solver is instantiated here.
+    vtkSmartPointer<vtkInitialValueProblemSolver> integrator =
+        createIntegrator(parameters.integrator);
+    tracer->SetIntegrator(integrator);
     tracer->SetIntegrationDirection(parameters.integrationDirection);
     tracer->SetMaximumPropagation(parameters.maximumPropagation);
     tracer->SetInitialIntegrationStep(parameters.initialStep);
