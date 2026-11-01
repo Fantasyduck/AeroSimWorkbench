@@ -10,6 +10,7 @@
 #include <SARibbonPanel.h>
 #include <QApplication>
 #include <QLabel>
+#include <QMenu>
 #include <QDockWidget>
 #include <QTreeWidget>
 #include <QTextStream>
@@ -66,6 +67,17 @@ int main(int argc, char **argv)
                && start->panelByObjectName("parametersGroup") && start->panelByObjectName("viewGroup"), "Missing grouped Start commands")) return 18;
     auto *help = window.findChild<SARibbonCategory *>("helpCategory");
     if (!check(help && help->panelByObjectName("toolsGroup"), "Tools must be under Help")) return 19;
+    auto *newProjectMenu = window.findChild<QMenu *>("newProjectMenu");
+    auto *batchMenu = window.findChild<QMenu *>("batchMenu");
+    auto *displayModeMenu = window.findChild<QMenu *>("displayModeMenu");
+    if (!check(newProjectMenu && newProjectMenu->actions().size() == 3
+               && batchMenu && batchMenu->actions().size() == 3
+               && displayModeMenu && displayModeMenu->actions().size() == 2,
+               "Missing Word-style Ribbon drop-down menus")) return 30;
+    if (!check(!window.findChild<QAction *>("blankProjectMenuAction")->isEnabled()
+               && window.findChild<QAction *>("openBatchConfigurationAction")->isEnabled()
+               && !window.findChild<QAction *>("surfaceModeMenuAction")->isEnabled(),
+               "Drop-down menu availability does not match service boundaries")) return 31;
     for (auto *action : window.findChildren<QAction *>()) {
         if (action->property("ribbonGroup").isValid()
             && !check(!action->icon().pixmap(32, 32).isNull(), "Missing embedded Ribbon icon")) return 20;

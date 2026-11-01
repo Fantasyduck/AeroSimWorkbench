@@ -152,19 +152,60 @@ void MainWindow::createRibbon()
                 });
             }
         }
+        return panel;
     };
     auto *start = ribbonBar()->addCategoryPage(uiText(u"\u5f00\u59cb"));
     start->setObjectName(QStringLiteral("startCategory"));
-    addGroup(start, "projectGroup", uiText(u"\u5de5\u7a0b"), {
-        {"new-project", uiText(u"\u65b0\u5efa\u5de5\u7a0b"), true, ""},
+    auto *projectPanel = addGroup(start, "projectGroup", uiText(u"\u5de5\u7a0b"), {
         {"open-project", uiText(u"\u6253\u5f00\u5de5\u7a0b"), false, ""},
         {"save-project", uiText(u"\u4fdd\u5b58\u5de5\u7a0b"), false, ""},
         {"state", uiText(u"\u8ba1\u7b97\u72b6\u6001"), false, "page:states"}});
-    addGroup(start, "batchGroup", uiText(u"\u6279\u91cf\u7ba1\u7406"), {
-        {"batch", uiText(u"\u6279\u91cf\u914d\u7f6e"), true, "page:states"},
+    auto *newProjectMenu = new QMenu(uiText(u"\u65b0\u5efa\u5de5\u7a0b"), this);
+    newProjectMenu->setObjectName(QStringLiteral("newProjectMenu"));
+    newProjectMenu->setIcon(QIcon(QStringLiteral(":/aerosim/ribbon/new-project.svg")));
+    const struct { const char *id; QString label; const char *icon; } projectEntries[] = {
+        {"blankProjectMenuAction", uiText(u"\u7a7a\u767d\u5de5\u7a0b"), "new-project"},
+        {"templateProjectMenuAction", uiText(u"\u4ece\u6a21\u677f\u65b0\u5efa"), "template"},
+        {"importProjectMenuAction", uiText(u"\u5bfc\u5165\u5de5\u7a0b\u914d\u7f6e"), "import-config"}};
+    for (const auto &entry : projectEntries) {
+        auto *action = newProjectMenu->addAction(
+            QIcon(QStringLiteral(":/aerosim/ribbon/") + QString::fromLatin1(entry.icon) + QStringLiteral(".svg")),
+            entry.label);
+        action->setObjectName(QString::fromLatin1(entry.id));
+        action->setEnabled(false);
+        action->setToolTip(uiText(u"\u7b49\u5f85\u5de5\u7a0b\u670d\u52a1\u63a5\u5165"));
+    }
+    newProjectMenu->menuAction()->setObjectName(QStringLiteral("newProjectMenuAction"));
+    newProjectMenu->menuAction()->setProperty("ribbonGroup", QStringLiteral("projectGroup"));
+    newProjectMenu->menuAction()->setToolTip(uiText(u"\u9009\u62e9\u65b0\u5efa\u5de5\u7a0b\u7684\u65b9\u5f0f"));
+    projectPanel->addLargeMenu(newProjectMenu);
+    projectPanel->moveAction(projectPanel->actionIndex(newProjectMenu->menuAction()), 0);
+
+    auto *batchPanel = addGroup(start, "batchGroup", uiText(u"\u6279\u91cf\u7ba1\u7406"), {
         {"new-state", uiText(u"\u65b0\u5efa\u72b6\u6001"), false, ""},
         {"template", uiText(u"\u72b6\u6001\u6a21\u677f"), false, ""},
         {"queue", uiText(u"\u4efb\u52a1\u5217\u8868"), false, "output:4"}});
+    auto *batchMenu = new QMenu(uiText(u"\u6279\u91cf\u914d\u7f6e"), this);
+    batchMenu->setObjectName(QStringLiteral("batchMenu"));
+    batchMenu->setIcon(QIcon(QStringLiteral(":/aerosim/ribbon/batch.svg")));
+    auto *openBatch = batchMenu->addAction(
+        QIcon(QStringLiteral(":/aerosim/ribbon/state.svg")), uiText(u"\u6253\u5f00\u72b6\u6001\u914d\u7f6e"));
+    openBatch->setObjectName(QStringLiteral("openBatchConfigurationAction"));
+    openBatch->setToolTip(uiText(u"\u6253\u5f00\u8ba1\u7b97\u72b6\u6001\u53c2\u6570\u8349\u7a3f"));
+    connect(openBatch, &QAction::triggered, this, [this] { selectPage(QStringLiteral("states")); });
+    auto *importStates = batchMenu->addAction(
+        QIcon(QStringLiteral(":/aerosim/ribbon/import-config.svg")), uiText(u"\u5bfc\u5165\u72b6\u6001\u8868"));
+    importStates->setObjectName(QStringLiteral("importStateTableAction"));
+    importStates->setEnabled(false);
+    auto *batchTemplate = batchMenu->addAction(
+        QIcon(QStringLiteral(":/aerosim/ribbon/template.svg")), uiText(u"\u6279\u91cf\u53c2\u6570\u6a21\u677f"));
+    batchTemplate->setObjectName(QStringLiteral("batchTemplateMenuAction"));
+    batchTemplate->setEnabled(false);
+    batchMenu->menuAction()->setObjectName(QStringLiteral("batchMenuAction"));
+    batchMenu->menuAction()->setProperty("ribbonGroup", QStringLiteral("batchGroup"));
+    batchMenu->menuAction()->setToolTip(uiText(u"\u6279\u91cf\u7ec4\u7ec7\u591a\u4e2a\u8ba1\u7b97\u72b6\u6001"));
+    batchPanel->addLargeMenu(batchMenu);
+    batchPanel->moveAction(batchPanel->actionIndex(batchMenu->menuAction()), 0);
     addGroup(start, "preprocessGroup", uiText(u"\u524d\u5904\u7406"), {
         {"mesh", uiText(u"\u5bfc\u5165\u7f51\u683c"), true, ""},
         {"transform", uiText(u"\u7f51\u683c\u53d8\u6362"), false, "page:mesh"},
@@ -177,16 +218,29 @@ void MainWindow::createRibbon()
         {"parallel", uiText(u"\u5e76\u884c\u8bbe\u7f6e"), false, "page:parallel"},
         {"import-config", uiText(u"\u5bfc\u5165\u914d\u7f6e"), false, ""},
         {"export-config", uiText(u"\u5bfc\u51fa\u914d\u7f6e"), false, ""}});
-    addGroup(start, "viewGroup", uiText(u"\u89c6\u56fe"), {
+    auto *viewPanel = addGroup(start, "viewGroup", uiText(u"\u89c6\u56fe"), {
         {"view-fit", uiText(u"\u9002\u5e94"), true, ""},
         {"view-zoom-in", uiText(u"\u653e\u5927"), false, ""},
         {"view-zoom-out", uiText(u"\u7f29\u5c0f"), false, ""},
         {"view-rotate", uiText(u"\u65cb\u8f6c"), false, ""},
         {"view-front", uiText(u"\u6b63\u89c6 X"), false, ""},
         {"view-side", uiText(u"\u4fa7\u89c6 Y"), false, ""},
-        {"view-top", uiText(u"\u9876\u89c6 Z"), false, ""},
-        {"view-surface", uiText(u"\u8868\u9762"), false, ""},
-        {"view-wireframe", uiText(u"\u7ebf\u6846"), false, ""}});
+        {"view-top", uiText(u"\u9876\u89c6 Z"), false, ""}});
+    auto *displayMenu = new QMenu(uiText(u"\u663e\u793a\u65b9\u5f0f"), this);
+    displayMenu->setObjectName(QStringLiteral("displayModeMenu"));
+    displayMenu->setIcon(QIcon(QStringLiteral(":/aerosim/ribbon/view-surface.svg")));
+    auto *surface = displayMenu->addAction(
+        QIcon(QStringLiteral(":/aerosim/ribbon/view-surface.svg")), uiText(u"\u8868\u9762"));
+    surface->setObjectName(QStringLiteral("surfaceModeMenuAction"));
+    surface->setEnabled(false);
+    auto *wireframe = displayMenu->addAction(
+        QIcon(QStringLiteral(":/aerosim/ribbon/view-wireframe.svg")), uiText(u"\u7ebf\u6846"));
+    wireframe->setObjectName(QStringLiteral("wireframeModeMenuAction"));
+    wireframe->setEnabled(false);
+    displayMenu->menuAction()->setObjectName(QStringLiteral("displayModeMenuAction"));
+    displayMenu->menuAction()->setProperty("ribbonGroup", QStringLiteral("viewGroup"));
+    displayMenu->menuAction()->setToolTip(uiText(u"\u7b49\u5f85 VTK \u663e\u793a\u6a21\u5f0f\u63a5\u53e3\u63a5\u5165"));
+    viewPanel->addSmallMenu(displayMenu);
     auto *monitor = ribbonBar()->addCategoryPage(uiText(u"\u76d1\u63a7"));
     addGroup(monitor, "calculationGroup", uiText(u"\u5f53\u524d\u8ba1\u7b97\u72b6\u6001"), {
         {"run", uiText(u"\u5f00\u59cb\u8ba1\u7b97"), true, "run"},
