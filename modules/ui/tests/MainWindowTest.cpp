@@ -12,7 +12,11 @@
 #include <QLabel>
 #include <QMenu>
 #include <QDockWidget>
+#include <QDoubleSpinBox>
+#include <QStackedWidget>
+#include <QTableWidget>
 #include <QTreeWidget>
+#include <QTreeWidgetItemIterator>
 #include <QTextStream>
 
 class Workflow final : public aerosim::IWorkflowService {
@@ -47,7 +51,7 @@ int main(int argc, char **argv)
     };
     if (!check(window.windowTitle() == text(u"AeroSimWorkbench \u00b7 \u4eff\u771f\u5de5\u4f5c\u53f0\uff08Mock \u670d\u52a1\uff09"),
                "Window title has incorrect Unicode characters")) return 12;
-    if (!check(window.findChild<QDockWidget *>("projectDock")->windowTitle() == text(u"\u5de5\u7a0b\u4e0e\u5de5\u4f5c\u6d41"),
+    if (!check(window.findChild<QDockWidget *>("projectDock")->windowTitle() == text(u"\u6a21\u5757\u5bfc\u822a"),
                "Dock title has incorrect Unicode characters")) return 13;
     if (!check(window.findChild<QTreeWidget *>("projectTree")->topLevelItem(0)->child(0)->text(0)
                == text(u"\u7f51\u683c Mesh"), "Project tree label has incorrect Unicode characters")) return 14;
@@ -62,6 +66,50 @@ int main(int argc, char **argv)
     if (!check(categories.size() == 5 && categories[0]->objectName() == "startCategory",
                "Expected Start, Monitor, Postprocess, Data and Help tabs")) return 17;
     auto *start = categories[0];
+    auto *navigation = window.findChild<QStackedWidget *>("navigationStack");
+    auto *workspace = window.findChild<QStackedWidget *>("centralWorkspace");
+    auto *projectTree = window.findChild<QTreeWidget *>("projectTree");
+    auto *monitorTree = window.findChild<QTreeWidget *>("monitorTree");
+    auto *dataTree = window.findChild<QTreeWidget *>("dataProcessTree");
+    if (!check(navigation && workspace && projectTree && monitorTree && dataTree
+               && navigation->currentWidget() == projectTree,
+               "Missing stacked module navigation")) return 32;
+    if (!check(window.findChild<QTreeWidget *>("workflowTree")->isHidden(),
+               "Workflow tree must not occupy the module navigation")) return 33;
+    QWidget *workspaceBeforeTabSwitch = workspace->currentWidget();
+    window.ribbonBar()->raiseCategory(window.findChild<SARibbonCategory *>("monitorCategory"));
+    app.processEvents();
+    if (!check(navigation->currentWidget() == monitorTree && workspace->currentWidget() == workspaceBeforeTabSwitch,
+               "Monitor Ribbon tab must change only the navigation tree")) return 34;
+    auto *rememberedMonitorItem = monitorTree->topLevelItem(0)->child(0)->child(0)->child(0);
+    monitorTree->setCurrentItem(rememberedMonitorItem);
+    window.ribbonBar()->raiseCategory(window.findChild<SARibbonCategory *>("dataCategory"));
+    app.processEvents();
+    if (!check(navigation->currentWidget() == dataTree, "Data Ribbon tab did not select the data tree")) return 35;
+    auto *datasetItem = dataTree->topLevelItem(0)->child(0)->child(0);
+    dataTree->setCurrentItem(datasetItem);
+    app.processEvents();
+    if (!check(workspace->currentWidget()->objectName() == "dataProcessPage"
+               && window.findChild<QLabel *>("propertyTitle")->text().contains("Dataset_001"),
+               "Dataset selection did not open data processing details")) return 41;
+    window.ribbonBar()->raiseCategory(window.findChild<SARibbonCategory *>("helpCategory"));
+    app.processEvents();
+    if (!check(navigation->currentWidget() == dataTree, "Help must retain the previous navigation tree")) return 36;
+    window.ribbonBar()->raiseCategory(window.findChild<SARibbonCategory *>("monitorCategory"));
+    app.processEvents();
+    if (!check(monitorTree->currentItem() == rememberedMonitorItem,
+               "Navigation selection was not preserved across Ribbon tabs")) return 37;
+    window.ribbonBar()->raiseCategory(start);
+    app.processEvents();
+    window.show();
+    app.processEvents();
+    auto *projectDock = window.findChild<QDockWidget *>("projectDock");
+    auto *propertyDock = window.findChild<QDockWidget *>("propertyDock");
+    if (!check(window.dockWidgetArea(projectDock) == Qt::LeftDockWidgetArea
+               && window.dockWidgetArea(propertyDock) == Qt::LeftDockWidgetArea
+               && projectDock->geometry().left() < propertyDock->geometry().left()
+               && projectDock->minimumWidth() >= 220 && propertyDock->minimumWidth() >= 300,
+               "Default layout must place navigation before properties on the left")) return 42;
     if (!check(start->panelCount() == 5 && start->panelByObjectName("projectGroup")
                && start->panelByObjectName("batchGroup") && start->panelByObjectName("preprocessGroup")
                && start->panelByObjectName("parametersGroup") && start->panelByObjectName("viewGroup"), "Missing grouped Start commands")) return 18;
@@ -78,6 +126,14 @@ int main(int argc, char **argv)
                && window.findChild<QAction *>("openBatchConfigurationAction")->isEnabled()
                && !window.findChild<QAction *>("surfaceModeMenuAction")->isEnabled(),
                "Drop-down menu availability does not match service boundaries")) return 31;
+    window.findChild<QAction *>("openBatchConfigurationAction")->trigger();
+    app.processEvents();
+    if (!check(navigation->currentWidget() == projectTree
+               && workspace->currentWidget()->objectName() == "batchPlanPage"
+               && projectTree->currentItem()->data(0, Qt::UserRole + 1).toString() == "batch-plans",
+               "Batch configuration did not locate and open BatchPlan management")) return 38;
+    if (!check(window.findChild<QTableWidget *>("batchPlanTable")->columnCount() == 3,
+               "BatchPlan page is missing its model-neutral table")) return 39;
     for (auto *action : window.findChildren<QAction *>()) {
         if (action->property("ribbonGroup").isValid()
             && !check(!action->icon().pixmap(32, 32).isNull(), "Missing embedded Ribbon icon")) return 20;
@@ -85,6 +141,9 @@ int main(int argc, char **argv)
     window.findChild<QAction *>("stateAction")->trigger();
     if (!check(window.findChild<QLabel *>("propertyTitle")->text().contains(text(u"\u4e00\u6b21\u8ba1\u7b97")),
                "State must represent one calculation")) return 21;
+    window.findChild<QAction *>("transformAction")->trigger();
+    if (!check(!window.findChild<QDoubleSpinBox *>("X")->isEnabled(),
+               "Mock project must not expose editable project parameters")) return 43;
     app.processEvents();
     for (const QString &id : {QStringLiteral("office-blue"), QStringLiteral("office-light"),
                               QStringLiteral("dark"), QStringLiteral("dark-gray")}) {
@@ -167,6 +226,12 @@ int main(int argc, char **argv)
     event.status = aerosim::TaskStatus::Finished;
     window.displayTaskEvent(event);
     if (!check(window.findChild<QTreeWidget *>("taskTree")->topLevelItemCount() == 1, "Task rows not updated by id")) return 7;
+    QTreeWidgetItem *navigationTask = nullptr;
+    for (QTreeWidgetItemIterator it(monitorTree); *it; ++it)
+        if ((*it)->data(0, Qt::UserRole + 1).toString() == "test-task") navigationTask = *it;
+    if (!check(navigationTask && navigationTask->data(0, Qt::UserRole + 3).toInt()
+               == static_cast<int>(aerosim::TaskStatus::Finished),
+               "Task event did not locally update structured monitor status")) return 40;
     window.bindServices({});
     if (!check(!run->isEnabled(), "Unbinding must disable run")) return 8;
     QTextStream(stdout) << "UI ownership, service binding, workflow gating and task display passed\n";

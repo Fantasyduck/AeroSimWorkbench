@@ -15,18 +15,24 @@
 #include <QDoubleSpinBox>
 #include <QFormLayout>
 #include <QHeaderView>
+#include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
 #include <QPlainTextEdit>
+#include <QPixmap>
 #include <QProgressBar>
 #include <QPushButton>
+#include <QStackedWidget>
 #include <QStatusBar>
 #include <QStyle>
 #include <QTabWidget>
+#include <QTableWidget>
+#include <QTableWidgetItem>
 #include <QThread>
 #include <QTimer>
 #include <QResource>
 #include <QTreeWidget>
+#include <QTreeWidgetItemIterator>
 #include <QVBoxLayout>
 #include <cstddef>
 
@@ -40,6 +46,13 @@ static QWidget *initializeRibbonResources(QWidget *parent)
 
 namespace aerosim {
 namespace {
+enum NavigationRole {
+    PageRole = Qt::UserRole,
+    ObjectIdRole,
+    NodeTypeRole,
+    TaskStatusRole
+};
+
 // Match the postprocess UI: explicit UTF-16 literals avoid source/execution
 // code-page dependence in the Qt 5.12 / MSVC 2017 toolchain.
 template <std::size_t N>
@@ -77,6 +90,41 @@ QLabel *emptyState(const QString &text, QWidget *parent)
     label->setWordWrap(true);
     label->setMargin(20);
     return label;
+}
+
+QTreeWidgetItem *addNavigationItem(QTreeWidgetItem *parent, const QString &text,
+                                   const QString &pageId, const QString &objectId,
+                                   const QString &nodeType)
+{
+    auto *item = new QTreeWidgetItem(parent, {text});
+    item->setData(0, PageRole, pageId);
+    item->setData(0, ObjectIdRole, objectId);
+    item->setData(0, NodeTypeRole, nodeType);
+    return item;
+}
+
+QIcon statusIcon(TaskStatus status)
+{
+    QColor color(QStringLiteral("#8a94a3"));
+    switch (status) {
+    case TaskStatus::Preparing: color = QColor(QStringLiteral("#d9a300")); break;
+    case TaskStatus::Running: color = QColor(QStringLiteral("#2b78d0")); break;
+    case TaskStatus::Paused: color = QColor(QStringLiteral("#8a5db7")); break;
+    case TaskStatus::Finished: color = QColor(QStringLiteral("#2e9b55")); break;
+    case TaskStatus::Failed: color = QColor(QStringLiteral("#c83c3c")); break;
+    case TaskStatus::Cancelled: color = QColor(QStringLiteral("#68717d")); break;
+    default: break;
+    }
+    QPixmap marker(12, 12);
+    marker.fill(color);
+    return QIcon(marker);
+}
+
+void setTaskItemStatus(QTreeWidgetItem *item, TaskStatus status)
+{
+    item->setData(0, TaskStatusRole, static_cast<int>(status));
+    item->setIcon(0, statusIcon(status));
+    item->setToolTip(0, uiText(u"\u72b6\u6001\uff1a%1\uff08Mock \u754c\u9762\u793a\u4f8b\uff09").arg(taskStatus(status)));
 }
 }
 
@@ -192,7 +240,11 @@ void MainWindow::createRibbon()
         QIcon(QStringLiteral(":/aerosim/ribbon/state.svg")), uiText(u"\u6253\u5f00\u72b6\u6001\u914d\u7f6e"));
     openBatch->setObjectName(QStringLiteral("openBatchConfigurationAction"));
     openBatch->setToolTip(uiText(u"\u6253\u5f00\u8ba1\u7b97\u72b6\u6001\u53c2\u6570\u8349\u7a3f"));
-    connect(openBatch, &QAction::triggered, this, [this] { selectPage(QStringLiteral("states")); });
+    connect(openBatch, &QAction::triggered, this, [this, start] {
+        ribbonBar()->raiseCategory(start);
+        navigationStack_->setCurrentWidget(projectTree_);
+        selectNavigationNode(projectTree_, QStringLiteral("batch-plans"));
+    });
     auto *importStates = batchMenu->addAction(
         QIcon(QStringLiteral(":/aerosim/ribbon/import-config.svg")), uiText(u"\u5bfc\u5165\u72b6\u6001\u8868"));
     importStates->setObjectName(QStringLiteral("importStateTableAction"));
@@ -242,6 +294,7 @@ void MainWindow::createRibbon()
     displayMenu->menuAction()->setToolTip(uiText(u"\u7b49\u5f85 VTK \u663e\u793a\u6a21\u5f0f\u63a5\u53e3\u63a5\u5165"));
     viewPanel->addSmallMenu(displayMenu);
     auto *monitor = ribbonBar()->addCategoryPage(uiText(u"\u76d1\u63a7"));
+    monitor->setObjectName(QStringLiteral("monitorCategory"));
     addGroup(monitor, "calculationGroup", uiText(u"\u5f53\u524d\u8ba1\u7b97\u72b6\u6001"), {
         {"run", uiText(u"\u5f00\u59cb\u8ba1\u7b97"), true, "run"},
         {"pause", uiText(u"\u6682\u505c"), false, ""},
@@ -253,6 +306,7 @@ void MainWindow::createRibbon()
         {"residual", uiText(u"\u6536\u655b\u66f2\u7ebf"), false, "output:2"},
         {"errors", uiText(u"\u9519\u8bef\u4fe1\u606f"), false, "output:3"}});
     auto *post = ribbonBar()->addCategoryPage(uiText(u"\u540e\u5904\u7406"));
+    post->setObjectName(QStringLiteral("postprocessCategory"));
     addGroup(post, "workspaceGroup", uiText(u"\u5de5\u4f5c\u533a"), {
         {"workbench", uiText(u"\u540e\u5904\u7406\u5de5\u4f5c\u53f0"), true, "postprocess"}});
     addGroup(post, "fieldGroup", uiText(u"\u573a\u663e\u793a"), {
@@ -264,6 +318,7 @@ void MainWindow::createRibbon()
         {"curve", uiText(u"\u66f2\u7ebf"), true, ""},
         {"animation", uiText(u"\u52a8\u753b"), true, ""}});
     auto *data = ribbonBar()->addCategoryPage(uiText(u"\u6570\u636e\u5904\u7406"));
+    data->setObjectName(QStringLiteral("dataCategory"));
     addGroup(data, "stateResultsGroup", uiText(u"\u72b6\u6001\u6570\u636e"), {
         {"compare", uiText(u"\u591a\u72b6\u6001\u6570\u636e\u5904\u7406"), true, ""}});
     auto *help = ribbonBar()->addCategoryPage(uiText(u"\u5e2e\u52a9"));
@@ -299,7 +354,8 @@ void MainWindow::createRibbon()
         });
     }
     appearance->addLargeMenu(menu);
-
+    connect(ribbonBar(), &SARibbonBar::currentRibbonTabChanged,
+            this, &MainWindow::switchNavigationForCategory);
 }
 
 void MainWindow::applyWindowTheme(const QString &requestedId)
@@ -396,83 +452,216 @@ QWidget *MainWindow::createSlot(WidgetSlot slot, const QString &text)
 
 void MainWindow::createWorkspace()
 {
-    auto *central = new QWidget(this);
-    auto *centerLayout = new QVBoxLayout(central);
-    centerLayout->setContentsMargins(0, 0, 0, 0);
+    workspaceStack_ = new QStackedWidget(this);
+    workspaceStack_->setObjectName(QStringLiteral("centralWorkspace"));
+    viewportPage_ = new QWidget(workspaceStack_);
+    viewportPage_->setObjectName(QStringLiteral("viewportPage"));
+    auto *viewportLayout = new QVBoxLayout(viewportPage_);
+    viewportLayout->setContentsMargins(0, 0, 0, 0);
     auto *viewport = createSlot(WidgetSlot::Viewport, uiText(u"\u4e09\u7ef4\u5de5\u4f5c\u533a\n\nVTK 8.2 \u89c6\u53e3\u63a5\u5165\u4f4d\u7f6e\n\u5bfc\u5165\u4e0e\u6e32\u67d3\u6a21\u5757\u5c1a\u672a\u63a5\u5165"));
     viewport->setObjectName(QStringLiteral("viewportSlot"));
-    centerLayout->addWidget(viewport, 1);
-    setCentralWidget(central);
+    viewportLayout->addWidget(viewport, 1);
+    workspaceStack_->addWidget(viewportPage_);
 
-    projectDock_ = new QDockWidget(uiText(u"\u5de5\u7a0b\u4e0e\u5de5\u4f5c\u6d41"), this);
+    const auto createWorkspacePage = [this](const QString &objectName, const QString &title,
+                                             const QString &description) {
+        auto *page = new QWidget(workspaceStack_);
+        page->setObjectName(objectName);
+        auto *layout = new QVBoxLayout(page);
+        layout->setContentsMargins(24, 20, 24, 20);
+        auto *heading = new QLabel(title, page);
+        heading->setObjectName(QStringLiteral("workspacePageTitle"));
+        QFont font = heading->font();
+        font.setPointSize(font.pointSize() + 3);
+        font.setBold(true);
+        heading->setFont(font);
+        layout->addWidget(heading);
+        auto *note = new QLabel(description, page);
+        note->setWordWrap(true);
+        layout->addWidget(note);
+        return page;
+    };
+    stateListPage_ = createWorkspacePage(QStringLiteral("stateListPage"), uiText(u"\u5de5\u51b5\u7ba1\u7406"),
+        uiText(u"\u5de5\u51b5\u4e0e\u6279\u5904\u7406\u8ba1\u5212\u5206\u5f00\u7ba1\u7406\u3002\u4ee5\u4e0b\u5185\u5bb9\u4ec5\u7528\u4e8e\u754c\u9762\u9a8c\u8bc1\uff0c\u672a\u4ece\u5de5\u7a0b\u670d\u52a1\u52a0\u8f7d\u3002"));
+    auto *stateLayout = qobject_cast<QVBoxLayout *>(stateListPage_->layout());
+    stateTable_ = new QTableWidget(3, 3, stateListPage_);
+    stateTable_->setObjectName(QStringLiteral("stateTable"));
+    stateTable_->setHorizontalHeaderLabels({uiText(u"\u5de5\u51b5"), uiText(u"\u53c2\u6570\u6458\u8981"), uiText(u"\u6821\u9a8c\u72b6\u6001")});
+    const QStringList stateNames = {QStringLiteral("State_001"), QStringLiteral("State_002"), QStringLiteral("State_003")};
+    for (int row = 0; row < stateNames.size(); ++row) {
+        stateTable_->setItem(row, 0, new QTableWidgetItem(stateNames[row] + uiText(u"\uff08\u754c\u9762\u793a\u4f8b\uff09")));
+        stateTable_->setItem(row, 1, new QTableWidgetItem(uiText(u"\u7b49\u5f85\u5de5\u51b5\u6570\u636e\u6a21\u578b")));
+        stateTable_->setItem(row, 2, new QTableWidgetItem(row < 2 ? uiText(u"\u793a\u4f8b\uff1a\u5df2\u901a\u8fc7") : uiText(u"\u793a\u4f8b\uff1a\u5f85\u6821\u9a8c")));
+    }
+    stateTable_->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
+    stateTable_->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    stateLayout->addWidget(stateTable_, 1);
+
+    batchPlanPage_ = createWorkspacePage(QStringLiteral("batchPlanPage"), uiText(u"\u6279\u5904\u7406\u8ba1\u5212"),
+        uiText(u"BatchPlan \u53ea\u7ec4\u7ec7\u5de5\u51b5\u5f15\u7528\u4e0e\u6267\u884c\u987a\u5e8f\uff0c\u4e0d\u4ee3\u8868\u8ba1\u7b97\u5df2\u542f\u52a8\u3002\u793a\u4f8b\u5217\u4e0d\u4f5c\u4e3a\u6b63\u5f0f\u5de5\u51b5\u5b57\u6bb5\u7ea6\u5b9a\u3002"));
+    auto *batchLayout = qobject_cast<QVBoxLayout *>(batchPlanPage_->layout());
+    batchPlanTable_ = new QTableWidget(3, 3, batchPlanPage_);
+    batchPlanTable_->setObjectName(QStringLiteral("batchPlanTable"));
+    batchPlanTable_->setHorizontalHeaderLabels({uiText(u"\u5de5\u51b5"), uiText(u"\u53c2\u6570\u6458\u8981"), uiText(u"\u6821\u9a8c\u72b6\u6001")});
+    for (int row = 0; row < stateNames.size(); ++row) {
+        batchPlanTable_->setItem(row, 0, new QTableWidgetItem(stateNames[row]));
+        batchPlanTable_->setItem(row, 1, new QTableWidgetItem(uiText(u"\u7531\u5de5\u51b5\u6570\u636e\u6a21\u578b\u52a8\u6001\u751f\u6210")));
+        batchPlanTable_->setItem(row, 2, new QTableWidgetItem(row < 2 ? uiText(u"\u793a\u4f8b\uff1a\u5df2\u901a\u8fc7") : uiText(u"\u793a\u4f8b\uff1a\u5f85\u6821\u9a8c")));
+    }
+    batchPlanTable_->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
+    batchPlanTable_->setSelectionBehavior(QAbstractItemView::SelectRows);
+    batchPlanTable_->setSelectionMode(QAbstractItemView::SingleSelection);
+    batchPlanTable_->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    batchLayout->addWidget(batchPlanTable_, 1);
+    auto *batchCommands = new QHBoxLayout;
+    const QStringList batchCommandLabels = {uiText(u"\u6dfb\u52a0\u5de5\u51b5"), uiText(u"\u79fb\u9664"), uiText(u"\u4e0a\u79fb"), uiText(u"\u4e0b\u79fb"), uiText(u"\u67e5\u770b\u6821\u9a8c")};
+    for (const auto &label : batchCommandLabels) {
+        auto *button = new QPushButton(label, batchPlanPage_);
+        button->setEnabled(false);
+        button->setToolTip(uiText(u"\u7b49\u5f85 BatchPlan \u670d\u52a1\u63a5\u5165"));
+        batchCommands->addWidget(button);
+    }
+    batchCommands->addStretch();
+    batchLayout->addLayout(batchCommands);
+    auto *newPlan = new QPushButton(uiText(u"\u65b0\u5efa\u6279\u5904\u7406\u8ba1\u5212"), batchPlanPage_);
+    newPlan->setEnabled(false);
+    newPlan->setToolTip(uiText(u"\u7b49\u5f85\u5de5\u7a0b\u4e0e\u6279\u5904\u7406\u670d\u52a1\u63a5\u5165"));
+    batchLayout->addWidget(newPlan, 0, Qt::AlignLeft);
+
+    batchMonitorPage_ = createWorkspacePage(QStringLiteral("batchMonitorPage"), uiText(u"\u6279\u5904\u7406\u603b\u4f53\u76d1\u63a7"),
+        uiText(u"Mock \u754c\u9762\u793a\u4f8b\uff1a3 \u4e2a\u5b50\u4efb\u52a1\uff0c\u5df2\u5b8c\u6210 1\uff0c\u8fd0\u884c\u4e2d 1\uff0c\u7b49\u5f85 1\uff0c\u5931\u8d25 0\u3002\u5c1a\u672a\u63a5\u5165\u771f\u5b9e BatchRun \u6570\u636e\u3002"));
+    auto *batchMonitorLayout = qobject_cast<QVBoxLayout *>(batchMonitorPage_->layout());
+    auto *batchProgress = new QProgressBar(batchMonitorPage_);
+    batchProgress->setObjectName(QStringLiteral("batchRunProgress"));
+    batchProgress->setRange(0, 3);
+    batchProgress->setValue(1);
+    batchProgress->setFormat(uiText(u"Mock \u793a\u4f8b\uff1a%v / %m \u5df2\u5b8c\u6210"));
+    batchMonitorLayout->addWidget(batchProgress);
+    batchMonitorLayout->addStretch();
+    taskMonitorPage_ = createWorkspacePage(QStringLiteral("taskMonitorPage"), uiText(u"\u5355\u4efb\u52a1\u76d1\u63a7"),
+        uiText(u"\u5c06\u5728\u6b64\u663e\u793a\u4efb\u52a1\u8f93\u5165\u5feb\u7167\u3001\u8fd0\u884c\u72b6\u6001\u548c\u8ba1\u7b97\u6307\u6807\u3002\u5f53\u524d\u4e3a Mock \u5360\u4f4d\uff0c\u4e0d\u4ee3\u8868\u771f\u5b9e\u6c42\u89e3\u7ed3\u679c\u3002"));
+    qobject_cast<QVBoxLayout *>(taskMonitorPage_->layout())->addStretch();
+    dataProcessPage_ = createWorkspacePage(QStringLiteral("dataProcessPage"), uiText(u"\u6570\u636e\u5904\u7406\u5de5\u4f5c\u533a"),
+        uiText(u"\u591a\u5de5\u51b5\u6570\u636e\u3001\u516d\u5206\u91cf\u6570\u636e\u4e0e\u5206\u6790\u4efb\u52a1\u7684\u754c\u9762\u5165\u53e3\u3002\u672c\u9636\u6bb5\u4e0d\u6267\u884c\u8235\u6548\u6216\u6c14\u52a8\u529b\u5206\u6790\u7b97\u6cd5\u3002"));
+    qobject_cast<QVBoxLayout *>(dataProcessPage_->layout())->addStretch();
+    for (auto *page : {stateListPage_, batchPlanPage_, batchMonitorPage_, taskMonitorPage_, dataProcessPage_})
+        workspaceStack_->addWidget(page);
+    setCentralWidget(workspaceStack_);
+
+    projectDock_ = new QDockWidget(uiText(u"\u6a21\u5757\u5bfc\u822a"), this);
     projectDock_->setObjectName(QStringLiteral("projectDock"));
-    navigationTabs_ = new QTabWidget(projectDock_);
-    projectTree_ = new QTreeWidget(navigationTabs_);
+    projectDock_->setMinimumWidth(220);
+    navigationStack_ = new QStackedWidget(projectDock_);
+    navigationStack_->setObjectName(QStringLiteral("navigationStack"));
+    projectTree_ = new QTreeWidget(navigationStack_);
     projectTree_->setObjectName(QStringLiteral("projectTree"));
     projectTree_->setHeaderHidden(true);
-    auto *root = new QTreeWidgetItem(projectTree_, {uiText(u"\u754c\u9762\u793a\u4f8b\uff08\u672a\u6253\u5f00\u5de5\u7a0b\uff09")});
-    const QList<QStringList> nodes = {
-        {"mesh", uiText(u"\u7f51\u683c Mesh"), "inlet|outlet|wall"},
-        {"physics", uiText(u"\u7269\u7406\u6a21\u578b Physics"), uiText(u"\u6c14\u4f53\u6a21\u578b|\u6d41\u52a8\u6a21\u578b|\u6e4d\u6d41\u6a21\u578b")},
-        {"motion", uiText(u"\u8fd0\u52a8 Motion"), uiText(u"\u52a8\u7f51\u683c|\u5f3a\u8feb\u8fd0\u52a8|\u516d\u81ea\u7531\u5ea6")},
-        {"boundary", uiText(u"\u8fb9\u754c\u6761\u4ef6"), "inlet|outlet|wall"},
-        {"solver", uiText(u"\u8ba1\u7b97\u53c2\u6570"), uiText(u"\u7a7a\u95f4\u79bb\u6563|\u65f6\u95f4\u79bb\u6563|\u8fed\u4ee3\u63a7\u5236")},
-        {"parallel", uiText(u"\u5e76\u884c\u8ba1\u7b97"), ""}, {"states", uiText(u"\u8ba1\u7b97\u72b6\u6001"), uiText(u"\u72b6\u6001 01\uff08\u4e00\u6b21\u8ba1\u7b97\uff0c\u793a\u4f8b\uff09")},
-        {"results", uiText(u"\u7ed3\u679c Results"), uiText(u"\u538b\u529b|\u6e29\u5ea6|\u901f\u5ea6|\u5207\u9762|\u6d41\u7ebf")}
-    };
-    for (const auto &node : nodes) {
-        auto *item = new QTreeWidgetItem(root, {node[1]});
-        item->setData(0, Qt::UserRole, node[0]);
-        for (const QString &child : node[2].split('|', QString::SkipEmptyParts)) {
-            auto *leaf = new QTreeWidgetItem(item, {child});
-            leaf->setData(0, Qt::UserRole, node[0]);
-            leaf->setData(0, Qt::UserRole + 1, child);
-        }
+    auto *root = new QTreeWidgetItem(projectTree_, {uiText(u"\u5de5\u7a0b Project\uff08\u754c\u9762\u793a\u4f8b\uff0c\u672a\u6253\u5f00\u5de5\u7a0b\uff09")});
+    auto *mesh = addNavigationItem(root, uiText(u"\u7f51\u683c Mesh"), QStringLiteral("mesh"), {}, QStringLiteral("mesh"));
+    addNavigationItem(mesh, uiText(u"\u5df2\u5bfc\u5165\u7f51\u683c\uff08\u672a\u52a0\u8f7d\uff09"), QStringLiteral("mesh"), QStringLiteral("mesh-placeholder"), QStringLiteral("mesh"));
+    addNavigationItem(root, uiText(u"\u7269\u7406\u6a21\u578b Physics"), QStringLiteral("physics"), {}, QStringLiteral("physics"));
+    addNavigationItem(root, uiText(u"\u8fd0\u52a8 Motion"), QStringLiteral("motion"), {}, QStringLiteral("motion"));
+    addNavigationItem(root, uiText(u"\u8fb9\u754c\u6761\u4ef6"), QStringLiteral("boundary"), {}, QStringLiteral("boundary"));
+    addNavigationItem(root, uiText(u"\u8ba1\u7b97\u53c2\u6570"), QStringLiteral("solver"), {}, QStringLiteral("solver"));
+    addNavigationItem(root, uiText(u"\u5e76\u884c\u8ba1\u7b97"), QStringLiteral("parallel"), {}, QStringLiteral("parallel"));
+    auto *states = addNavigationItem(root, uiText(u"\u5de5\u51b5\u7ba1\u7406"), QStringLiteral("state-manager"), QStringLiteral("states"), QStringLiteral("state-manager"));
+    for (int i = 1; i <= 3; ++i) {
+        const QString id = QStringLiteral("State_%1").arg(i, 3, 10, QLatin1Char('0'));
+        addNavigationItem(states, id + uiText(u"\uff08\u754c\u9762\u793a\u4f8b\uff09"), QStringLiteral("state"), id, QStringLiteral("state"));
     }
+    auto *plans = addNavigationItem(root, uiText(u"\u6279\u5904\u7406\u8ba1\u5212"), QStringLiteral("batch-plans"), QStringLiteral("batch-plans"), QStringLiteral("batch-plans"));
+    for (int i = 1; i <= 2; ++i) {
+        const QString id = QStringLiteral("Plan_%1").arg(i, 3, 10, QLatin1Char('0'));
+        addNavigationItem(plans, id + uiText(u"\uff08\u754c\u9762\u793a\u4f8b\uff09"), QStringLiteral("batch-plan"), id, QStringLiteral("batch-plan"));
+    }
+    addNavigationItem(root, uiText(u"\u7ed3\u679c Results"), QStringLiteral("results"), {}, QStringLiteral("results"));
     root->setExpanded(true);
-    connect(projectTree_, &QTreeWidget::currentItemChanged, this, [this](QTreeWidgetItem *item) {
-        if (!item) return;
-        const QString page = item->data(0, Qt::UserRole).toString();
-        if (page.isEmpty()) return;
-        selectPage(page);
-        emit navigationRequested(page, item->data(0, Qt::UserRole + 1).toString(), {});
-    });
-    navigationTabs_->addTab(projectTree_, uiText(u"\u5de5\u7a0b\u6811"));
-    auto *workflowPage = new QWidget(navigationTabs_);
-    auto *workflowLayout = new QVBoxLayout(workflowPage);
-    suggestion_ = new QLabel(uiText(u"\u7b49\u5f85\u5de5\u4f5c\u6d41\u670d\u52a1"), workflowPage);
-    suggestion_->setWordWrap(true);
-    workflowLayout->addWidget(suggestion_);
-    workflowTree_ = new QTreeWidget(workflowPage);
+    connect(projectTree_, &QTreeWidget::currentItemChanged, this, [this](QTreeWidgetItem *item) { handleNavigationSelection(item); });
+    navigationStack_->addWidget(projectTree_);
+
+    monitorTree_ = new QTreeWidget(navigationStack_);
+    monitorTree_->setObjectName(QStringLiteral("monitorTree"));
+    monitorTree_->setHeaderHidden(true);
+    auto *monitorRoot = new QTreeWidgetItem(monitorTree_, {uiText(u"\u5de5\u7a0b Project\uff08\u754c\u9762\u793a\u4f8b\uff09")});
+    auto *calculationTasks = addNavigationItem(monitorRoot, uiText(u"\u8ba1\u7b97\u4efb\u52a1"), {}, QStringLiteral("calculation-tasks"), QStringLiteral("group"));
+    auto *singleRuns = addNavigationItem(calculationTasks, uiText(u"\u5355\u6b21\u8ba1\u7b97"), {}, QStringLiteral("single-runs"), QStringLiteral("group"));
+    for (int i = 1; i <= 2; ++i) {
+        const QString id = QStringLiteral("Run_%1").arg(i, 3, 10, QLatin1Char('0'));
+        auto *run = addNavigationItem(singleRuns, id + uiText(u"\uff08Mock \u793a\u4f8b\uff09"), QStringLiteral("task"), id, QStringLiteral("task"));
+        setTaskItemStatus(run, i == 1 ? TaskStatus::Running : TaskStatus::Finished);
+    }
+    auto *batchRuns = addNavigationItem(calculationTasks, uiText(u"\u6279\u5904\u7406\u8ba1\u7b97"), {}, QStringLiteral("batch-runs"), QStringLiteral("group"));
+    auto *batchRun = addNavigationItem(batchRuns, uiText(u"BatchRun_001\uff08Mock \u793a\u4f8b\uff09"), QStringLiteral("batch-run"), QStringLiteral("BatchRun_001"), QStringLiteral("batch-run"));
+    setTaskItemStatus(batchRun, TaskStatus::Running);
+    for (int i = 1; i <= 3; ++i) {
+        const QString id = QStringLiteral("Task_%1").arg(i, 3, 10, QLatin1Char('0'));
+        auto *task = addNavigationItem(batchRun, id + uiText(u"\uff08Mock \u793a\u4f8b\uff09"), QStringLiteral("task"), id, QStringLiteral("task"));
+        setTaskItemStatus(task, i == 1 ? TaskStatus::Finished : i == 2 ? TaskStatus::Running : TaskStatus::Preparing);
+    }
+    auto *monitorViews = addNavigationItem(monitorRoot, uiText(u"\u76d1\u63a7\u89c6\u56fe"), {}, QStringLiteral("monitor-views"), QStringLiteral("group"));
+    addNavigationItem(monitorViews, uiText(u"\u8ba1\u7b97\u65e5\u5fd7"), QStringLiteral("monitor-log"), QStringLiteral("log"), QStringLiteral("monitor-view"));
+    addNavigationItem(monitorViews, uiText(u"\u6536\u655b\u66f2\u7ebf"), QStringLiteral("monitor-residual"), QStringLiteral("residual"), QStringLiteral("monitor-view"));
+    addNavigationItem(monitorViews, uiText(u"\u9519\u8bef\u4fe1\u606f"), QStringLiteral("monitor-errors"), QStringLiteral("errors"), QStringLiteral("monitor-view"));
+    monitorRoot->setExpanded(true);
+    calculationTasks->setExpanded(true);
+    connect(monitorTree_, &QTreeWidget::currentItemChanged, this, [this](QTreeWidgetItem *item) { handleNavigationSelection(item); });
+    navigationStack_->addWidget(monitorTree_);
+
+    dataTree_ = new QTreeWidget(navigationStack_);
+    dataTree_->setObjectName(QStringLiteral("dataProcessTree"));
+    dataTree_->setHeaderHidden(true);
+    auto *dataRoot = new QTreeWidgetItem(dataTree_, {uiText(u"\u5de5\u7a0b Project\uff08\u754c\u9762\u793a\u4f8b\uff09")});
+    auto *datasets = addNavigationItem(dataRoot, uiText(u"\u591a\u5de5\u51b5\u6570\u636e\u96c6"), QStringLiteral("data-process"), QStringLiteral("datasets"), QStringLiteral("data-group"));
+    for (int i = 1; i <= 2; ++i) {
+        const QString id = QStringLiteral("Dataset_%1").arg(i, 3, 10, QLatin1Char('0'));
+        addNavigationItem(datasets, id + uiText(u"\uff08\u754c\u9762\u793a\u4f8b\uff09"), QStringLiteral("dataset"), id, QStringLiteral("dataset"));
+    }
+    addNavigationItem(dataRoot, uiText(u"\u516d\u5206\u91cf\u6570\u636e"), QStringLiteral("data-process"), QStringLiteral("six-component"), QStringLiteral("data-source"));
+    auto *methods = addNavigationItem(dataRoot, uiText(u"\u6570\u636e\u5904\u7406\u65b9\u6cd5"), QStringLiteral("data-process"), QStringLiteral("methods"), QStringLiteral("data-group"));
+    addNavigationItem(methods, uiText(u"\u8235\u6548\u5206\u6790\uff08\u672a\u5b9e\u73b0\uff09"), QStringLiteral("data-process"), QStringLiteral("control-effectiveness"), QStringLiteral("data-method"));
+    addNavigationItem(methods, uiText(u"\u6c14\u52a8\u529b\u5206\u6790\uff08\u672a\u5b9e\u73b0\uff09"), QStringLiteral("data-process"), QStringLiteral("aerodynamics"), QStringLiteral("data-method"));
+    addNavigationItem(dataRoot, uiText(u"\u5206\u6790\u4efb\u52a1"), QStringLiteral("data-process"), QStringLiteral("analysis-tasks"), QStringLiteral("data-group"));
+    addNavigationItem(dataRoot, uiText(u"\u5904\u7406\u7ed3\u679c"), QStringLiteral("data-process"), QStringLiteral("analysis-results"), QStringLiteral("data-group"));
+    dataRoot->setExpanded(true);
+    datasets->setExpanded(true);
+    connect(dataTree_, &QTreeWidget::currentItemChanged, this, [this](QTreeWidgetItem *item) { handleNavigationSelection(item); });
+    navigationStack_->addWidget(dataTree_);
+    navigationStack_->setCurrentWidget(projectTree_);
+    projectDock_->setWidget(navigationStack_);
+
+    // Workflow data remains available to run gating and services, but no longer
+    // consumes the navigation area required by the three module trees.
+    suggestion_ = new QLabel(uiText(u"\u7b49\u5f85\u5de5\u4f5c\u6d41\u670d\u52a1"), this);
+    suggestion_->hide();
+    workflowTree_ = new QTreeWidget(this);
     workflowTree_->setObjectName(QStringLiteral("workflowTree"));
     workflowTree_->setHeaderLabels({uiText(u"\u6b65\u9aa4 / \u64cd\u4f5c"), uiText(u"\u72b6\u6001")});
     workflowTree_->header()->setSectionResizeMode(QHeaderView::ResizeToContents);
-    workflowLayout->addWidget(workflowTree_);
+    workflowTree_->hide();
     connect(workflowTree_, &QTreeWidget::itemActivated, this, [this](QTreeWidgetItem *item) {
         const QString page = item->data(0, Qt::UserRole).toString();
         if (!page.isEmpty()) selectPage(page);
         emit navigationRequested(page, item->data(0, Qt::UserRole + 1).toString(), item->data(0, Qt::UserRole + 2).toString());
     });
-    navigationTabs_->addTab(workflowPage, uiText(u"\u5de5\u4f5c\u6d41"));
-    projectDock_->setWidget(navigationTabs_);
-
     propertyDock_ = new QDockWidget(uiText(u"\u5c5e\u6027\u7f16\u8f91\u5668"), this);
     propertyDock_->setObjectName(QStringLiteral("propertyDock"));
+    propertyDock_->setMinimumWidth(300);
     auto *properties = new QWidget(propertyDock_);
     auto *propertyLayout = new QVBoxLayout(properties);
     propertyTitle_ = new QLabel(properties);
     propertyTitle_->setObjectName(QStringLiteral("propertyTitle"));
     propertyLayout->addWidget(propertyTitle_);
-    auto *notice = new QLabel(uiText(u"\u53c2\u6570\u8349\u7a3f\u793a\u4f8b \u00b7 \u4ec5\u4fdd\u5b58\u5728\u5f53\u524d\u7a97\u53e3\n\u6b63\u5f0f\u53c2\u6570\u6821\u9a8c\u4e0e\u5de5\u7a0b\u4fdd\u5b58\u5f85\u63a5\u5165"), properties);
+    auto *notice = new QLabel(uiText(u"\u53c2\u6570\u8349\u7a3f\u793a\u4f8b \u00b7 \u4ec5\u4fdd\u5b58\u5728\u5f53\u524d\u7a97\u53e3\n\u672a\u6253\u5f00\u771f\u5b9e\u5de5\u7a0b\u65f6\u7f16\u8f91\u63a7\u4ef6\u9501\u5b9a"), properties);
     notice->setWordWrap(true);
     propertyLayout->addWidget(notice);
     propertyForm_ = new QFormLayout;
     propertyForm_->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
     propertyLayout->addLayout(propertyForm_);
     propertyLayout->addStretch();
-    auto *reset = new QPushButton(uiText(u"\u6e05\u9664\u672c\u9875\u8349\u7a3f"), properties);
-    connect(reset, &QPushButton::clicked, this, [this] { drafts_.remove(currentPage_); selectPage(currentPage_); });
-    propertyLayout->addWidget(reset);
+    draftReset_ = new QPushButton(uiText(u"\u6e05\u9664\u672c\u9875\u8349\u7a3f"), properties);
+    draftReset_->setEnabled(false);
+    connect(draftReset_, &QPushButton::clicked, this, [this] { drafts_.remove(currentPage_); selectPage(currentPage_); });
+    propertyLayout->addWidget(draftReset_);
     propertyDock_->setWidget(properties);
     selectPage(QStringLiteral("mesh"));
 
@@ -526,14 +715,78 @@ void MainWindow::createWorkspace()
     outputDock_->setWidget(outputTabs_);
 }
 
+void MainWindow::switchNavigationForCategory(int index)
+{
+    auto *category = ribbonBar()->categoryByIndex(index);
+    if (!category) return;
+    if (category->objectName() == QStringLiteral("startCategory"))
+        navigationStack_->setCurrentWidget(projectTree_);
+    else if (category->objectName() == QStringLiteral("monitorCategory"))
+        navigationStack_->setCurrentWidget(monitorTree_);
+    else if (category->objectName() == QStringLiteral("dataCategory"))
+        navigationStack_->setCurrentWidget(dataTree_);
+    // Postprocess and Help intentionally retain the previous navigation tree.
+}
+
+void MainWindow::handleNavigationSelection(QTreeWidgetItem *item)
+{
+    if (!item) return;
+    const QString page = item->data(0, PageRole).toString();
+    if (page.isEmpty()) return;
+    const QString objectId = item->data(0, ObjectIdRole).toString();
+    const QString draftPage = objectId.isEmpty() ? page : page + QLatin1Char('|') + objectId;
+    selectPage(draftPage);
+    emit navigationRequested(page, objectId, {});
+    if (page == QStringLiteral("state-manager")) showWorkspacePage(QStringLiteral("states"));
+    else if (page == QStringLiteral("batch-plans") || page == QStringLiteral("batch-plan")) showWorkspacePage(QStringLiteral("batch-plan"));
+    else if (page == QStringLiteral("batch-run")) { showWorkspacePage(QStringLiteral("batch-monitor")); showOutput(1); }
+    else if (page == QStringLiteral("task")) { showWorkspacePage(QStringLiteral("task-monitor")); showOutput(1); }
+    else if (page == QStringLiteral("dataset") || page == QStringLiteral("data-process")) showWorkspacePage(QStringLiteral("data-process"));
+    else if (page == QStringLiteral("monitor-log")) showOutput(0);
+    else if (page == QStringLiteral("monitor-residual")) showOutput(2);
+    else if (page == QStringLiteral("monitor-errors")) showOutput(3);
+    else showWorkspacePage(QStringLiteral("viewport"));
+}
+
+void MainWindow::showWorkspacePage(const QString &pageId)
+{
+    QWidget *target = viewportPage_;
+    if (pageId == QStringLiteral("states")) target = stateListPage_;
+    else if (pageId == QStringLiteral("batch-plan")) target = batchPlanPage_;
+    else if (pageId == QStringLiteral("batch-monitor")) target = batchMonitorPage_;
+    else if (pageId == QStringLiteral("task-monitor")) target = taskMonitorPage_;
+    else if (pageId == QStringLiteral("data-process")) target = dataProcessPage_;
+    workspaceStack_->setCurrentWidget(target);
+}
+
+void MainWindow::selectNavigationNode(QTreeWidget *tree, const QString &objectId)
+{
+    if (!tree) return;
+    for (QTreeWidgetItemIterator it(tree); *it; ++it) {
+        if ((*it)->data(0, ObjectIdRole).toString() != objectId) continue;
+        for (auto *parent = (*it)->parent(); parent; parent = parent->parent()) parent->setExpanded(true);
+        tree->setCurrentItem(*it);
+        tree->scrollToItem(*it);
+        return;
+    }
+}
+
 void MainWindow::selectPage(const QString &pageId)
 {
     currentPage_ = pageId;
+    const QString pageType = pageId.section(QLatin1Char('|'), 0, 0);
+    const QString objectId = pageId.section(QLatin1Char('|'), 1, 1);
     while (propertyForm_->rowCount()) propertyForm_->removeRow(0);
     const QHash<QString, QString> titles = {{"mesh", uiText(u"\u7f51\u683c\u4e0e\u53d8\u6362")}, {"physics", uiText(u"\u7269\u7406\u6a21\u578b / \u5927\u6c14\u53c2\u6570")},
         {"motion", uiText(u"\u8fd0\u52a8\u53c2\u6570")}, {"boundary", uiText(u"\u8fb9\u754c\u6761\u4ef6")}, {"solver", uiText(u"\u8ba1\u7b97\u53c2\u6570")},
-        {"parallel", uiText(u"\u5e76\u884c\u8bbe\u7f6e")}, {"states", uiText(u"\u8ba1\u7b97\u72b6\u6001 \u00b7 \u4e00\u6b21\u8ba1\u7b97\u4e00\u4e2a\u72b6\u6001")}, {"results", uiText(u"\u7ed3\u679c\u4e0e\u540e\u5904\u7406")}};
-    propertyTitle_->setText(titles.value(pageId, pageId));
+        {"parallel", uiText(u"\u5e76\u884c\u8bbe\u7f6e")}, {"states", uiText(u"\u8ba1\u7b97\u72b6\u6001 \u00b7 \u4e00\u6b21\u8ba1\u7b97\u4e00\u4e2a\u72b6\u6001")},
+        {"state-manager", uiText(u"\u5de5\u51b5\u7ba1\u7406")}, {"state", uiText(u"\u5de5\u51b5\u53c2\u6570")},
+        {"batch-plans", uiText(u"\u6279\u5904\u7406\u8ba1\u5212\u7ba1\u7406")}, {"batch-plan", uiText(u"\u6279\u5904\u7406\u8ba1\u5212\u5c5e\u6027")},
+        {"batch-run", uiText(u"\u6279\u5904\u7406\u8fd0\u884c\u4fe1\u606f")}, {"task", uiText(u"\u8ba1\u7b97\u4efb\u52a1\u4fe1\u606f")},
+        {"dataset", uiText(u"\u6570\u636e\u96c6\u4fe1\u606f")}, {"data-process", uiText(u"\u6570\u636e\u5904\u7406")},
+        {"monitor-log", uiText(u"\u8ba1\u7b97\u65e5\u5fd7")}, {"monitor-residual", uiText(u"\u6536\u655b\u66f2\u7ebf")},
+        {"monitor-errors", uiText(u"\u9519\u8bef\u4fe1\u606f")}, {"results", uiText(u"\u7ed3\u679c\u4e0e\u540e\u5904\u7406")}};
+    propertyTitle_->setText(titles.value(pageType, pageType) + (objectId.isEmpty() ? QString() : uiText(u" \u00b7 ") + objectId));
     const auto addNumber = [this, pageId](const QString &key, const QString &label, double value, const QString &unit) {
         auto *editor = new QDoubleSpinBox(this);
         editor->setObjectName(key);
@@ -541,16 +794,19 @@ void MainWindow::selectPage(const QString &pageId)
         editor->setRange(-1e9, 1e9);
         editor->setSuffix(unit);
         editor->setValue(drafts_.value(pageId).value(key, value).toDouble());
+        editor->setEnabled(projectEditingEnabled_);
+        if (!projectEditingEnabled_) editor->setToolTip(uiText(u"\u8bf7\u5148\u901a\u8fc7\u5de5\u7a0b\u670d\u52a1\u6253\u5f00\u771f\u5b9e\u5de5\u7a0b"));
         propertyForm_->addRow(label, editor);
         connect(editor, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this, pageId, key](double value) {
             drafts_[pageId].insert(key, value);
             emit parameterDraftChanged(pageId, drafts_.value(pageId));
         });
     };
-    if (pageId == "boundary" || pageId == "physics") {
+    if (pageType == "boundary" || pageType == "physics") {
         auto *type = new QComboBox(this);
         type->addItems({uiText(u"\u538b\u529b\u5165\u53e3"), uiText(u"\u901f\u5ea6\u5165\u53e3"), uiText(u"\u538b\u529b\u51fa\u53e3"), uiText(u"\u58c1\u9762")});
         type->setCurrentIndex(drafts_.value(pageId).value("type", 0).toInt());
+        type->setEnabled(projectEditingEnabled_);
         propertyForm_->addRow(uiText(u"\u8fb9\u754c\u7c7b\u578b\uff08\u793a\u4f8b\uff09"), type);
         connect(type, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this, pageId](int value) {
             drafts_[pageId].insert("type", value);
@@ -558,17 +814,30 @@ void MainWindow::selectPage(const QString &pageId)
         });
         addNumber("pressure", uiText(u"\u538b\u529b"), 101325, " Pa");
         addNumber("temperature", uiText(u"\u6e29\u5ea6"), 300, " K");
-    } else if (pageId == "motion" || pageId == "mesh") {
-        if (pageId == "motion") addNumber("mass", uiText(u"\u8d28\u91cf"), 15.2, " kg");
+    } else if (pageType == "motion" || pageType == "mesh") {
+        if (pageType == "motion") addNumber("mass", uiText(u"\u8d28\u91cf"), 15.2, " kg");
         for (const QString &axis : {QStringLiteral("X"), QStringLiteral("Y"), QStringLiteral("Z")})
             addNumber(axis, uiText(u"\u4f4d\u7f6e ") + axis, 0, " m");
-    } else if (pageId == "solver") {
+    } else if (pageType == "solver") {
         addNumber("iterations", uiText(u"\u6700\u5927\u8fed\u4ee3\u6b65"), 10000, {});
         addNumber("timeStep", uiText(u"\u65f6\u95f4\u6b65\u957f"), 0.001, " s");
-    } else if (pageId == "parallel") {
+    } else if (pageType == "parallel") {
         addNumber("processes", uiText(u"MPI \u8fdb\u7a0b\u6570"), 32, {});
+    } else if (pageType == "state") {
+        addNumber("altitude", uiText(u"\u9ad8\u5ea6\uff08\u754c\u9762\u8349\u7a3f\uff09"), 5000, " m");
+        addNumber("mach", uiText(u"\u9a6c\u8d6b\u6570\uff08\u754c\u9762\u8349\u7a3f\uff09"), 0.8, {});
+    } else if (pageType == "batch-plan") {
+        const QList<QPair<QString, QString>> values = {
+            {uiText(u"\u8ba1\u5212 ID"), objectId}, {uiText(u"\u7248\u672c"), QStringLiteral("1 (Mock)")},
+            {uiText(u"\u6267\u884c\u7b56\u7565"), uiText(u"\u987a\u5e8f\u6267\u884c\uff08\u754c\u9762\u793a\u4f8b\uff09")},
+            {uiText(u"\u5de5\u51b5\u6570\u91cf"), QStringLiteral("3")}, {uiText(u"\u6821\u9a8c\u72b6\u6001"), uiText(u"\u5f85\u4e1a\u52a1\u670d\u52a1\u786e\u8ba4")}};
+        for (const auto &value : values) propertyForm_->addRow(value.first, new QLabel(value.second, this));
+    } else if (pageType == "batch-run" || pageType == "task" || pageType == "dataset" || pageType == "data-process") {
+        auto *note = new QLabel(uiText(u"\u5bf9\u8c61\uff1a%1\n\u5f53\u524d\u4ec5\u5c55\u793a Mock / \u5360\u4f4d\u4fe1\u606f\uff0c\u5c1a\u672a\u4ece\u5de5\u7a0b\u3001\u4efb\u52a1\u6216\u6570\u636e\u670d\u52a1\u52a0\u8f7d\u3002").arg(objectId), this);
+        note->setWordWrap(true);
+        propertyForm_->addRow(note);
     } else {
-        auto *note = new QLabel(pageId == "results" ? uiText(u"\u5c1a\u65e0\u7ed3\u679c\u6570\u636e\u3002\u7ed3\u679c\u5339\u914d\u6821\u9a8c\u548c\u663e\u793a\u7531\u5de5\u4f5c\u6d41\u53ca\u53ef\u89c6\u5316\u6a21\u5757\u63d0\u4f9b\u3002") : uiText(u"\u4e00\u6b21\u8ba1\u7b97\u5bf9\u5e94\u4e00\u4e2a\u72b6\u6001\uff0c\u72b6\u6001\u5f52\u5c5e\u5f53\u524d\u5de5\u7a0b\u3002\u6279\u91cf\u7ba1\u7406\u7ec4\u7ec7\u591a\u4e2a\u72b6\u6001\uff1b\u6bcf\u4e2a\u72b6\u6001\u7684\u8f93\u5165\u914d\u7f6e\u4e0e\u8ba1\u7b97\u7ed3\u679c\u7531\u4e1a\u52a1\u670d\u52a1\u7ef4\u62a4\u3002\u5f53\u524d\u4ec5\u4e3a\u754c\u9762\u793a\u4f8b\u3002"), this);
+        auto *note = new QLabel(pageType == "results" ? uiText(u"\u5c1a\u65e0\u7ed3\u679c\u6570\u636e\u3002\u7ed3\u679c\u5339\u914d\u6821\u9a8c\u548c\u663e\u793a\u7531\u5de5\u4f5c\u6d41\u53ca\u53ef\u89c6\u5316\u6a21\u5757\u63d0\u4f9b\u3002") : uiText(u"\u4e00\u6b21\u8ba1\u7b97\u5bf9\u5e94\u4e00\u4e2a\u5de5\u51b5\uff0c\u5de5\u51b5\u5f52\u5c5e\u5f53\u524d\u5de5\u7a0b\u3002\u6279\u5904\u7406\u8ba1\u5212\u53ea\u5f15\u7528\u5de5\u51b5\uff0c\u5f53\u524d\u4ec5\u4e3a\u754c\u9762\u793a\u4f8b\u3002"), this);
         note->setWordWrap(true);
         propertyForm_->addRow(note);
     }
@@ -582,12 +851,13 @@ void MainWindow::restoreLayout()
         removeDockWidget(dock);
     }
     addDockWidget(Qt::LeftDockWidgetArea, projectDock_);
-    addDockWidget(Qt::RightDockWidgetArea, propertyDock_);
+    addDockWidget(Qt::LeftDockWidgetArea, propertyDock_);
+    splitDockWidget(projectDock_, propertyDock_, Qt::Horizontal);
     addDockWidget(Qt::BottomDockWidgetArea, outputDock_);
     setCorner(Qt::BottomLeftCorner, Qt::BottomDockWidgetArea);
     setCorner(Qt::BottomRightCorner, Qt::BottomDockWidgetArea);
     for (auto *dock : {projectDock_, propertyDock_, outputDock_}) dock->show();
-    resizeDocks({projectDock_, propertyDock_}, {250, 285}, Qt::Horizontal);
+    resizeDocks({projectDock_, propertyDock_}, {250, 330}, Qt::Horizontal);
     resizeDocks({outputDock_}, {210}, Qt::Vertical);
 }
 
@@ -616,6 +886,9 @@ void MainWindow::bindServices(const ServiceBindings &services)
     workflowView_ = {};
     workflow_ = services.workflow;
     tasks_ = services.tasks;
+    projectEditingEnabled_ = services.projects && !services.projects->currentProject().projectId.isEmpty();
+    if (draftReset_) draftReset_->setEnabled(projectEditingEnabled_);
+    if (!currentPage_.isEmpty()) selectPage(currentPage_);
     registerContractMetaTypes();
     if (workflow_) {
         serviceConnections_.append(connect(workflow_, &IWorkflowService::workflowViewChanged, this,
@@ -697,6 +970,21 @@ void MainWindow::displayTaskEvent(const TaskEvent &event)
     row->setText(1, taskStatus(event.status));
     row->setText(2, event.message);
     row->setText(3, event.timestamp.toLocalTime().toString("HH:mm:ss"));
+    QTreeWidgetItem *navigationTask = nullptr;
+    QTreeWidgetItem *singleRuns = nullptr;
+    for (QTreeWidgetItemIterator it(monitorTree_); *it; ++it) {
+        const QString objectId = (*it)->data(0, ObjectIdRole).toString();
+        if (objectId == event.taskId) navigationTask = *it;
+        if (objectId == QStringLiteral("single-runs")) singleRuns = *it;
+    }
+    if (!navigationTask && singleRuns && !event.taskId.isEmpty()) {
+        navigationTask = addNavigationItem(singleRuns, event.taskId + uiText(u"\uff08Mock \u4e8b\u4ef6\uff09"),
+                                           QStringLiteral("task"), event.taskId, QStringLiteral("task"));
+    }
+    if (navigationTask) {
+        setTaskItemStatus(navigationTask, event.status);
+        navigationTask->setToolTip(0, uiText(u"\u72b6\u6001\uff1a%1\n%2").arg(taskStatus(event.status), event.message));
+    }
     monitorStatus_->setText(event.taskId + uiText(u" \u00b7 ") + taskStatus(event.status));
     if (event.progress.totalSteps > 0) {
         progress_->setValue(qBound(0, static_cast<int>(100.0 * event.progress.currentStep / event.progress.totalSteps), 100));
