@@ -128,33 +128,31 @@ QAction *ribbonAction(QWidget *owner, const QIcon &icon, const QString &text,
     return action;
 }
 
-// View decoration only. The real viewer is supplied through IWidgetHost.
+// Shown only until a real VTK widget is inserted. This is a visual preview, not a fake data source.
 class ResultPreviewWidget final : public QWidget {
 public:
-    explicit ResultPreviewWidget(QWidget *parent = nullptr) : QWidget(parent) {
-        setMinimumSize(280, 200);
-    }
+    explicit ResultPreviewWidget(QWidget *parent = nullptr) : QWidget(parent) { setMinimumSize(280, 200); }
 protected:
     void paintEvent(QPaintEvent *) override {
-        QPainter p(this);
-        p.setRenderHint(QPainter::Antialiasing);
-        const QColor bottom = property("backgroundBottom").value<QColor>();
-        const QColor top = property("backgroundTop").value<QColor>();
-        QLinearGradient background(rect().bottomLeft(), rect().topLeft());
-        background.setColorAt(0, bottom); background.setColorAt(1, top);
-        p.fillRect(rect(), background);
-        const QColor text = bottom.lightness() < 145 ? QColor(Qt::white) : QColor("#25364c");
-        p.setPen(text);
-        p.drawText(rect().adjusted(32,32,-32,-32), Qt::AlignCenter | Qt::TextWordWrap,
-                   uiText(u"导入 Tecplot / CGNS / VTK 结果开始后处理\n选择网格与字段，再创建云图、切面或流线\n\n当前未接入真实读取与渲染；可从“工具”加载界面示例"));
-        // Orientation legend, not a simulated model or computed result.
-        const QPoint origin(48, height()-48);
-        p.setPen(QPen(QColor("#ef6c6c"),2)); p.drawLine(origin,origin+QPoint(30,0));
-        p.drawText(origin+QPoint(34,4),"X");
-        p.setPen(QPen(QColor("#81c995"),2)); p.drawLine(origin,origin+QPoint(0,-30));
-        p.drawText(origin+QPoint(-4,-36),"Y");
-        p.setPen(QPen(QColor("#82b1ff"),2)); p.drawLine(origin,origin+QPoint(-17,17));
-        p.drawText(origin+QPoint(-28,28),"Z");
+        // Keep the preview illustrative, but use the same light workspace
+        // surface as the main window's viewport placeholder.
+        QPainter p(this); p.setRenderHint(QPainter::Antialiasing); QLinearGradient bg(rect().bottomLeft(), rect().topLeft()); bg.setColorAt(0, property("backgroundBottom").value<QColor>()); bg.setColorAt(1, property("backgroundTop").value<QColor>()); p.fillRect(rect(), bg);
+        const QRect area = rect().adjusted(28, 58, -86, -48);
+        QLinearGradient gradient(area.topLeft(), area.bottomRight());
+        gradient.setColorAt(0, QColor("#174f88")); gradient.setColorAt(.32, QColor("#10a4bd")); gradient.setColorAt(.58, QColor("#79c76f")); gradient.setColorAt(.78, QColor("#f6c84b")); gradient.setColorAt(1, QColor("#d94e4e"));
+        QPainterPath body; body.moveTo(area.left() + 12, area.center().y());
+        body.cubicTo(area.left() + area.width() * .27, area.top() + 14, area.left() + area.width() * .68, area.top() + 24, area.right() - 12, area.center().y() - 8);
+        body.cubicTo(area.left() + area.width() * .68, area.bottom() - 20, area.left() + area.width() * .25, area.bottom() - 24, area.left() + 12, area.center().y());
+        p.setBrush(gradient); p.setPen(Qt::NoPen); p.drawPath(body);
+        p.setBrush(Qt::NoBrush); p.setPen(QPen(QColor("#c4d2e0"), 1));
+        for (int i = 1; i < 9; ++i) { const int x = area.left() + area.width() * i / 9; p.drawLine(x, area.top() + 30, x, area.bottom() - 30); }
+        for (int i = 1; i < 6; ++i) { const int y = area.top() + area.height() * i / 6; p.drawLine(area.left() + 24, y, area.right() - 24, y); }
+        p.setPen(QPen(QColor("#234d7a"), 2)); p.drawPath(body);
+        const QRect legend(rect().right() - 45, 80, 13, qMax(40, height() - 175)); QLinearGradient lg(legend.topLeft(), legend.bottomLeft());
+        lg.setColorAt(0, QColor("#d94e4e")); lg.setColorAt(.35, QColor("#f6c84b")); lg.setColorAt(.67, QColor("#10a4bd")); lg.setColorAt(1, QColor("#174f88")); p.fillRect(legend, lg); p.setPen(QColor("#8fa5bb")); p.drawRect(legend);
+        p.setPen(QColor("#25364c")); p.drawText(QRect(20, 14, width() - 50, 30), Qt::AlignLeft | Qt::AlignVCenter, uiText(u"界面示例（非真实数据）"));
+        p.setPen(QColor("#52677f")); p.drawText(QRect(20, height() - 34, width() - 40, 20), Qt::AlignLeft | Qt::AlignVCenter, uiText(u"翼身组合 / 压力场 / 时间步 0"));
+        p.drawText(QRect(width() - 65, 52, 50, 24), Qt::AlignCenter, uiText(u"压力"));
     }
 };
 }
@@ -175,12 +173,9 @@ PostProcessWorkbenchWindow::PostProcessWorkbenchWindow(QWidget *parent)
     auto *tabs = new QTabWidget(content); tabs->setObjectName(uiText(u"postProcessNavigator")); tabs->setMinimumWidth(250);
     tabs->addTab(scrollPanel(createViewPanel()), uiText(u"视图")); tabs->addTab(createDataPanel(), uiText(u"数据")); tabs->addTab(createObjectPanel(), uiText(u"对象"));
     content->addWidget(tabs); content->addWidget(createViewportPanel()); content->setStretchFactor(1, 1); content->setSizes({270, 1170}); content->setChildrenCollapsible(false);
-    workflowHint_ = new QLabel(uiText(u"1 导入结果 → 2 选择网格与字段 → 3 创建显示/特征 → 4 编辑参数 → 5 导出"), workbench);
-    workflowHint_->setObjectName(QStringLiteral("postProcessWorkflowHint"));
-    workflowHint_->setWordWrap(true); root->addWidget(workflowHint_);
     root->addWidget(content, 1); root->addWidget(createTimeline()); setCentralWidget(workbench);
     auto *dock = new QDockWidget(uiText(u"任务与消息"), this); taskDock_ = dock; dock->setObjectName(uiText(u"postProcessMessageDock")); events_ = new QTextEdit(dock); events_->setReadOnly(true); events_->document()->setMaximumBlockCount(2000); events_->setPlaceholderText(uiText(u"暂无任务事件。读取、计算和导出服务的进度与错误将在这里显示。")); dock->setWidget(events_); installDockTitle(dock); addDockWidget(Qt::BottomDockWidgetArea, dock); dock->hide();
-    statusBar()->showMessage(uiText(u"空会话：请导入本地结果，无需创建工程或运行求解器。"));
+    statusBar()->showMessage(uiText(u"当前显示界面示例；导入真实结果功能尚未接入。"));
     // Scope workspace styling so SARibbon's buttons, tabs and window controls
     // retain their own metrics. Native inputs use the same style as MainWindow.
     workbench->setStyleSheet(QStringLiteral(
@@ -233,6 +228,7 @@ PostProcessWorkbenchWindow::PostProcessWorkbenchWindow(QWidget *parent)
         findChild<QToolButton *>(name)->setEnabled(false);
     timeLabel_->setText(uiText(u"无时间数据"));
     syncFieldSelection();
+    loadUiExample(false);
     updateSelectionActions();
     connect(tabs, &QTabWidget::currentChanged, this, [this](int index) {
         if (index == 1) updateDataSelection(datasetTree_->currentItem(), 0);
@@ -343,6 +339,7 @@ void PostProcessWorkbenchWindow::createActions() {
     quickFeatures->addSmallAction(isoLineAction);
     auto *quickCamera = dataCategory->addPanel(uiText(u"视图"));
     quickCamera->addLargeAction(fitAction);
+    quickCamera->addSmallAction(backgroundAction);
     for (QAction *action : {frontAction, rightAction, topAction}) quickCamera->addSmallAction(action);
     auto *quickQuery = dataCategory->addPanel(uiText(u"查询与辅助"));
     quickQuery->addSmallAction(probeAction); quickQuery->addSmallAction(deepSeekAction);
@@ -802,11 +799,7 @@ void PostProcessWorkbenchWindow::updateSelectionActions() {
     if (viewportHint_) viewportHint_->setText(spatial
         ? uiText(u"界面示例 · %1 · %2 · %3").arg(selectedContext_.value("topology").toString(),selectedName_,selectedContext_.value("field").toString())
         : uiText(u"未选择空间数据"));
-    if (workflowHint_) workflowHint_->setText(!spatial
-        ? uiText(u"1 导入结果 → 2 选择网格与字段 → 3 创建显示/特征 → 4 编辑参数 → 5 导出")
-        : derived ? uiText(u"当前为对象草稿 → 编辑参数或切换着色字段 → 服务计算成功后才可导出；可继续选择源网格创建其他特征")
-        : vector ? uiText(u"已选矢量 → 可创建流线；模长可着色。需要等值面时请选择标量字段")
-        : uiText(u"已选网格与标量 → 创建云图或切面；体网格可提取等值面，物面/切片可提取等值线"));
+
 }
 
 void PostProcessWorkbenchWindow::addDerivedLayer(const QString &kind, const QString &name, const QString &message) {

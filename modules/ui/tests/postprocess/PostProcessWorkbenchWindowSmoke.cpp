@@ -68,10 +68,10 @@ int main(int argc, char *argv[])
     for (auto *dock : window.findChildren<QDockWidget *>()) CHECK(!dock->isVisible());
     for (auto *toolbar : window.findChildren<QToolBar *>()) CHECK(window.toolBarArea(toolbar) == Qt::NoToolBarArea);
 
-    // Empty startup and explicit UI fixtures: never treat sample metadata as a reader.
-    CHECK(tree->topLevelItemCount()==0 && layers->count()==0);
-    for (const char *name : {"postProcessContourAction","postProcessSliceAction","postProcessIsoAction","postProcessStreamAction","postProcessExportAction"})
-        CHECK(!action(name)->isEnabled());
+    // The startup sample is explicitly illustrative, not a reader result.
+    CHECK(tree->topLevelItemCount()==4 && layers->count()==3);
+    CHECK(action("postProcessContourAction")->isEnabled());
+    CHECK(!action("postProcessExportAction")->isEnabled());
     CHECK(!action("postProcessConvertAction") && !action("postProcessExcelAction"));
     auto *host = window.findChild<QWidget *>("postProcessViewportHost");
     CHECK(host->property("backgroundBottom").value<QColor>()==QColor(98,93,90));

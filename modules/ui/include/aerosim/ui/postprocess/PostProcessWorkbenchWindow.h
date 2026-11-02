@@ -81,7 +81,6 @@ private:
     QString selectedName_;
     QVariantMap selectedContext_;
     QComboBox *fieldSelector_ = nullptr;
-    QLabel *workflowHint_ = nullptr;
     QColor backgroundBottom_ = QColor(98, 93, 90);
     QColor backgroundTop_ = QColor(98, 93, 90);
     bool gradientBackground_ = false;
