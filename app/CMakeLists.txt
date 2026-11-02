@@ -20,4 +20,17 @@ if(AEROSIM_BUILD_GUI)
         target_compile_definitions(aerosim_gui PRIVATE AEROSIM_HAS_VTK_VIEWER=1)
     endif()
     set_target_properties(aerosim_gui PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
+
+    # The standalone workbench has its own EXE and deployment directory so a
+    # running main window does not lock its binary or its Qt runtime files.
+    add_executable(aerosim_postprocess WIN32 gui_main.cpp)
+    target_link_libraries(aerosim_postprocess PRIVATE
+        aerosim_application aerosim_mock aerosim_ui Qt5::Widgets)
+    target_compile_definitions(aerosim_postprocess PRIVATE AEROSIM_POSTPROCESS_STANDALONE=1)
+    if(TARGET aerosim_visualization_scene)
+        target_link_libraries(aerosim_postprocess PRIVATE aerosim_visualization_scene)
+        target_compile_definitions(aerosim_postprocess PRIVATE AEROSIM_HAS_VTK_VIEWER=1)
+    endif()
+    set_target_properties(aerosim_postprocess PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/postprocess")
 endif()

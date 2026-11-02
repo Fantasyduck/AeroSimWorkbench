@@ -35,17 +35,23 @@ int main(int argc, char *argv[])
     }
 
     const bool smoke = app.arguments().contains(QStringLiteral("--smoke"));
+#ifndef AEROSIM_POSTPROCESS_STANDALONE
     aerosim::MainWindow window;
+#endif
     aerosim::PostProcessWorkbenchWindow postprocess;
     const aerosim::ServiceBindings bindings = {
         controller.workflow(), controller.tasks(), nullptr, nullptr, nullptr, nullptr};
+#ifndef AEROSIM_POSTPROCESS_STANDALONE
     window.bindServices(bindings);
+#endif
     postprocess.bindServices(bindings);
+#ifndef AEROSIM_POSTPROCESS_STANDALONE
     QObject::connect(&window, &aerosim::MainWindow::openPostProcessRequested, &postprocess, [&postprocess] {
         postprocess.show();
         postprocess.raise();
         postprocess.activateWindow();
     });
+#endif
 #ifdef AEROSIM_HAS_VTK_VIEWER
     // The workbench remains usable without a native OpenGL surface.  This is
     // also the safe default on remote desktop sessions where VTK's native
@@ -67,8 +73,12 @@ int main(int argc, char *argv[])
         });
     }
 #endif
+#ifdef AEROSIM_POSTPROCESS_STANDALONE
+    QWidget *initialWindow = &postprocess;
+#else
     QWidget *initialWindow = app.arguments().contains(QStringLiteral("--postprocess"))
         ? static_cast<QWidget *>(&postprocess) : static_cast<QWidget *>(&window);
+#endif
     initialWindow->show();
 
     const int screenshotIndex = app.arguments().indexOf(QStringLiteral("--screenshot"));

@@ -47,6 +47,8 @@ if(AEROSIM_BUILD_TESTS)
         set_tests_properties(gui_mock_smoke PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
         add_test(NAME postprocess_gui_mock_smoke COMMAND aerosim_gui --postprocess --smoke)
         set_tests_properties(postprocess_gui_mock_smoke PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+        add_test(NAME postprocess_standalone_mock_smoke COMMAND aerosim_postprocess --smoke)
+        set_tests_properties(postprocess_standalone_mock_smoke PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
     endif()
     add_test(NAME postprocess_fixture_check
         COMMAND "${CMAKE_COMMAND}"

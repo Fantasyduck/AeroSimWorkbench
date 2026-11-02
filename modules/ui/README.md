@@ -73,7 +73,9 @@ VTK Viewer、统一场景入口和异步数据读取应分别由后续 `modules/
 `tests/postprocess/`。开发期的 Mock 入口只用于切换 P0/P1 的会话初始状态；它明确不
 承担数据读取、VTK 算法或场景管理，真实工程选择服务接入后将替换该入口。
 
-默认启动 Ribbon 主窗口，选择“后处理 → 后处理工作台”打开同一进程中的独立工作台窗口（重复点击复用实例）；也可运行 `aerosim_gui --postprocess` 直接打开。工作台的数据/对象导航、时间轴、对象设置对话框及 DeepSeek Harness 入口保留。两个窗口由 GUI 入口绑定同一组服务，主窗口不持有 VTK 数据。
+默认启动 Ribbon 主窗口，选择“后处理 → 后处理工作台”仍打开同一进程中的工作台窗口（重复点击复用实例）；`aerosim_gui --postprocess` 也继续可用。另提供独立程序 `aerosim_postprocess`：它在单独进程中启动后处理，可与主界面同时运行，关闭主界面不关闭该独立程序。Windows Debug 使用 `scripts\run-postprocess-windows.cmd` 构建并启动；生成文件及部署依赖位于 `build-windows\postprocess\Debug`（可用 `AEROSIM_BUILD_DIR` 覆盖构建目录）。这两个进程各自装配服务，当前服务是 Mock，不共享会话或选择状态。
+
+主界面进程不会锁住独立后处理程序的 EXE 和部署目录。已有的 `aerosim_postprocess.exe` 若正从该目录运行，重新链接它时仍可能遇到文件占用；脚本不会自动关闭任何进程。全量构建若需要重新链接正在运行的主界面 EXE，仍可能遇到主界面的文件占用。
 
 真实 Viewer 将由后续 `modules/visualization/scene` 实现后经 `app/` 注入工作台；当前工作台始终使用明确标记的视口占位。`--screenshot` 可与 `--postprocess` 组合检查工作台。
 

@@ -60,4 +60,4 @@ Ribbon 分类保持稳定；通过动作启用/禁用和提示解释限制，不
 
 按用户要求只进行代码检查，未执行构建、CTest 或原生界面视觉验收。现有 smoke 用例已补充示例启动、两种网格的菜单联动、标量/矢量区分、云图后继续操作、流线积分字段，以及背景应用/取消/恢复默认和非法颜色检查，待手动构建运行。
 
-Windows 可按仓库约定运行 `scripts\build-windows.cmd all Debug`。之后使用 `aerosim_gui.exe --postprocess` 打开工作台，从“工具 → 界面示例”检查交互。真实文件读取、特征计算、数值正确性、VTK 渲染与导出仍需各自的后端实现和验收。
+Windows 可运行 `scripts\run-postprocess-windows.cmd`，构建并启动独立的 `aerosim_postprocess.exe`；它与主界面使用不同进程及部署目录。也可按仓库约定运行 `scripts\build-windows.cmd all Debug`。从“工具 → 界面示例”检查交互。真实文件读取、特征计算、数值正确性、VTK 渲染与导出仍需各自的后端实现和验收。
