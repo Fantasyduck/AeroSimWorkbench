@@ -13,6 +13,7 @@
 #include <QFile>
 #include <QLabel>
 #include <QListWidget>
+#include <QLineEdit>
 #include <QPushButton>
 #include <QSlider>
 #include <QSpinBox>
@@ -66,6 +67,67 @@ int main(int argc, char *argv[])
     window.show(); flush();
     for (auto *dock : window.findChildren<QDockWidget *>()) CHECK(!dock->isVisible());
     for (auto *toolbar : window.findChildren<QToolBar *>()) CHECK(window.toolBarArea(toolbar) == Qt::NoToolBarArea);
+
+    // Empty startup and explicit UI fixtures: never treat sample metadata as a reader.
+    CHECK(tree->topLevelItemCount()==0 && layers->count()==0);
+    for (const char *name : {"postProcessContourAction","postProcessSliceAction","postProcessIsoAction","postProcessStreamAction","postProcessExportAction"})
+        CHECK(!action(name)->isEnabled());
+    CHECK(!action("postProcessConvertAction") && !action("postProcessExcelAction"));
+    auto *host = window.findChild<QWidget *>("postProcessViewportHost");
+    CHECK(host->property("backgroundBottom").value<QColor>()==QColor(98,93,90));
+    CHECK(capture(&window,"empty-session"));
+    const auto backgroundDialog = [&] {
+        action("postProcessBackgroundAction")->trigger(); flush();
+        return window.findChild<QDialog *>("postProcessBackgroundDialog");
+    };
+    auto *bg = backgroundDialog(); CHECK(bg);
+    bg->findChild<QComboBox *>("postProcessBackgroundPreset")->setCurrentIndex(4);
+    bg->reject(); flush();
+    CHECK(host->property("backgroundBottom").value<QColor>()==QColor(98,93,90));
+    bg=backgroundDialog();
+    bg->findChild<QComboBox *>("postProcessBackgroundPreset")->setCurrentIndex(3);
+    bg->findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Ok)->click(); flush();
+    CHECK(host->property("gradientBackground").toBool());
+    CHECK(host->property("backgroundBottom").value<QColor>()==QColor("#52576e"));
+    bg=backgroundDialog();
+    bg->findChild<QLineEdit *>("postProcessBackgroundBottom")->setText("invalid-color");
+    bg->findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Ok)->click(); flush();
+    CHECK(bg->isVisible());
+    bg->findChild<QDialogButtonBox *>()->button(QDialogButtonBox::RestoreDefaults)->click();
+    CHECK(capture(bg,"background-settings"));
+    bg->findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Ok)->click(); flush();
+    CHECK(!host->property("gradientBackground").toBool());
+    CHECK(host->property("backgroundBottom").value<QColor>()==QColor(98,93,90));
+
+    auto *fields = window.findChild<QComboBox *>("postProcessFieldSelector"); CHECK(fields);
+    // Same UI capabilities for structured and unstructured topology.
+    for (const char *example : {"postProcessStructuredExampleAction","postProcessUnstructuredExampleAction"}) {
+        action(example)->trigger(); flush(); chooseZone(0);
+        CHECK(action("postProcessSliceAction")->isEnabled() && action("postProcessIsoAction")->isEnabled());
+        CHECK(!action("postProcessStreamAction")->isEnabled());
+        fields->setCurrentIndex(4); // Three-component velocity, not speed magnitude.
+        CHECK(action("postProcessStreamAction")->isEnabled() && !action("postProcessIsoAction")->isEnabled());
+        CHECK(action("postProcessSliceAction")->isEnabled());
+        fields->setCurrentIndex(1); // Speed magnitude is scalar.
+        CHECK(!action("postProcessStreamAction")->isEnabled() && action("postProcessIsoAction")->isEnabled());
+        chooseZone(1);
+        CHECK(action("postProcessIsoLineAction")->isEnabled() && !action("postProcessIsoAction")->isEnabled());
+        CHECK(!action("postProcessSliceAction")->isEnabled());
+        chooseObject(0); // A slice retains its source fields but has surface dimension.
+        CHECK(action("postProcessIsoLineAction")->isEnabled() && !action("postProcessIsoAction")->isEnabled());
+        CHECK(!action("postProcessGeometryExportAction")->isEnabled()); // UI drafts are not geometry.
+    }
+    chooseZone(0); action("postProcessContourAction")->trigger(); flush();
+    CHECK(nav->currentIndex()==2 && parameters->isEnabled());
+    CHECK(action("postProcessSliceAction")->isEnabled() && action("postProcessIsoAction")->isEnabled());
+    CHECK(!action("postProcessStreamAction")->isEnabled());
+    fields->setCurrentIndex(4); CHECK(action("postProcessStreamAction")->isEnabled());
+    // Integration vector remains fixed when coloring a streamline by another scalar.
+    action("postProcessStreamAction")->trigger(); flush();
+    CHECK(layers->currentItem()->data(Qt::UserRole+3).toMap().value("integrationField").toString().contains(QString::fromUtf8("速度矢量")));
+    fields->setCurrentIndex(0);
+    CHECK(layers->currentItem()->data(Qt::UserRole+3).toMap().value("integrationField").toString().contains(QString::fromUtf8("速度矢量")));
+    action("postProcessUnstructuredExampleAction")->trigger(); flush();
 
     // Merely selecting a zone or object must never open an editor or sidebar.
     chooseObject(0); chooseZone(0);

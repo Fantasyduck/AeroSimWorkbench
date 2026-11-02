@@ -7,9 +7,11 @@
 #include <QHash>
 #include <QPointer>
 #include <QVariantMap>
+#include <QColor>
 
 class QAction;
 class QDialog;
+class QComboBox;
 class QLabel;
 class QListWidget;
 class QDockWidget;
@@ -40,6 +42,8 @@ public slots:
 signals:
     void viewRequested(const QString &orientation);
     void postProcessCommandRequested(const QString &command);
+    // GUI-thread view preference; a future viewer adapter must apply it to VTK.
+    void backgroundChanged(const QColor &bottom, const QColor &top, bool gradient);
 
 private:
     QWidget *createDataPanel();
@@ -51,13 +55,16 @@ private:
     void openDeepSeekHarness();
     void showProbePanel();
     void openObjectStyle();
-    void openObjectParameters();
+    void openObjectParameters(bool colorOnly = false);
     void openSelectedSettings();
     void updateSelectionActions();
     void showTaskPanel();
+    void loadUiExample(bool structured);
+    void openBackgroundSettings();
+    void applyBackground(const QColor &bottom, const QColor &top, bool gradient);
+    void syncFieldSelection();
     void updateDataSelection(QTreeWidgetItem *item, int column);
     void addDerivedLayer(const QString &kind, const QString &name, const QString &message);
-    void setFeatureActionsEnabled(bool mesh, bool contour, bool slice, bool iso, bool streamline);
     void appendMessage(const QString &message);
     void updateSelectionDetails();
 
@@ -72,6 +79,12 @@ private:
     QString selectedId_;
     QString selectedKind_;
     QString selectedName_;
+    QVariantMap selectedContext_;
+    QComboBox *fieldSelector_ = nullptr;
+    QLabel *workflowHint_ = nullptr;
+    QColor backgroundBottom_ = QColor(98, 93, 90);
+    QColor backgroundTop_ = QColor(98, 93, 90);
+    bool gradientBackground_ = false;
     QHash<QString, QVariantMap> styleDrafts_;
     QHash<QString, QVariantMap> parameterDrafts_;
     int nextObjectId_ = 0;
@@ -86,7 +99,6 @@ private:
     QDockWidget *taskDock_ = nullptr;
     QTextEdit *events_ = nullptr;
     QDockWidget *deepSeekHarnessDock_ = nullptr;
-    QList<QAction *> featureActions_;
     ServiceBindings services_;
     bool bound_ = false;
 };
