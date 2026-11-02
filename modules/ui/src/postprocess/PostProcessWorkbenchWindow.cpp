@@ -236,7 +236,7 @@ PostProcessWorkbenchWindow::PostProcessWorkbenchWindow(QWidget *parent)
     timeLabel_->setText(uiText(u"无时间数据"));
     loadUiExample(false);
     updateSelectionActions();
-    connect(tabs, &QTabWidget::currentChanged, this, [this](int index) {
+    connect(tabs, &QTabWidget::currentChanged, this, [this, tabs](int index) {
         if (tabs->widget(index) == navigationPanels_[1]) updateDataSelection(datasetTree_->currentItem(), 0);
         if (tabs->widget(index) == navigationPanels_[2]) updateSelectionDetails();
     });
@@ -705,7 +705,7 @@ void PostProcessWorkbenchWindow::openBackgroundSettings() {
     const auto colorRow = [dialog, form](const QString &title, QLineEdit *input) {
         auto *row = new QWidget(dialog); auto *box = new QHBoxLayout(row); box->setContentsMargins(0,0,0,0);
         box->addWidget(input); auto *choose = new QPushButton(uiText(u"选色…"),row); box->addWidget(choose);
-        connect(choose,&QPushButton::clicked,dialog,[dialog,input] {
+        QObject::connect(choose,&QPushButton::clicked,dialog,[dialog,input] {
             const QColor color = QColorDialog::getColor(QColor(input->text()),dialog,uiText(u"选择背景颜色"));
             if (color.isValid()) input->setText(color.name());
         });
