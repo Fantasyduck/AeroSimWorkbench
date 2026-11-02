@@ -171,7 +171,14 @@ PostProcessWorkbenchWindow::PostProcessWorkbenchWindow(QWidget *parent)
     workbench->setObjectName(QStringLiteral("postProcessWorkspace"));
     auto *content = new QSplitter(Qt::Horizontal, workbench); content->setObjectName(uiText(u"postProcessContent"));
     auto *tabs = new QTabWidget(content); tabs->setObjectName(uiText(u"postProcessNavigator")); tabs->setMinimumWidth(250);
-    tabs->addTab(scrollPanel(createViewPanel()), uiText(u"视图")); tabs->addTab(createDataPanel(), uiText(u"数据")); tabs->addTab(createObjectPanel(), uiText(u"对象"));
+    navigationPanels_[0] = scrollPanel(createViewPanel());
+    navigationPanels_[1] = createDataPanel(); navigationPanels_[2] = createObjectPanel();
+    tabs->addTab(navigationPanels_[0], uiText(u"视图")); tabs->addTab(navigationPanels_[1], uiText(u"数据")); tabs->addTab(navigationPanels_[2], uiText(u"对象"));
+    tabs->setTabsClosable(true);
+    connect(tabs, &QTabWidget::tabCloseRequested, this, [tabs](int index) {
+        tabs->removeTab(index);
+        if (tabs->count() == 0) tabs->hide();
+    });
     content->addWidget(tabs); content->addWidget(createViewportPanel()); content->setStretchFactor(1, 1); content->setSizes({270, 1170}); content->setChildrenCollapsible(false);
     root->addWidget(content, 1); root->addWidget(createTimeline()); setCentralWidget(workbench);
     auto *dock = new QDockWidget(uiText(u"任务与消息"), this); taskDock_ = dock; dock->setObjectName(uiText(u"postProcessMessageDock")); events_ = new QTextEdit(dock); events_->setReadOnly(true); events_->document()->setMaximumBlockCount(2000); events_->setPlaceholderText(uiText(u"暂无任务事件。读取、计算和导出服务的进度与错误将在这里显示。")); dock->setWidget(events_); installDockTitle(dock); addDockWidget(Qt::BottomDockWidgetArea, dock); dock->hide();
@@ -227,12 +234,11 @@ PostProcessWorkbenchWindow::PostProcessWorkbenchWindow(QWidget *parent)
     for (const char *name : {"postProcessFirstFrame", "postProcessPreviousFrame", "postProcessNextFrame", "postProcessLastFrame"})
         findChild<QToolButton *>(name)->setEnabled(false);
     timeLabel_->setText(uiText(u"无时间数据"));
-    syncFieldSelection();
     loadUiExample(false);
     updateSelectionActions();
     connect(tabs, &QTabWidget::currentChanged, this, [this](int index) {
-        if (index == 1) updateDataSelection(datasetTree_->currentItem(), 0);
-        if (index == 2) updateSelectionDetails();
+        if (tabs->widget(index) == navigationPanels_[1]) updateDataSelection(datasetTree_->currentItem(), 0);
+        if (tabs->widget(index) == navigationPanels_[2]) updateSelectionDetails();
     });
 }
 
@@ -348,11 +354,21 @@ void PostProcessWorkbenchWindow::createActions() {
     panelsMenu->setObjectName(QStringLiteral("postProcessPanelsMenu"));
     auto *resultsAction = ribbonAction(this, commandIcon("probe"), uiText(u"探针结果"), uiText(u"查看已有取点结果，不改变鼠标模式"), QStringLiteral("postProcessProbeResultsAction"));
     auto *tasksAction = ribbonAction(this, commandIcon("analysis"), uiText(u"任务与消息"), uiText(u"查看任务事件与操作消息"), QStringLiteral("postProcessTasksAction"));
+    for (int i=0; i<3; ++i) {
+        const QStringList names = {uiText(u"视图面板"), uiText(u"数据面板"), uiText(u"对象面板")};
+        const QStringList ids = {"postProcessShowViewPanel", "postProcessShowDataPanel", "postProcessShowObjectPanel"};
+        auto *action = ribbonAction(this, commandIcon("dock"), names.at(i), uiText(u"打开") + names.at(i), ids.at(i));
+        panelsMenu->addAction(action);
+        connect(action, &QAction::triggered, this, [this, i] { showNavigationPanel(i); });
+    }
+    panelsMenu->addSeparator();
     panelsMenu->addAction(resultsAction); panelsMenu->addAction(tasksAction);
     auto *panelsAction = ribbonAction(this, commandIcon("dock"), uiText(u"面板"), uiText(u"按需打开结果与任务面板"), QStringLiteral("postProcessPanelsAction"));
     panelsAction->setMenu(panelsMenu);
     quickQuery->addSmallAction(panelsAction);
     auto *panelGroup = toolsCategory->addPanel(uiText(u"面板"));
+    for (const char *name : {"postProcessShowViewPanel", "postProcessShowDataPanel", "postProcessShowObjectPanel"})
+        panelGroup->addLargeAction(findChild<QAction *>(QString::fromLatin1(name)));
     panelGroup->addSmallAction(resultsAction); panelGroup->addSmallAction(tasksAction);
     connect(resultsAction, &QAction::triggered, this, &PostProcessWorkbenchWindow::showProbePanel);
     connect(tasksAction, &QAction::triggered, this, &PostProcessWorkbenchWindow::showTaskPanel);
@@ -537,7 +553,7 @@ void PostProcessWorkbenchWindow::loadUiExample(bool structured) {
         findChild<QToolButton *>(name)->setEnabled(true);
     timeLabel_->setText(uiText(u"示例 Frame 1 / 3 · t = 0.0 s"));
     datasetTree_->setCurrentItem(volume);
-    updateDataSelection(volume,0); syncFieldSelection();
+    updateDataSelection(volume,0);
     appendMessage(uiText(u"已加载界面示例：仅验证流程与菜单联动，不表示文件读取、特征计算或渲染已完成。"));
 }
 
@@ -619,24 +635,7 @@ QWidget *PostProcessWorkbenchWindow::createViewportPanel() {
     auto *caption = new QVBoxLayout;
     viewportTitle_->setWordWrap(true); viewportHint_->setWordWrap(true);
     caption->addWidget(viewportTitle_); caption->addWidget(viewportHint_);
-    fieldSelector_ = new QComboBox(header);
-    fieldSelector_->setObjectName(QStringLiteral("postProcessFieldSelector"));
-    fieldSelector_->setMinimumContentsLength(10);
-    fieldSelector_->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
-    fieldSelector_->setToolTip(uiText(u"当前对象的着色字段；矢量模长用于着色，原矢量用于流线积分"));
-    headerLayout->addLayout(caption, 1);
-    headerLayout->addWidget(new QLabel(uiText(u"着色"), header));
-    headerLayout->addWidget(fieldSelector_); headerLayout->addWidget(orientation);
-    connect(fieldSelector_, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int index) {
-        if (index < 0) return;
-        const QVariantMap field = fieldSelector_->itemData(index).toMap();
-        selectedContext_["field"] = field.value("name");
-        selectedContext_["components"] = field.value("components");
-        if (auto *item = sceneList_->currentItem()) {
-            if (item->data(Qt::UserRole+1).toString() == selectedId_) item->setData(Qt::UserRole+3, selectedContext_);
-        }
-        updateSelectionActions();
-    });
+    headerLayout->addLayout(caption, 1); headerLayout->addWidget(orientation);
     layout->addWidget(header);
     auto *viewportHost = new QFrame(frame); viewportHost->setObjectName(uiText(u"postProcessViewportHost")); viewportLayout_ = new QVBoxLayout(viewportHost); viewportLayout_->setContentsMargins(0, 0, 0, 0);
     emptyViewport_ = new ResultPreviewWidget(viewportHost); emptyViewport_->setObjectName(uiText(u"postProcessResultPreview")); viewportLayout_->addWidget(emptyViewport_);
@@ -740,20 +739,18 @@ void PostProcessWorkbenchWindow::openBackgroundSettings() {
     layout->addWidget(buttons); dialog->show();
 }
 
-void PostProcessWorkbenchWindow::syncFieldSelection() {
-    if (!fieldSelector_) return;
-    const QSignalBlocker blocker(fieldSelector_);
-    fieldSelector_->clear();
-    const QString current = selectedContext_.value("field").toString();
-    for (const QString &key : {QStringLiteral("scalars"), QStringLiteral("vectors")}) {
-        for (const QString &name : selectedContext_.value(key).toStringList()) {
-            const int components = key == "scalars" ? 1 : 3;
-            QVariantMap field{{"name",name},{"components",components}};
-            fieldSelector_->addItem(name+(components==3 ? uiText(u" · 模长着色") : QString()),field);
-            if (name==current) fieldSelector_->setCurrentIndex(fieldSelector_->count()-1);
-        }
+void PostProcessWorkbenchWindow::showNavigationPanel(int panel) {
+    if (panel < 0 || panel >= 3 || !navigationPanels_[panel]) return;
+    auto *tabs = findChild<QTabWidget *>(QStringLiteral("postProcessNavigator"));
+    if (!tabs) return;
+    int index = tabs->indexOf(navigationPanels_[panel]);
+    if (index < 0) {
+        index = 0;
+        for (int i = 0; i < panel; ++i) if (tabs->indexOf(navigationPanels_[i]) >= 0) ++index;
+        const QStringList labels = {uiText(u"视图"), uiText(u"数据"), uiText(u"对象")};
+        tabs->insertTab(index, navigationPanels_[panel], labels.at(panel));
     }
-    fieldSelector_->setEnabled(fieldSelector_->count()>0);
+    tabs->show(); tabs->setCurrentIndex(index);
 }
 
 void PostProcessWorkbenchWindow::updateDataSelection(QTreeWidgetItem *item, int) {
@@ -764,7 +761,6 @@ void PostProcessWorkbenchWindow::updateDataSelection(QTreeWidgetItem *item, int)
     if (selectionSummary_) selectionSummary_->setText(uiText(u"当前选择：") + selectedName_);
     if (selectedKind_ == "time" && timeSlider_ && item->parent())
         timeSlider_->setValue(item->parent()->indexOfChild(item));
-    syncFieldSelection();
     updateSelectionActions();
 }
 
@@ -823,8 +819,7 @@ void PostProcessWorkbenchWindow::addDerivedLayer(const QString &kind, const QStr
         context["dimension"] = 1; context["vectors"] = QStringList();
     }
     item->setData(Qt::UserRole+3,context);
-    auto *nav = findChild<QTabWidget *>(QStringLiteral("postProcessNavigator"));
-    nav->setCurrentIndex(2);
+    showNavigationPanel(2);
     sceneList_->setCurrentItem(item);
     updateSelectionDetails();
     appendMessage(message);
@@ -838,7 +833,7 @@ void PostProcessWorkbenchWindow::updateSelectionDetails() {
     selectedKind_ = item ? item->data(Qt::UserRole).toString() : QString();
     selectedName_ = item ? item->data(Qt::UserRole+2).toString() : QString();
     selectedContext_ = item ? item->data(Qt::UserRole+3).toMap() : QVariantMap();
-    syncFieldSelection(); updateSelectionActions();
+    updateSelectionActions();
 }
 
 void PostProcessWorkbenchWindow::openSelectedSettings() {

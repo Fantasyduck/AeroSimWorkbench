@@ -62,7 +62,7 @@ private:
     void loadUiExample(bool structured);
     void openBackgroundSettings();
     void applyBackground(const QColor &bottom, const QColor &top, bool gradient);
-    void syncFieldSelection();
+    void showNavigationPanel(int panel);
     void updateDataSelection(QTreeWidgetItem *item, int column);
     void addDerivedLayer(const QString &kind, const QString &name, const QString &message);
     void appendMessage(const QString &message);
@@ -80,7 +80,7 @@ private:
     QString selectedKind_;
     QString selectedName_;
     QVariantMap selectedContext_;
-    QComboBox *fieldSelector_ = nullptr;
+    QWidget *navigationPanels_[3] = {nullptr, nullptr, nullptr};
     QColor backgroundBottom_ = QColor(98, 93, 90);
     QColor backgroundTop_ = QColor(98, 93, 90);
     bool gradientBackground_ = false;

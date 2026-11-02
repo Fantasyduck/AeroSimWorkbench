@@ -99,16 +99,29 @@ int main(int argc, char *argv[])
     CHECK(!host->property("gradientBackground").toBool());
     CHECK(host->property("backgroundBottom").value<QColor>()==QColor(98,93,90));
 
-    auto *fields = window.findChild<QComboBox *>("postProcessFieldSelector"); CHECK(fields);
+    CHECK(!window.findChild<QComboBox *>("postProcessFieldSelector"));
+    const auto chooseField = [&] (int index) {
+        nav->setCurrentIndex(1);
+        auto *item = tree->topLevelItem(1)->child(index);
+        tree->setCurrentItem(item); tree->itemClicked(item,0); flush();
+    };
+    // Close independently; menu actions reopen each panel in its original order.
+    emit nav->tabCloseRequested(1); CHECK(nav->count()==2);
+    action("postProcessShowDataPanel")->trigger(); CHECK(nav->count()==3 && nav->currentIndex()==1);
+    emit nav->tabCloseRequested(2); emit nav->tabCloseRequested(1); emit nav->tabCloseRequested(0);
+    CHECK(nav->count()==0 && !nav->isVisible());
+    action("postProcessShowObjectPanel")->trigger(); CHECK(nav->count()==1 && nav->isVisible());
+    action("postProcessShowViewPanel")->trigger(); action("postProcessShowDataPanel")->trigger();
+    CHECK(nav->count()==3 && nav->currentIndex()==1);
     // Same UI capabilities for structured and unstructured topology.
     for (const char *example : {"postProcessStructuredExampleAction","postProcessUnstructuredExampleAction"}) {
         action(example)->trigger(); flush(); chooseZone(0);
         CHECK(action("postProcessSliceAction")->isEnabled() && action("postProcessIsoAction")->isEnabled());
         CHECK(!action("postProcessStreamAction")->isEnabled());
-        fields->setCurrentIndex(4); // Three-component velocity, not speed magnitude.
+        chooseField(4); // Three-component velocity, not speed magnitude.
         CHECK(action("postProcessStreamAction")->isEnabled() && !action("postProcessIsoAction")->isEnabled());
         CHECK(action("postProcessSliceAction")->isEnabled());
-        fields->setCurrentIndex(1); // Speed magnitude is scalar.
+        chooseField(1); // Speed magnitude is scalar.
         CHECK(!action("postProcessStreamAction")->isEnabled() && action("postProcessIsoAction")->isEnabled());
         chooseZone(1);
         CHECK(action("postProcessIsoLineAction")->isEnabled() && !action("postProcessIsoAction")->isEnabled());
@@ -121,11 +134,10 @@ int main(int argc, char *argv[])
     CHECK(nav->currentIndex()==2 && parameters->isEnabled());
     CHECK(action("postProcessSliceAction")->isEnabled() && action("postProcessIsoAction")->isEnabled());
     CHECK(!action("postProcessStreamAction")->isEnabled());
-    fields->setCurrentIndex(4); CHECK(action("postProcessStreamAction")->isEnabled());
+    chooseField(4); CHECK(action("postProcessStreamAction")->isEnabled());
     // Integration vector remains fixed when coloring a streamline by another scalar.
     action("postProcessStreamAction")->trigger(); flush();
     CHECK(layers->currentItem()->data(Qt::UserRole+3).toMap().value("integrationField").toString().contains(QString::fromUtf8("速度矢量")));
-    fields->setCurrentIndex(0);
     CHECK(layers->currentItem()->data(Qt::UserRole+3).toMap().value("integrationField").toString().contains(QString::fromUtf8("速度矢量")));
     action("postProcessUnstructuredExampleAction")->trigger(); flush();
 
