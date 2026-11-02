@@ -133,11 +133,15 @@ int main(int argc, char *argv[])
     }
     chooseZone(0); action("postProcessContourAction")->trigger(); flush();
     CHECK(nav->currentIndex()==2 && parameters->isEnabled());
+    auto *createdDialog = window.findChild<QDialog *>("postProcessParameterDialog"); CHECK(createdDialog);
+    createdDialog->findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Ok)->click(); flush();
     CHECK(action("postProcessSliceAction")->isEnabled() && action("postProcessIsoAction")->isEnabled());
     CHECK(!action("postProcessStreamAction")->isEnabled());
     chooseField(4); CHECK(action("postProcessStreamAction")->isEnabled());
     // Integration vector remains fixed when coloring a streamline by another scalar.
     action("postProcessStreamAction")->trigger(); flush();
+    createdDialog = window.findChild<QDialog *>("postProcessParameterDialog"); CHECK(createdDialog);
+    createdDialog->findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Ok)->click(); flush();
     CHECK(layers->currentItem()->data(Qt::UserRole+3).toMap().value("integrationField").toString().contains(QString::fromUtf8("速度矢量")));
     CHECK(layers->currentItem()->data(Qt::UserRole+3).toMap().value("integrationField").toString().contains(QString::fromUtf8("速度矢量")));
     action("postProcessUnstructuredExampleAction")->trigger(); flush();
@@ -230,7 +234,12 @@ int main(int argc, char *argv[])
     chooseZone(0);
     const int count = layers->count(); action("postProcessContourAction")->trigger();
     CHECK(layers->count() == count+1);
-    CHECK(window.findChildren<QDialog *>().isEmpty());
+    createdDialog = window.findChild<QDialog *>("postProcessParameterDialog"); CHECK(createdDialog);
+    createdDialog->reject(); flush(); CHECK(layers->count() == count);
+    action("postProcessContourAction")->trigger(); flush();
+    createdDialog = window.findChild<QDialog *>("postProcessParameterDialog"); CHECK(createdDialog);
+    createdDialog->findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Ok)->click(); flush();
+    CHECK(layers->count() == count+1 && window.findChildren<QDialog *>().isEmpty());
 
     // Probe is an exclusive mouse mode; results visibility is a separate action.
     pan->trigger(); CHECK(pan->isChecked());

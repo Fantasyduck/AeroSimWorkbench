@@ -850,7 +850,7 @@ void PostProcessWorkbenchWindow::updateSelectionActions() {
 }
 
 void PostProcessWorkbenchWindow::addDerivedLayer(const QString &kind, const QString &name, const QString &message) {
-    if (selectedContext_.isEmpty()) return;
+    if (selectedContext_.isEmpty() || parameterDialog_) return;
     const auto sourceContext = selectedContext_;
     emit postProcessCommandRequested(kind);
     auto *item = new QListWidgetItem(commandIcon(kind == "isoline" ? "iso" : kind), name + uiText(u" · 草稿 · 可见"), sceneList_);
@@ -874,6 +874,21 @@ void PostProcessWorkbenchWindow::addDerivedLayer(const QString &kind, const QStr
     sceneList_->setCurrentItem(item);
     updateSelectionDetails();
     appendMessage(message);
+    const QString newId = item->data(Qt::UserRole+1).toString();
+    openObjectParameters();
+    if (parameterDialog_) {
+        connect(parameterDialog_, &QDialog::rejected, this, [this, newId] {
+            if (parameterDialog_ && parameterDialog_->property("draftApplied").toBool()) return;
+            for (int i = 0; i < sceneList_->count(); ++i) {
+                if (sceneList_->item(i)->data(Qt::UserRole+1).toString() == newId) {
+                    delete sceneList_->takeItem(i);
+                    parameterDrafts_.remove(newId); styleDrafts_.remove(newId);
+                    updateSelectionDetails();
+                    break;
+                }
+            }
+        });
+    }
 }
 bool PostProcessWorkbenchWindow::insertWidget(WidgetSlot slot,QWidget *widget){if(slot!=WidgetSlot::Viewport||!widget||!viewportLayout_)return false;if(emptyViewport_){viewportLayout_->removeWidget(emptyViewport_);emptyViewport_->deleteLater();emptyViewport_=nullptr;}if(viewportLayout_->count()!=0)return false;viewportLayout_->addWidget(widget);return true;}
 void PostProcessWorkbenchWindow::bindServices(const ServiceBindings &services){if(bound_)return;services_=services;bound_=true;if(services_.tasks)connect(services_.tasks,&ITaskService::taskEventOccurred,this,[this](const TaskEvent &event){appendMessage(event.message);},Qt::QueuedConnection);}
@@ -995,13 +1010,25 @@ void PostProcessWorkbenchWindow::openObjectParameters(bool colorOnly) {
         choice("direction",uiText(u"积分方向"), {uiText(u"向前"),uiText(u"向后"),uiText(u"双向")});
     }
     if (kind == "field" || kind == "contour") {
+        QStringList fields = selectedContext_.value("scalars").toStringList();
+        fields.append(selectedContext_.value("vectors").toStringList());
+        if (fields.isEmpty() && !selectedContext_.value("field").toString().isEmpty())
+            fields.append(selectedContext_.value("field").toString());
+        choice("displayField", uiText(u"字段"), fields);
+        if (!draft.contains("displayField"))
+            choices.value("displayField")->setCurrentIndex(qMax(0, fields.indexOf(selectedContext_.value("field").toString())));
         choice("palette",uiText(u"色标"),{uiText(u"蓝-青-黄-红"),uiText(u"灰度"),uiText(u"蓝-白-红")});
         auto *range = new QLabel(uiText(u"真实结果读取后计算"),dialog); form->addRow(uiText(u"值域"),range);
     } else if (kind == "curve") {
         choice("xAxis",uiText(u"横轴"),{uiText(u"迭代步"),uiText(u"时间"),uiText(u"工况序号")});
     } else if (kind != "layer") {
-        auto *field = new QLabel(selectedContext_.value(kind=="stream" || kind=="trace" ? "integrationField" : "field").toString(),dialog);
-        form->addRow(kind=="stream" || kind=="trace" ? uiText(u"积分矢量") : uiText(u"字段"),field);
+        const bool integration = kind=="stream" || kind=="trace";
+        QStringList fields = integration ? QStringList{selectedContext_.value("integrationField").toString()}
+                                         : selectedContext_.value("scalars").toStringList();
+        fields.removeAll(QString());
+        choice("displayField", integration ? uiText(u"积分矢量") : uiText(u"字段"), fields);
+        if (!draft.contains("displayField"))
+            choices.value("displayField")->setCurrentIndex(qMax(0, fields.indexOf(selectedContext_.value(integration ? "integrationField" : "field").toString())));
     } else {
         auto *hint = new QLabel(uiText(u"通用对象尚未指定特征类型，请先创建切面、等值面或流线对象。"),dialog);
         hint->setWordWrap(true); form->addRow(hint);
@@ -1014,11 +1041,12 @@ void PostProcessWorkbenchWindow::openObjectParameters(bool colorOnly) {
     buttons->button(QDialogButtonBox::Cancel)->setText(uiText(u"取消")); layout->addWidget(buttons);
     auto *apply = buttons->addButton(uiText(u"应用（待接入）"), QDialogButtonBox::ApplyRole);
     apply->setObjectName(QStringLiteral("postProcessApplyDraft"));
-    connect(apply, &QPushButton::clicked, dialog, [this, id, kind, numbers, choices] {
+    connect(apply, &QPushButton::clicked, dialog, [this, dialog, id, kind, numbers, choices] {
         QVariantMap saved = parameterDrafts_.value(id);
         for (auto it=numbers.cbegin(); it!=numbers.cend(); ++it) saved.insert(it.key(),it.value()->value());
         for (auto it=choices.cbegin(); it!=choices.cend(); ++it) saved.insert(it.key(),it.value()->currentIndex());
         parameterDrafts_[id] = saved;
+        dialog->setProperty("draftApplied", true);
         emit postProcessCommandRequested(QStringLiteral("apply:") + kind);
         appendMessage(uiText(u"已提交应用请求；特征服务尚未接入，未生成结果。"));
     });
