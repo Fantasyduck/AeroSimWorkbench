@@ -43,6 +43,7 @@
 #include <QTextEdit>
 #include <QToolButton>
 #include <QTreeWidget>
+#include <QTreeWidgetItemIterator>
 #include <QVBoxLayout>
 
 #include <SARibbonBar.h>
@@ -641,13 +642,26 @@ QWidget *PostProcessWorkbenchWindow::createObjectPanel() {
     hint->setObjectName(uiText(u"mutedText")); hint->setWordWrap(true); layout->addWidget(hint);
     auto *row = new QHBoxLayout;
     row->addWidget(sectionLabel(uiText(u"派生对象"), panel)); row->addStretch();
-    auto *add = new QPushButton(uiText(u"新建"), panel); add->setIcon(commandIcon("add")); row->addWidget(add); layout->addLayout(row);
+    auto *add = new QPushButton(uiText(u"新建"), panel); add->setIcon(commandIcon("add"));
+    add->setObjectName(QStringLiteral("postProcessNewObjectButton"));
+    add->setMinimumWidth(add->fontMetrics().horizontalAdvance(uiText(u"新建")) + 64);
+    row->addWidget(add); layout->addLayout(row);
     sceneList_ = new QListWidget(panel); sceneList_->setObjectName(uiText(u"sceneLayerList"));
     layout->addWidget(sceneList_, 1);
     auto *actions = new QHBoxLayout; auto *visible = new QPushButton(uiText(u"显隐"), panel); auto *remove = new QPushButton(uiText(u"删除"), panel); visible->setIcon(commandIcon("visible")); remove->setIcon(commandIcon("delete")); actions->addWidget(visible); actions->addWidget(remove); layout->addLayout(actions);
-    add->setMenu(new QMenu(add));
-    for (const char *name : {"postProcessSliceAction", "postProcessIsoLineAction", "postProcessIsoAction", "postProcessStreamAction"})
-        add->menu()->addAction(findChild<QAction *>(name));
+    auto *newMenu = new QMenu(add);
+    newMenu->setObjectName(QStringLiteral("postProcessNewObjectMenu"));
+    newMenu->setMinimumWidth(newMenu->fontMetrics().horizontalAdvance(uiText(u"物面 / 切片等值线")) + 80);
+    add->setMenu(newMenu);
+    const QStringList newKinds = {"slice", "isoline", "iso", "stream"};
+    const QStringList newNames = {uiText(u"添加切面"), uiText(u"等值线"), uiText(u"等值面"), uiText(u"流线")};
+    const QStringList newIcons = {"slice", "iso", "iso", "stream"};
+    for (int i = 0; i < newKinds.size(); ++i) {
+        auto *action = newMenu->addAction(commandIcon(newIcons.at(i)), newNames.at(i));
+        action->setObjectName(QStringLiteral("postProcessNew_%1").arg(newKinds.at(i)));
+        const QString kind = newKinds.at(i);
+        connect(action, &QAction::triggered, this, [this, kind] { openNewFeatureDialog(kind); });
+    }
     connect(sceneList_, &QListWidget::itemSelectionChanged, this, &PostProcessWorkbenchWindow::updateSelectionDetails);
     connect(sceneList_, &QListWidget::itemClicked, this, [this] { updateSelectionDetails(); });
     auto *edit = new QToolButton(panel); edit->setDefaultAction(parameterAction_);
@@ -847,6 +861,87 @@ void PostProcessWorkbenchWindow::updateSelectionActions() {
         ? uiText(u"界面示例 · %1 · %2 · %3").arg(selectedContext_.value("topology").toString(),selectedName_,selectedContext_.value("field").toString())
         : uiText(u"未选择空间数据"));
 
+}
+
+void PostProcessWorkbenchWindow::openNewFeatureDialog(const QString &kind) {
+    if (sourceDialog_) { sourceDialog_->raise(); sourceDialog_->activateWindow(); return; }
+    if (parameterDialog_) { parameterDialog_->raise(); parameterDialog_->activateWindow(); return; }
+    const QString title = kind == "slice" ? uiText(u"新建切面") : kind == "isoline" ? uiText(u"新建等值线")
+                          : kind == "iso" ? uiText(u"新建等值面") : uiText(u"新建流线");
+    auto *dialog = new QDialog(this);
+    sourceDialog_ = dialog;
+    dialog->setAttribute(Qt::WA_DeleteOnClose);
+    dialog->setWindowModality(Qt::WindowModal);
+    dialog->setWindowTitle(title);
+    dialog->setObjectName(QStringLiteral("postProcessFeatureSourceDialog"));
+    dialog->setStyleSheet(centralWidget()->styleSheet());
+    dialog->resize(500, 230);
+    auto *layout = new QVBoxLayout(dialog);
+    layout->addWidget(sectionLabel(title, dialog));
+    auto *form = new QFormLayout;
+    auto *sources = new QComboBox(dialog);
+    sources->setObjectName(QStringLiteral("postProcessFeatureSource"));
+    auto *fields = new QComboBox(dialog);
+    fields->setObjectName(QStringLiteral("postProcessFeatureField"));
+    auto addSource = [sources, kind](const QString &label, const QString &id, const QVariantMap &context) {
+        const int dimension = context.value("dimension").toInt();
+        if (context.value("sourceId").toString().isEmpty()) return;
+        if ((kind == "slice" || kind == "iso") && dimension != 3) return;
+        if (kind == "isoline" && dimension != 2) return;
+        if (kind == "stream" && dimension < 2) return;
+        QVariantMap candidate = context;
+        candidate["inputObjectId"] = id;
+        sources->addItem(label, candidate);
+    };
+    for (QTreeWidgetItemIterator it(datasetTree_); *it; ++it) {
+        auto *item = *it;
+        const QString itemKind = item->data(0, Qt::UserRole).toString();
+        if (itemKind == "volume" || itemKind == "surface")
+            addSource(item->text(0), item->data(0, Qt::UserRole+1).toString(), item->data(0, Qt::UserRole+3).toMap());
+    }
+    for (int i = 0; i < sceneList_->count(); ++i) {
+        auto *item = sceneList_->item(i);
+        addSource(item->text(), item->data(Qt::UserRole+1).toString(), item->data(Qt::UserRole+3).toMap());
+    }
+    form->addRow(uiText(u"数据源"), sources);
+    form->addRow(kind == "stream" ? uiText(u"积分矢量") : uiText(u"字段"), fields);
+    layout->addLayout(form);
+    auto *hint = new QLabel(dialog);
+    hint->setObjectName(QStringLiteral("postProcessFeatureSourceHint"));
+    hint->setWordWrap(true); layout->addWidget(hint);
+    auto *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, dialog);
+    buttons->button(QDialogButtonBox::Ok)->setText(uiText(u"下一步"));
+    buttons->button(QDialogButtonBox::Cancel)->setText(uiText(u"取消"));
+    layout->addWidget(buttons);
+    const auto updateFields = [sources, fields, buttons, hint, kind](int index) {
+        fields->clear();
+        const QVariantMap source = sources->itemData(index).toMap();
+        if (kind == "slice") fields->addItem(uiText(u"仅切片网格"), QString());
+        const QStringList available = source.value(kind == "stream" ? "vectors" : "scalars").toStringList();
+        for (const QString &name : available) fields->addItem(name, name);
+        const int preferred = fields->findData(source.value("field"));
+        if (preferred >= 0) fields->setCurrentIndex(preferred);
+        const bool valid = index >= 0 && (kind == "slice" || !available.isEmpty());
+        fields->setEnabled(index >= 0);
+        buttons->button(QDialogButtonBox::Ok)->setEnabled(valid);
+        hint->setText(index < 0 ? uiText(u"没有符合要求的数据源，请先导入或选择示例数据。")
+                     : !valid ? uiText(u"所选数据源缺少此功能所需的字段，请选择其他数据源。")
+                     : uiText(u"请选择数据源和字段，下一步设置特征参数。"));
+    };
+    connect(sources, QOverload<int>::of(&QComboBox::currentIndexChanged), dialog, updateFields);
+    updateFields(sources->currentIndex());
+    connect(buttons, &QDialogButtonBox::rejected, dialog, &QDialog::reject);
+    connect(buttons, &QDialogButtonBox::accepted, dialog, [this, dialog, sources, fields, kind, title] {
+        QVariantMap context = sources->currentData().toMap();
+        if (context.isEmpty()) return;
+        context["field"] = fields->currentData().toString();
+        context["components"] = context.value("field").toString().isEmpty() ? 0 : (kind == "stream" ? 3 : 1);
+        selectedContext_ = context;
+        selectedId_ = context.value("inputObjectId").toString();
+        dialog->accept();
+        addDerivedLayer(kind, title.mid(2), uiText(u"已创建对象草稿，请设置参数。"));
+    });
+    dialog->show();
 }
 
 void PostProcessWorkbenchWindow::addDerivedLayer(const QString &kind, const QString &name, const QString &message) {

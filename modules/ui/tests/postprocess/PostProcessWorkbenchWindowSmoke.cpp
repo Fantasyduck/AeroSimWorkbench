@@ -15,6 +15,7 @@
 #include <QLabel>
 #include <QListWidget>
 #include <QLineEdit>
+#include <QMenu>
 #include <QPushButton>
 #include <QSlider>
 #include <QSpinBox>
@@ -175,6 +176,28 @@ int main(int argc, char *argv[])
     CHECK(applyButton); applyButton->click(); CHECK(appliedCommand=="apply:slice");
     applyDialog->reject(); flush();
     action("postProcessUnstructuredExampleAction")->trigger(); flush();
+
+    // New-object commands choose a source independently of the current object.
+    chooseObject(2); // A one-dimensional streamline cannot itself supply these operations.
+    auto *newButton = window.findChild<QPushButton *>("postProcessNewObjectButton");
+    CHECK(newButton && newButton->menu());
+    CHECK(newButton->menu()->minimumWidth() >= newButton->menu()->fontMetrics().horizontalAdvance(QString::fromUtf8("等值面")) + 80);
+    for (const char *kind : {"slice", "isoline", "iso", "stream"}) {
+        auto *newAction = newButton->menu()->findChild<QAction *>(QStringLiteral("postProcessNew_%1").arg(QString::fromLatin1(kind)));
+        CHECK(newAction && newAction->isEnabled());
+        const int before = layers->count();
+        newAction->trigger(); flush();
+        auto *sourceDialog = window.findChild<QDialog *>("postProcessFeatureSourceDialog");
+        CHECK(sourceDialog && sourceDialog->isVisible());
+        auto *sources = sourceDialog->findChild<QComboBox *>("postProcessFeatureSource");
+        auto *fields = sourceDialog->findChild<QComboBox *>("postProcessFeatureField");
+        CHECK(sources && sources->count() > 0 && fields);
+        CHECK(sourceDialog->findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Ok)->isEnabled());
+        sourceDialog->findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Ok)->click(); flush();
+        auto *setup = window.findChild<QDialog *>("postProcessParameterDialog");
+        CHECK(setup && setup->isVisible() && layers->count() == before + 1);
+        setup->reject(); flush(); CHECK(layers->count() == before);
+    }
 
     // Merely selecting a zone or object must never open an editor or sidebar.
     chooseObject(0); chooseZone(0);

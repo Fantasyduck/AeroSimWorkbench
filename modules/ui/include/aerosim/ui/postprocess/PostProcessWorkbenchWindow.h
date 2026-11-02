@@ -72,6 +72,7 @@ private:
     void showNavigationPanel(int panel);
     void updateDataSelection(QTreeWidgetItem *item, int column);
     void addDerivedLayer(const QString &kind, const QString &name, const QString &message);
+    void openNewFeatureDialog(const QString &kind);
     void appendMessage(const QString &message);
     void updateSelectionDetails();
 
@@ -83,6 +84,7 @@ private:
     QAction *parameterAction_ = nullptr;
     QPointer<QDialog> styleDialog_;
     QPointer<QDialog> parameterDialog_;
+    QPointer<QDialog> sourceDialog_;
     QPointer<QFileDialog> importDialog_;
     QPointer<QFileDialog> exportDialog_;
     QString selectedId_;
