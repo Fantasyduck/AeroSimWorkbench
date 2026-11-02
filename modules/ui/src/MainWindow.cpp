@@ -5,7 +5,10 @@
 #include <SARibbonPanel.h>
 #include <QAction>
 #include <QActionGroup>
+#include <QApplication>
 #include <QBrush>
+#include <QCheckBox>
+#include <QClipboard>
 #include <QMenu>
 #include <QSettings>
 #include <QPalette>
@@ -14,9 +17,11 @@
 #include <QDockWidget>
 #include <QDoubleSpinBox>
 #include <QFormLayout>
+#include <QFrame>
 #include <QHeaderView>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QKeySequence>
 #include <QLineEdit>
 #include <QPlainTextEdit>
 #include <QPixmap>
@@ -178,6 +183,9 @@ void MainWindow::createRibbon()
             } else if (route.startsWith("output:")) {
                 const int index = route.mid(7).toInt();
                 connect(action, &QAction::triggered, this, [this, index] { showOutput(index); });
+            } else if (route.startsWith("workspace:")) {
+                const QString workspace = route.mid(10);
+                connect(action, &QAction::triggered, this, [this, workspace] { showWorkspacePage(workspace); });
             } else if (route == "postprocess") {
                 action->setObjectName(QStringLiteral("openPostProcessAction"));
                 connect(action, &QAction::triggered, this, &MainWindow::openPostProcessRequested);
@@ -232,7 +240,7 @@ void MainWindow::createRibbon()
     auto *batchPanel = addGroup(start, "batchGroup", uiText(u"\u6279\u91cf\u7ba1\u7406"), {
         {"new-state", uiText(u"\u65b0\u5efa\u72b6\u6001"), false, ""},
         {"template", uiText(u"\u72b6\u6001\u6a21\u677f"), false, ""},
-        {"queue", uiText(u"\u4efb\u52a1\u5217\u8868"), false, "output:4"}});
+        {"queue", uiText(u"\u4efb\u52a1\u5217\u8868"), false, "workspace:batch-monitor"}});
     auto *batchMenu = new QMenu(uiText(u"\u6279\u91cf\u914d\u7f6e"), this);
     batchMenu->setObjectName(QStringLiteral("batchMenu"));
     batchMenu->setIcon(QIcon(QStringLiteral(":/aerosim/ribbon/batch.svg")));
@@ -301,9 +309,9 @@ void MainWindow::createRibbon()
         {"resume", uiText(u"\u7ee7\u7eed\u8ba1\u7b97"), false, ""},
         {"stop", uiText(u"\u505c\u6b62"), false, ""}});
     addGroup(monitor, "monitorGroup", uiText(u"\u8fd0\u884c\u76d1\u63a7"), {
-        {"monitor", uiText(u"\u8ba1\u7b97\u76d1\u63a7"), true, "output:1"},
+        {"monitor", uiText(u"\u8ba1\u7b97\u76d1\u63a7"), true, "workspace:task-monitor"},
         {"log", uiText(u"\u65e5\u5fd7"), false, "output:0"},
-        {"residual", uiText(u"\u6536\u655b\u66f2\u7ebf"), false, "output:2"},
+        {"residual", uiText(u"\u6536\u655b\u66f2\u7ebf"), false, "workspace:task-monitor"},
         {"errors", uiText(u"\u9519\u8bef\u4fe1\u606f"), false, "output:3"}});
     auto *post = ribbonBar()->addCategoryPage(uiText(u"\u540e\u5904\u7406"));
     post->setObjectName(QStringLiteral("postprocessCategory"));
@@ -414,10 +422,14 @@ void MainWindow::applyWindowTheme(const QString &requestedId)
         "QMenu { background: %2; color: %3; border: 1px solid %4; }"
         "QMenu::item:selected { background: %5; }"
         "QDockWidget::title { background: %1; padding: 7px; color: %3; }"
-        "QTreeWidget, QPlainTextEdit, QLineEdit, QComboBox, QAbstractSpinBox { background: %2; color: %3; }"
-        "QTreeWidget { border: 0; alternate-background-color: %1; }"
+        "QTreeWidget, QTableWidget, QPlainTextEdit, QLineEdit, QComboBox, QAbstractSpinBox { background: %2; color: %3; }"
+        "QTreeWidget, QTableWidget { alternate-background-color: %1; }"
+        "QTreeWidget { border: 0; }"
         "QTreeWidget::item { padding: 5px 2px; }"
         "QTreeWidget::item:selected { background: %5; color: %3; }"
+        "QHeaderView::section { background: %1; color: %3; border: 0; border-right: 1px solid %4; border-bottom: 1px solid %4; padding: 4px 7px; }"
+        "QWidget#outputToolbar { background: %1; color: %3; border-bottom: 1px solid %4; }"
+        "QLabel#outputTitle { color: %3; }"
         "QTabWidget::pane { border: 1px solid %4; }"
         "QTabWidget QTabBar::tab { background: %1; color: %3; padding: 6px 10px; }"
         "QTabWidget QTabBar::tab:selected { background: %2; }"
@@ -537,10 +549,12 @@ void MainWindow::createWorkspace()
     batchProgress->setValue(1);
     batchProgress->setFormat(uiText(u"Mock \u793a\u4f8b\uff1a%v / %m \u5df2\u5b8c\u6210"));
     batchMonitorLayout->addWidget(batchProgress);
+    auto *batchSummary = new QLabel(uiText(u"\u603b\u6570 3    \u8fd0\u884c\u4e2d 1    \u5df2\u5b8c\u6210 1    \u5931\u8d25 0    \u7b49\u5f85 1    \uff08Mock\uff09"), batchMonitorPage_);
+    batchSummary->setObjectName(QStringLiteral("batchRunSummary"));
+    batchMonitorLayout->addWidget(batchSummary);
     batchMonitorLayout->addStretch();
     taskMonitorPage_ = createWorkspacePage(QStringLiteral("taskMonitorPage"), uiText(u"\u5355\u4efb\u52a1\u76d1\u63a7"),
-        uiText(u"\u5c06\u5728\u6b64\u663e\u793a\u4efb\u52a1\u8f93\u5165\u5feb\u7167\u3001\u8fd0\u884c\u72b6\u6001\u548c\u8ba1\u7b97\u6307\u6807\u3002\u5f53\u524d\u4e3a Mock \u5360\u4f4d\uff0c\u4e0d\u4ee3\u8868\u771f\u5b9e\u6c42\u89e3\u7ed3\u679c\u3002"));
-    qobject_cast<QVBoxLayout *>(taskMonitorPage_->layout())->addStretch();
+        uiText(u"\u7efc\u5408\u663e\u793a\u4efb\u52a1\u8fdb\u5ea6\u3001\u6536\u655b\u8d8b\u52bf\u548c\u8d44\u6e90\u4fe1\u606f\u3002\u672a\u63a5\u5165\u771f\u5b9e\u6570\u636e\u7684\u5b57\u6bb5\u5747\u6807\u8bb0\u4e3a Mock\u3002"));
     dataProcessPage_ = createWorkspacePage(QStringLiteral("dataProcessPage"), uiText(u"\u6570\u636e\u5904\u7406\u5de5\u4f5c\u533a"),
         uiText(u"\u591a\u5de5\u51b5\u6570\u636e\u3001\u516d\u5206\u91cf\u6570\u636e\u4e0e\u5206\u6790\u4efb\u52a1\u7684\u754c\u9762\u5165\u53e3\u3002\u672c\u9636\u6bb5\u4e0d\u6267\u884c\u8235\u6548\u6216\u6c14\u52a8\u529b\u5206\u6790\u7b97\u6cd5\u3002"));
     qobject_cast<QVBoxLayout *>(dataProcessPage_->layout())->addStretch();
@@ -665,65 +679,209 @@ void MainWindow::createWorkspace()
     propertyDock_->setWidget(properties);
     selectPage(QStringLiteral("mesh"));
 
-    outputDock_ = new QDockWidget(uiText(u"\u8f93\u51fa\u4e0e\u8ba1\u7b97\u76d1\u63a7"), this);
-    outputDock_->setObjectName(QStringLiteral("outputDock"));
-    outputTabs_ = new QTabWidget(outputDock_);
-    log_ = new QPlainTextEdit(this);
-    log_->setReadOnly(true);
-    log_->setMaximumBlockCount(2000);
-    auto *logSlot = createSlot(WidgetSlot::Log, {});
-    auto *logLayout = slotLayouts_.value(static_cast<int>(WidgetSlot::Log));
-    auto *oldLogItem = logLayout->takeAt(0);
-    delete oldLogItem->widget();
-    delete oldLogItem;
-    logLayout->addWidget(log_);
-    outputTabs_->addTab(logSlot, uiText(u"\u65e5\u5fd7"));
+    // Reuse the existing monitor slot and task list in the right-hand monitor
+    // workspaces. The bottom dock is reserved for unified runtime output.
+    auto *taskMonitorLayout = qobject_cast<QVBoxLayout *>(taskMonitorPage_->layout());
+    taskMonitorTitle_ = new QLabel(uiText(u"Task_001 \u00b7 \u8fd0\u884c\u4e2d\uff08Mock\uff09"), taskMonitorPage_);
+    taskMonitorTitle_->setObjectName(QStringLiteral("taskMonitorTitle"));
+    QFont taskTitleFont = taskMonitorTitle_->font();
+    taskTitleFont.setPointSize(taskTitleFont.pointSize() + 2);
+    taskTitleFont.setBold(true);
+    taskMonitorTitle_->setFont(taskTitleFont);
+    taskMonitorLayout->addWidget(taskMonitorTitle_);
     auto *monitorSlot = createSlot(WidgetSlot::Monitor, {});
+    monitorSlot->setObjectName(QStringLiteral("monitorWorkspaceSlot"));
     auto *monitorLayout = slotLayouts_.value(static_cast<int>(WidgetSlot::Monitor));
     auto *oldMonitorItem = monitorLayout->takeAt(0);
     delete oldMonitorItem->widget();
     delete oldMonitorItem;
-    auto *monitor = new QWidget(monitorSlot);
+    auto *monitor = new QFrame(monitorSlot);
+    monitor->setObjectName(QStringLiteral("taskMetricsFrame"));
+    monitor->setFrameShape(QFrame::StyledPanel);
     auto *monitorForm = new QFormLayout(monitor);
-    monitorStatus_ = new QLabel(uiText(u"\u5c1a\u65e0\u4efb\u52a1\u4e8b\u4ef6"), monitor);
-    monitorDetails_ = new QLabel(uiText(u"\u8fed\u4ee3\uff1a\u2014    \u6b8b\u5dee\uff1a\u2014    CPU\uff1a\u2014    \u5185\u5b58\uff1a\u2014    MPI\uff1a\u2014"), monitor);
+    monitorStatus_ = new QLabel(uiText(u"Running\uff08Mock\uff09"), monitor);
+    monitorDetails_ = new QLabel(uiText(u"\u5f53\u524d\u8fed\u4ee3\uff1a1250    \u603b\u8fed\u4ee3\uff1a10000    \u6b8b\u5dee\uff1a1.2e-4\uff08Mock\uff09"), monitor);
     progress_ = new QProgressBar(monitor);
-    progress_->setRange(0, 100);
-    progress_->setValue(0);
-    monitorForm->addRow(uiText(u"\u4efb\u52a1\u72b6\u6001"), monitorStatus_);
-    monitorForm->addRow(uiText(u"\u8ba1\u7b97\u6307\u6807"), monitorDetails_);
-    monitorForm->addRow(uiText(u"\u8fdb\u5ea6"), progress_);
+    progress_->setRange(0, 1000);
+    progress_->setValue(125);
+    progress_->setFormat(uiText(u"12.5%\uff08Mock\uff09"));
+    monitorForm->addRow(uiText(u"\u8fd0\u884c\u72b6\u6001"), monitorStatus_);
+    monitorForm->addRow(uiText(u"\u8fed\u4ee3\u4fe1\u606f"), monitorDetails_);
+    monitorForm->addRow(uiText(u"\u8ba1\u7b97\u8fdb\u5ea6"), progress_);
     monitorLayout->addWidget(monitor);
-    outputTabs_->addTab(monitorSlot, uiText(u"\u8ba1\u7b97\u76d1\u63a7"));
-    outputTabs_->addTab(emptyState(uiText(u"\u6536\u655b\u66f2\u7ebf\n\u7b49\u5f85\u6b8b\u5dee\u91c7\u6837\u6570\u636e\u4e0e\u66f2\u7ebf\u7ec4\u4ef6\u63a5\u5165"), outputTabs_), uiText(u"\u6536\u655b\u66f2\u7ebf"));
-    auto *errorSlot = createSlot(WidgetSlot::Error, {});
-    auto *errorLayout = slotLayouts_.value(static_cast<int>(WidgetSlot::Error));
-    auto *oldErrorItem = errorLayout->takeAt(0);
-    delete oldErrorItem->widget();
-    delete oldErrorItem;
-    errors_ = new QPlainTextEdit(this);
-    errors_->setReadOnly(true);
-    errors_->setMaximumBlockCount(1000);
-    errorLayout->addWidget(errors_);
-    outputTabs_->addTab(errorSlot, uiText(u"\u9519\u8bef\u4fe1\u606f"));
-    taskTree_ = new QTreeWidget(outputTabs_);
+    taskMonitorLayout->addWidget(monitorSlot);
+    auto *curveFrame = new QFrame(taskMonitorPage_);
+    curveFrame->setObjectName(QStringLiteral("convergenceCurvePanel"));
+    curveFrame->setFrameShape(QFrame::StyledPanel);
+    curveFrame->setMinimumHeight(150);
+    auto *curveLayout = new QVBoxLayout(curveFrame);
+    auto *curveTitle = new QLabel(uiText(u"\u6536\u655b\u66f2\u7ebf"), curveFrame);
+    QFont curveTitleFont = curveTitle->font();
+    curveTitleFont.setBold(true);
+    curveTitle->setFont(curveTitleFont);
+    curveLayout->addWidget(curveTitle);
+    curveLayout->addWidget(emptyState(uiText(u"Mock \u66f2\u7ebf\u533a\u57df\n\u7b49\u5f85\u6b8b\u5dee\u91c7\u6837\u6570\u636e\u4e0e\u66f2\u7ebf\u7ec4\u4ef6\u63a5\u5165"), curveFrame), 1);
+    taskMonitorLayout->addWidget(curveFrame, 1);
+    auto *resourceSummary = new QLabel(uiText(u"CPU 76%    \u5185\u5b58 18.3 GB    MPI 32    \u8ba1\u7b97\u65f6\u95f4 00:12:35    \uff08Mock\uff09"), taskMonitorPage_);
+    resourceSummary->setObjectName(QStringLiteral("taskResourceSummary"));
+    taskMonitorLayout->addWidget(resourceSummary);
+
+    taskTree_ = new QTreeWidget(batchMonitorPage_);
     taskTree_->setObjectName(QStringLiteral("taskTree"));
     taskTree_->setHeaderLabels({uiText(u"\u4efb\u52a1 ID"), uiText(u"\u72b6\u6001"), uiText(u"\u6d88\u606f"), uiText(u"\u65f6\u95f4")});
     taskTree_->header()->setSectionResizeMode(QHeaderView::ResizeToContents);
+    taskTree_->header()->setSectionResizeMode(2, QHeaderView::Stretch);
     taskTree_->setAlternatingRowColors(true);
-    outputTabs_->addTab(taskTree_, uiText(u"\u4efb\u52a1\u5217\u8868"));
-    outputDock_->setWidget(outputTabs_);
+    new QTreeWidgetItem(taskTree_, {QStringLiteral("Task_001"), uiText(u"\u5df2\u5b8c\u6210\uff08Mock\uff09"), uiText(u"\u793a\u4f8b\u5b50\u4efb\u52a1"), QStringLiteral("00:08:21")});
+    new QTreeWidgetItem(taskTree_, {QStringLiteral("Task_002"), uiText(u"\u8fd0\u884c\u4e2d\uff08Mock\uff09"), uiText(u"\u793a\u4f8b\u5b50\u4efb\u52a1"), QStringLiteral("00:04:10")});
+    new QTreeWidgetItem(taskTree_, {QStringLiteral("Task_003"), uiText(u"\u51c6\u5907\u4e2d\uff08Mock\uff09"), uiText(u"\u793a\u4f8b\u5b50\u4efb\u52a1"), QStringLiteral("--")});
+    connect(taskTree_, &QTreeWidget::currentItemChanged, this, [this](QTreeWidgetItem *item) {
+        if (item) selectNavigationNode(monitorTree_, item->text(0));
+    });
+    batchMonitorLayout->insertWidget(batchMonitorLayout->count() - 1, taskTree_, 1);
+
+    outputDock_ = new QDockWidget(uiText(u"\u8f93\u51fa"), this);
+    outputDock_->setObjectName(QStringLiteral("outputDock"));
+    auto *outputTitleBar = new QWidget(outputDock_);
+    outputTitleBar->setObjectName(QStringLiteral("outputToolbar"));
+    auto *outputTools = new QHBoxLayout(outputTitleBar);
+    outputTools->setContentsMargins(8, 3, 6, 3);
+    outputTools->setSpacing(6);
+    outputTitle_ = new QLabel(outputTitleBar);
+    outputTitle_->setObjectName(QStringLiteral("outputTitle"));
+    QFont outputTitleFont = outputTitle_->font();
+    outputTitleFont.setBold(true);
+    outputTitle_->setFont(outputTitleFont);
+    outputTools->addWidget(outputTitle_);
+    logLevelFilter_ = new QComboBox(outputTitleBar);
+    logLevelFilter_->setObjectName(QStringLiteral("logLevelFilter"));
+    logLevelFilter_->addItem(uiText(u"\u5168\u90e8\u7ea7\u522b"), QStringLiteral("ALL"));
+    for (const QString &level : {QStringLiteral("INFO"), QStringLiteral("WARN"), QStringLiteral("ERROR"), QStringLiteral("DEBUG")})
+        logLevelFilter_->addItem(level, level);
+    logLevelFilter_->setMaximumWidth(120);
+    outputTools->addWidget(logLevelFilter_);
+    logModuleFilter_ = new QComboBox(outputTitleBar);
+    logModuleFilter_->setObjectName(QStringLiteral("logModuleFilter"));
+    logModuleFilter_->addItem(uiText(u"\u5168\u90e8\u6a21\u5757"), QStringLiteral("ALL"));
+    const QList<QPair<QString, QString>> modules = {
+        {uiText(u"\u754c\u9762"), QStringLiteral("UI")}, {uiText(u"\u5de5\u7a0b"), QStringLiteral("Project")},
+        {uiText(u"\u7f51\u683c"), QStringLiteral("Mesh")}, {uiText(u"\u6821\u9a8c"), QStringLiteral("Validation")},
+        {uiText(u"\u6c42\u89e3\u5668"), QStringLiteral("Solver")}, {uiText(u"\u4efb\u52a1"), QStringLiteral("Task")},
+        {uiText(u"\u6279\u5904\u7406"), QStringLiteral("Batch")}};
+    for (const auto &module : modules) logModuleFilter_->addItem(module.first, module.second);
+    logModuleFilter_->setMaximumWidth(140);
+    outputTools->addWidget(logModuleFilter_);
+    logSearch_ = new QLineEdit(outputTitleBar);
+    logSearch_->setObjectName(QStringLiteral("logSearch"));
+    logSearch_->setPlaceholderText(uiText(u"\u641c\u7d22\u65e5\u5fd7"));
+    logSearch_->setClearButtonEnabled(true);
+    logSearch_->setMaximumWidth(220);
+    outputTools->addWidget(logSearch_, 1);
+    outputTools->addStretch();
+    outputScopeReset_ = new QPushButton(uiText(u"\u5168\u90e8\u65e5\u5fd7"), outputTitleBar);
+    outputScopeReset_->setObjectName(QStringLiteral("outputScopeReset"));
+    outputScopeReset_->setToolTip(uiText(u"\u6e05\u9664\u5f53\u524d\u4efb\u52a1\u8303\u56f4\u7b5b\u9009"));
+    outputScopeReset_->setMaximumWidth(90);
+    outputTools->addWidget(outputScopeReset_);
+    auto *clearOutput = new QPushButton(uiText(u"\u6e05\u7a7a"), outputTitleBar);
+    clearOutput->setObjectName(QStringLiteral("clearOutputButton"));
+    clearOutput->setToolTip(uiText(u"\u4ec5\u6e05\u7a7a\u5f53\u524d\u754c\u9762\u65e5\u5fd7\uff0c\u4e0d\u5220\u9664\u6587\u4ef6"));
+    clearOutput->setMaximumWidth(60);
+    outputTools->addWidget(clearOutput);
+    auto *exportOutput = new QPushButton(uiText(u"\u5bfc\u51fa"), outputTitleBar);
+    exportOutput->setObjectName(QStringLiteral("exportOutputButton"));
+    exportOutput->setEnabled(false);
+    exportOutput->setToolTip(uiText(u"\u65e5\u5fd7\u5bfc\u51fa\u5c1a\u672a\u63a5\u5165"));
+    exportOutput->setMaximumWidth(60);
+    outputTools->addWidget(exportOutput);
+    logAutoScroll_ = new QCheckBox(uiText(u"\u81ea\u52a8\u6eda\u52a8"), outputTitleBar);
+    logAutoScroll_->setObjectName(QStringLiteral("logAutoScroll"));
+    logAutoScroll_->setChecked(true);
+    outputTools->addWidget(logAutoScroll_);
+    outputCollapse_ = new QPushButton(uiText(u"\u6536\u8d77"), outputTitleBar);
+    outputCollapse_->setObjectName(QStringLiteral("outputCollapseButton"));
+    outputCollapse_->setMaximumWidth(60);
+    outputTools->addWidget(outputCollapse_);
+    outputDock_->setTitleBarWidget(outputTitleBar);
+
+    auto *logSlot = createSlot(WidgetSlot::Log, {});
+    logSlot->setObjectName(QStringLiteral("outputBody"));
+    outputBody_ = logSlot;
+    auto *logLayout = slotLayouts_.value(static_cast<int>(WidgetSlot::Log));
+    auto *oldLogItem = logLayout->takeAt(0);
+    delete oldLogItem->widget();
+    delete oldLogItem;
+    outputLogTable_ = new QTableWidget(0, 4, logSlot);
+    outputLogTable_->setObjectName(QStringLiteral("outputLogTable"));
+    outputLogTable_->setHorizontalHeaderLabels({uiText(u"\u65f6\u95f4"), uiText(u"\u7ea7\u522b"), uiText(u"\u6765\u6e90"), uiText(u"\u65e5\u5fd7\u6d88\u606f")});
+    outputLogTable_->verticalHeader()->hide();
+    outputLogTable_->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    outputLogTable_->setSelectionBehavior(QAbstractItemView::SelectRows);
+    outputLogTable_->setSelectionMode(QAbstractItemView::ExtendedSelection);
+    outputLogTable_->setShowGrid(false);
+    outputLogTable_->setAlternatingRowColors(true);
+    outputLogTable_->horizontalHeader()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
+    outputLogTable_->horizontalHeader()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
+    outputLogTable_->horizontalHeader()->setSectionResizeMode(2, QHeaderView::ResizeToContents);
+    outputLogTable_->horizontalHeader()->setSectionResizeMode(3, QHeaderView::Stretch);
+    auto *copyLogs = new QAction(outputLogTable_);
+    copyLogs->setShortcut(QKeySequence::Copy);
+    copyLogs->setShortcutContext(Qt::WidgetShortcut);
+    outputLogTable_->addAction(copyLogs);
+    connect(copyLogs, &QAction::triggered, this, [this] {
+        const QModelIndexList indexes = outputLogTable_->selectionModel()->selectedIndexes();
+        QString copied;
+        int previousRow = -1;
+        for (const auto &index : indexes) {
+            if (previousRow >= 0) copied += index.row() == previousRow ? QLatin1Char('\t') : QLatin1Char('\n');
+            copied += index.data().toString();
+            previousRow = index.row();
+        }
+        QApplication::clipboard()->setText(copied);
+    });
+    logLayout->addWidget(outputLogTable_);
+    outputDock_->setWidget(logSlot);
+
+    // Preserve the legacy Error slot for compatible adapters without exposing
+    // a second bottom tab. New messages are rendered by the unified log table.
+    auto *errorSlot = createSlot(WidgetSlot::Error, {});
+    errorSlot->setObjectName(QStringLiteral("legacyErrorSlot"));
+    errorSlot->hide();
+
+    connect(logLevelFilter_, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this] { applyLogFilters(); });
+    connect(logModuleFilter_, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this] { applyLogFilters(); });
+    connect(logSearch_, &QLineEdit::textChanged, this, [this] { applyLogFilters(); });
+    connect(outputScopeReset_, &QPushButton::clicked, this, [this] { setOutputScope({}); });
+    connect(clearOutput, &QPushButton::clicked, this, [this] { outputLogTable_->setRowCount(0); });
+    connect(outputCollapse_, &QPushButton::clicked, this, [this] { setOutputCollapsed(!outputCollapsed_); });
+    appendLog(QStringLiteral("INFO"), QStringLiteral("Project"), uiText(u"Mock\uff1a\u5de5\u7a0b DemoProject \u5df2\u6253\u5f00"), QStringLiteral("current-project"));
+    appendLog(QStringLiteral("INFO"), QStringLiteral("Mesh"), uiText(u"Mock\uff1a\u7f51\u683c\u6587\u4ef6\u52a0\u8f7d\u5b8c\u6210"), QStringLiteral("current-project"));
+    appendLog(QStringLiteral("WARN"), QStringLiteral("Validation"), uiText(u"Mock\uff1a\u5de5\u51b5\u53c2\u6570\u5c1a\u672a\u5b8c\u6210\u6821\u9a8c"), QStringLiteral("current-project"));
+    appendLog(QStringLiteral("ERROR"), QStringLiteral("Solver"), uiText(u"Mock\uff1a\u6c42\u89e3\u5668\u8f93\u5165\u6587\u4ef6\u4e0d\u5b58\u5728"), QStringLiteral("current-project"));
+    appendLog(QStringLiteral("INFO"), QStringLiteral("Task"), uiText(u"Mock\uff1aTask_001 \u5df2\u542f\u52a8"), QStringLiteral("Task_001"));
+    appendLog(QStringLiteral("WARN"), QStringLiteral("Task"), uiText(u"Mock\uff1aTask_001 \u6536\u655b\u901f\u5ea6\u4f4e\u4e8e\u9884\u671f"), QStringLiteral("Task_001"));
+    appendLog(QStringLiteral("INFO"), QStringLiteral("Batch"), uiText(u"Mock\uff1aBatchRun_001 \u5df2\u521b\u5efa 3 \u4e2a\u5b50\u4efb\u52a1"), QStringLiteral("BatchRun_001"));
+    appendLog(QStringLiteral("DEBUG"), QStringLiteral("Task"), uiText(u"Mock\uff1aTask_002 \u7b49\u5f85\u8d44\u6e90"), QStringLiteral("Task_002"));
+    setOutputScope(QStringLiteral("current-project"));
 }
 
 void MainWindow::switchNavigationForCategory(int index)
 {
     auto *category = ribbonBar()->categoryByIndex(index);
     if (!category) return;
-    if (category->objectName() == QStringLiteral("startCategory"))
+    if (category->objectName() == QStringLiteral("startCategory")) {
         navigationStack_->setCurrentWidget(projectTree_);
-    else if (category->objectName() == QStringLiteral("monitorCategory"))
+        showWorkspacePage(QStringLiteral("viewport"));
+        setOutputScope(QStringLiteral("current-project"));
+    } else if (category->objectName() == QStringLiteral("monitorCategory")) {
         navigationStack_->setCurrentWidget(monitorTree_);
-    else if (category->objectName() == QStringLiteral("dataCategory"))
+        auto *selected = monitorTree_->currentItem();
+        const QString page = selected ? selected->data(0, PageRole).toString() : QString();
+        if (page == QStringLiteral("batch-run"))
+            showWorkspacePage(QStringLiteral("batch-monitor"));
+        else
+            showWorkspacePage(QStringLiteral("task-monitor"));
+    } else if (category->objectName() == QStringLiteral("dataCategory"))
         navigationStack_->setCurrentWidget(dataTree_);
     // Postprocess and Help intentionally retain the previous navigation tree.
 }
@@ -737,13 +895,20 @@ void MainWindow::handleNavigationSelection(QTreeWidgetItem *item)
     const QString draftPage = objectId.isEmpty() ? page : page + QLatin1Char('|') + objectId;
     selectPage(draftPage);
     emit navigationRequested(page, objectId, {});
+    if (item->treeWidget() == projectTree_) setOutputScope(QStringLiteral("current-project"));
     if (page == QStringLiteral("state-manager")) showWorkspacePage(QStringLiteral("states"));
     else if (page == QStringLiteral("batch-plans") || page == QStringLiteral("batch-plan")) showWorkspacePage(QStringLiteral("batch-plan"));
-    else if (page == QStringLiteral("batch-run")) { showWorkspacePage(QStringLiteral("batch-monitor")); showOutput(1); }
-    else if (page == QStringLiteral("task")) { showWorkspacePage(QStringLiteral("task-monitor")); showOutput(1); }
+    else if (page == QStringLiteral("batch-run")) {
+        showWorkspacePage(QStringLiteral("batch-monitor"));
+        setOutputScope(objectId);
+    } else if (page == QStringLiteral("task")) {
+        showWorkspacePage(QStringLiteral("task-monitor"));
+        setOutputScope(objectId);
+        if (taskMonitorTitle_) taskMonitorTitle_->setText(objectId + uiText(u" \u00b7 \u7efc\u5408\u76d1\u63a7\uff08Mock\uff09"));
+    }
     else if (page == QStringLiteral("dataset") || page == QStringLiteral("data-process")) showWorkspacePage(QStringLiteral("data-process"));
     else if (page == QStringLiteral("monitor-log")) showOutput(0);
-    else if (page == QStringLiteral("monitor-residual")) showOutput(2);
+    else if (page == QStringLiteral("monitor-residual")) showWorkspacePage(QStringLiteral("task-monitor"));
     else if (page == QStringLiteral("monitor-errors")) showOutput(3);
     else showWorkspacePage(QStringLiteral("viewport"));
 }
@@ -858,7 +1023,8 @@ void MainWindow::restoreLayout()
     setCorner(Qt::BottomRightCorner, Qt::BottomDockWidgetArea);
     for (auto *dock : {projectDock_, propertyDock_, outputDock_}) dock->show();
     resizeDocks({projectDock_, propertyDock_}, {250, 330}, Qt::Horizontal);
-    resizeDocks({outputDock_}, {210}, Qt::Vertical);
+    if (outputCollapsed_) setOutputCollapsed(false);
+    resizeDocks({outputDock_}, {140}, Qt::Vertical);
 }
 
 bool MainWindow::insertWidget(WidgetSlot slot, QWidget *widget)
@@ -953,7 +1119,8 @@ void MainWindow::submitRun()
     if (!workflow_ || workflow_->thread() != thread() || !hasRunContext_) return;
     const auto result = workflow_->requestRun(runRequest_);
     appendMessage(result.allowed ? uiText(u"\u8fd0\u884c\u8bf7\u6c42\u5df2\u63d0\u4ea4\uff0c\u7b49\u5f85\u4efb\u52a1\u4e8b\u4ef6") : uiText(u"\u5de5\u4f5c\u6d41\u62d2\u7edd\u8fd0\u884c\u8bf7\u6c42"));
-    for (const auto &issue : result.issues) errors_->appendPlainText(issue.message);
+    for (const auto &issue : result.issues)
+        appendLog(QStringLiteral("ERROR"), QStringLiteral("Validation"), issue.message, QStringLiteral("current-project"));
     if (!result.allowed) showOutput(3);
 }
 
@@ -987,27 +1154,111 @@ void MainWindow::displayTaskEvent(const TaskEvent &event)
     }
     monitorStatus_->setText(event.taskId + uiText(u" \u00b7 ") + taskStatus(event.status));
     if (event.progress.totalSteps > 0) {
-        progress_->setValue(qBound(0, static_cast<int>(100.0 * event.progress.currentStep / event.progress.totalSteps), 100));
+        const int progressValue = qBound(0, static_cast<int>(1000.0 * event.progress.currentStep / event.progress.totalSteps), 1000);
+        progress_->setValue(progressValue);
+        progress_->setFormat(QStringLiteral("%1%").arg(progressValue / 10.0, 0, 'f', 1));
         monitorDetails_->setText(uiText(u"\u8fed\u4ee3\uff1a%1 / %2    \u6b8b\u5dee\uff1a%3").arg(event.progress.currentStep).arg(event.progress.totalSteps).arg(event.progress.residual));
     } else {
         progress_->setValue(0);
+        progress_->setFormat(uiText(u"\u6682\u65e0\u8fdb\u5ea6\u6570\u636e"));
         monitorDetails_->setText(uiText(u"\u6682\u65e0\u8fed\u4ee3 / \u6b8b\u5dee\u6570\u636e\uff1bMock \u6d88\u606f\u4e0d\u4ee3\u8868\u771f\u5b9e\u8ba1\u7b97"));
     }
-    appendMessage(event.taskId + uiText(u" \u00b7 ") + event.message);
-    if (event.type == TaskEventType::Failed || event.type == TaskEventType::Warning)
-        errors_->appendPlainText(event.errorCode + " " + event.message);
+    const QString level = event.type == TaskEventType::Failed ? QStringLiteral("ERROR")
+        : event.type == TaskEventType::Warning ? QStringLiteral("WARN") : QStringLiteral("INFO");
+    appendLog(level, QStringLiteral("Task"),
+              (event.errorCode.isEmpty() ? QString() : event.errorCode + QLatin1Char(' ')) + event.message,
+              event.taskId);
 }
 
 void MainWindow::appendMessage(const QString &message)
 {
-    log_->appendPlainText(QDateTime::currentDateTime().toString("[HH:mm:ss] ") + message);
+    appendLog(QStringLiteral("INFO"), QStringLiteral("UI"), message,
+              outputScope_.isEmpty() ? QStringLiteral("current-project") : outputScope_);
+}
+
+void MainWindow::appendLog(const QString &level, const QString &source, const QString &message,
+                           const QString &scope)
+{
+    if (!outputLogTable_) return;
+    const int row = outputLogTable_->rowCount();
+    outputLogTable_->insertRow(row);
+    const QStringList values = {QDateTime::currentDateTime().toString(QStringLiteral("HH:mm:ss")), level, source, message};
+    for (int column = 0; column < values.size(); ++column) {
+        auto *item = new QTableWidgetItem(values[column]);
+        item->setData(Qt::UserRole, level);
+        item->setData(Qt::UserRole + 1, source);
+        item->setData(Qt::UserRole + 2, scope);
+        outputLogTable_->setItem(row, column, item);
+    }
+    QColor levelColor;
+    if (level == QStringLiteral("WARN")) levelColor = QColor(QStringLiteral("#d88900"));
+    else if (level == QStringLiteral("ERROR")) levelColor = QColor(QStringLiteral("#d04444"));
+    else if (level == QStringLiteral("DEBUG")) levelColor = QColor(QStringLiteral("#7f8c8d"));
+    if (levelColor.isValid()) outputLogTable_->item(row, 1)->setForeground(levelColor);
+    applyLogFilters();
+    if (logAutoScroll_ && logAutoScroll_->isChecked() && !outputLogTable_->isRowHidden(row))
+        outputLogTable_->scrollToBottom();
+}
+
+void MainWindow::applyLogFilters()
+{
+    if (!outputLogTable_ || !logLevelFilter_ || !logModuleFilter_ || !logSearch_) return;
+    const QString level = logLevelFilter_->currentData().toString();
+    const QString source = logModuleFilter_->currentData().toString();
+    const QString search = logSearch_->text().trimmed();
+    for (int row = 0; row < outputLogTable_->rowCount(); ++row) {
+        auto *first = outputLogTable_->item(row, 0);
+        if (!first) continue;
+        const bool levelMatches = level == QStringLiteral("ALL") || first->data(Qt::UserRole).toString() == level;
+        const bool sourceMatches = source == QStringLiteral("ALL") || first->data(Qt::UserRole + 1).toString() == source;
+        const bool scopeMatches = outputScope_.isEmpty() || first->data(Qt::UserRole + 2).toString() == outputScope_;
+        bool searchMatches = search.isEmpty();
+        for (int column = 0; column < outputLogTable_->columnCount() && !searchMatches; ++column) {
+            auto *item = outputLogTable_->item(row, column);
+            searchMatches = item && item->text().contains(search, Qt::CaseInsensitive);
+        }
+        outputLogTable_->setRowHidden(row, !(levelMatches && sourceMatches && scopeMatches && searchMatches));
+    }
+}
+
+void MainWindow::setOutputScope(const QString &scope)
+{
+    outputScope_ = scope;
+    const QString label = scope.isEmpty() ? uiText(u"\u5168\u90e8\u65e5\u5fd7")
+        : scope == QStringLiteral("current-project") ? uiText(u"\u5f53\u524d\u5de5\u7a0b") : scope;
+    if (outputTitle_) outputTitle_->setText(uiText(u"\u8f93\u51fa \u00b7 %1").arg(label));
+    if (outputScopeReset_) outputScopeReset_->setVisible(!scope.isEmpty());
+    applyLogFilters();
+}
+
+void MainWindow::setOutputCollapsed(bool collapsed)
+{
+    if (!outputDock_ || !outputBody_ || !outputCollapse_) return;
+    outputCollapsed_ = collapsed;
+    if (collapsed) {
+        expandedOutputHeight_ = qMax(120, outputDock_->height());
+        outputBody_->hide();
+        outputCollapse_->setText(uiText(u"\u5c55\u5f00"));
+        const int compactHeight = outputCollapse_->parentWidget()->sizeHint().height() + 4;
+        outputDock_->setMinimumHeight(compactHeight);
+        outputDock_->setMaximumHeight(compactHeight);
+        resizeDocks({outputDock_}, {compactHeight}, Qt::Vertical);
+    } else {
+        outputDock_->setMinimumHeight(60);
+        outputDock_->setMaximumHeight(QWIDGETSIZE_MAX);
+        outputBody_->show();
+        outputCollapse_->setText(uiText(u"\u6536\u8d77"));
+        resizeDocks({outputDock_}, {qMax(120, expandedOutputHeight_)}, Qt::Vertical);
+    }
 }
 
 void MainWindow::showOutput(int index)
 {
     outputDock_->show();
     outputDock_->raise();
-    outputTabs_->setCurrentIndex(index);
+    if (outputCollapsed_) setOutputCollapsed(false);
+    if (index == 3) logLevelFilter_->setCurrentIndex(logLevelFilter_->findData(QStringLiteral("ERROR")));
+    else if (index == 0) logLevelFilter_->setCurrentIndex(logLevelFilter_->findData(QStringLiteral("ALL")));
 }
 
 } // namespace aerosim

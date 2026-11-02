@@ -9,12 +9,17 @@
 #include <SARibbonCategory.h>
 #include <SARibbonPanel.h>
 #include <QApplication>
+#include <QCheckBox>
+#include <QComboBox>
 #include <QLabel>
+#include <QLineEdit>
 #include <QMenu>
 #include <QDockWidget>
 #include <QDoubleSpinBox>
+#include <QPushButton>
 #include <QStackedWidget>
 #include <QTableWidget>
+#include <QTabWidget>
 #include <QTreeWidget>
 #include <QTreeWidgetItemIterator>
 #include <QTextStream>
@@ -76,11 +81,11 @@ int main(int argc, char **argv)
                "Missing stacked module navigation")) return 32;
     if (!check(window.findChild<QTreeWidget *>("workflowTree")->isHidden(),
                "Workflow tree must not occupy the module navigation")) return 33;
-    QWidget *workspaceBeforeTabSwitch = workspace->currentWidget();
     window.ribbonBar()->raiseCategory(window.findChild<SARibbonCategory *>("monitorCategory"));
     app.processEvents();
-    if (!check(navigation->currentWidget() == monitorTree && workspace->currentWidget() == workspaceBeforeTabSwitch,
-               "Monitor Ribbon tab must change only the navigation tree")) return 34;
+    if (!check(navigation->currentWidget() == monitorTree
+               && workspace->currentWidget()->objectName() == "taskMonitorPage",
+               "Monitor Ribbon tab must open the monitor workspace")) return 34;
     auto *rememberedMonitorItem = monitorTree->topLevelItem(0)->child(0)->child(0)->child(0);
     monitorTree->setCurrentItem(rememberedMonitorItem);
     window.ribbonBar()->raiseCategory(window.findChild<SARibbonCategory *>("dataCategory"));
@@ -101,6 +106,9 @@ int main(int argc, char **argv)
                "Navigation selection was not preserved across Ribbon tabs")) return 37;
     window.ribbonBar()->raiseCategory(start);
     app.processEvents();
+    if (!check(navigation->currentWidget() == projectTree
+               && workspace->currentWidget()->objectName() == "viewportPage",
+               "Start Ribbon tab must restore the persistent VTK workspace")) return 51;
     window.show();
     app.processEvents();
     auto *projectDock = window.findChild<QDockWidget *>("projectDock");
@@ -110,6 +118,38 @@ int main(int argc, char **argv)
                && projectDock->geometry().left() < propertyDock->geometry().left()
                && projectDock->minimumWidth() >= 220 && propertyDock->minimumWidth() >= 300,
                "Default layout must place navigation before properties on the left")) return 42;
+    auto *outputDock = window.findChild<QDockWidget *>("outputDock");
+    auto *outputTable = window.findChild<QTableWidget *>("outputLogTable");
+    auto *levelFilter = window.findChild<QComboBox *>("logLevelFilter");
+    auto *moduleFilter = window.findChild<QComboBox *>("logModuleFilter");
+    auto *logSearch = window.findChild<QLineEdit *>("logSearch");
+    if (!check(outputDock && outputDock->windowTitle() == text(u"\u8f93\u51fa")
+               && outputTable && outputTable->columnCount() == 4
+               && !outputDock->findChild<QTabWidget *>()
+               && levelFilter && moduleFilter && logSearch
+               && window.findChild<QCheckBox *>("logAutoScroll")->isChecked()
+               && !window.findChild<QPushButton *>("exportOutputButton")->isEnabled(),
+               "Bottom area must be a single structured Output panel")) return 44;
+    levelFilter->setCurrentIndex(levelFilter->findData("WARN"));
+    moduleFilter->setCurrentIndex(moduleFilter->findData("Validation"));
+    logSearch->setText(text(u"\u5de5\u51b5"));
+    app.processEvents();
+    int visibleLogs = 0;
+    for (int row = 0; row < outputTable->rowCount(); ++row) visibleLogs += !outputTable->isRowHidden(row);
+    if (!check(visibleLogs == 1, "Output filters and search did not combine correctly")) return 45;
+    levelFilter->setCurrentIndex(levelFilter->findData("ALL"));
+    moduleFilter->setCurrentIndex(moduleFilter->findData("ALL"));
+    logSearch->clear();
+    auto *collapseOutput = window.findChild<QPushButton *>("outputCollapseButton");
+    collapseOutput->click();
+    app.processEvents();
+    if (!check(window.findChild<QWidget *>("outputBody")->isHidden()
+               && collapseOutput->text() == text(u"\u5c55\u5f00"),
+               "Output panel did not collapse to its toolbar")) return 46;
+    collapseOutput->click();
+    app.processEvents();
+    if (!check(!window.findChild<QWidget *>("outputBody")->isHidden(),
+               "Output panel did not restore its content")) return 47;
     if (!check(start->panelCount() == 5 && start->panelByObjectName("projectGroup")
                && start->panelByObjectName("batchGroup") && start->panelByObjectName("preprocessGroup")
                && start->panelByObjectName("parametersGroup") && start->panelByObjectName("viewGroup"), "Missing grouped Start commands")) return 18;
@@ -134,6 +174,22 @@ int main(int argc, char **argv)
                "Batch configuration did not locate and open BatchPlan management")) return 38;
     if (!check(window.findChild<QTableWidget *>("batchPlanTable")->columnCount() == 3,
                "BatchPlan page is missing its model-neutral table")) return 39;
+    auto *batchRunItem = monitorTree->topLevelItem(0)->child(0)->child(1)->child(0);
+    auto *batchTaskItem = batchRunItem->child(0);
+    monitorTree->setCurrentItem(batchRunItem);
+    app.processEvents();
+    if (!check(workspace->currentWidget()->objectName() == "batchMonitorPage"
+               && window.findChild<QLabel *>("outputTitle")->text().contains("BatchRun_001")
+               && window.findChild<QTreeWidget *>("taskTree")->topLevelItemCount() == 3,
+               "BatchRun selection did not open the integrated batch monitor")) return 48;
+    monitorTree->setCurrentItem(batchTaskItem);
+    app.processEvents();
+    if (!check(workspace->currentWidget()->objectName() == "taskMonitorPage"
+               && window.findChild<QLabel *>("taskMonitorTitle")->text().contains("Task_001")
+               && window.findChild<QWidget *>("convergenceCurvePanel")
+               && window.findChild<QLabel *>("taskResourceSummary")
+               && window.findChild<QLabel *>("outputTitle")->text().contains("Task_001"),
+               "Task selection did not open the integrated monitor and scoped output")) return 49;
     for (auto *action : window.findChildren<QAction *>()) {
         if (action->property("ribbonGroup").isValid()
             && !check(!action->icon().pixmap(32, 32).isNull(), "Missing embedded Ribbon icon")) return 20;
@@ -225,13 +281,19 @@ int main(int argc, char **argv)
     window.displayTaskEvent(event);
     event.status = aerosim::TaskStatus::Finished;
     window.displayTaskEvent(event);
-    if (!check(window.findChild<QTreeWidget *>("taskTree")->topLevelItemCount() == 1, "Task rows not updated by id")) return 7;
+    QTreeWidgetItem *taskRow = nullptr;
+    auto *taskTree = window.findChild<QTreeWidget *>("taskTree");
+    for (int row = 0; row < taskTree->topLevelItemCount(); ++row)
+        if (taskTree->topLevelItem(row)->text(0) == "test-task") taskRow = taskTree->topLevelItem(row);
+    if (!check(taskRow && taskTree->topLevelItemCount() == 4, "Task rows not updated by id")) return 7;
     QTreeWidgetItem *navigationTask = nullptr;
     for (QTreeWidgetItemIterator it(monitorTree); *it; ++it)
         if ((*it)->data(0, Qt::UserRole + 1).toString() == "test-task") navigationTask = *it;
     if (!check(navigationTask && navigationTask->data(0, Qt::UserRole + 3).toInt()
                == static_cast<int>(aerosim::TaskStatus::Finished),
                "Task event did not locally update structured monitor status")) return 40;
+    window.findChild<QPushButton *>("clearOutputButton")->click();
+    if (!check(outputTable->rowCount() == 0, "Clear Output must only clear the UI rows")) return 50;
     window.bindServices({});
     if (!check(!run->isEnabled(), "Unbinding must disable run")) return 8;
     QTextStream(stdout) << "UI ownership, service binding, workflow gating and task display passed\n";

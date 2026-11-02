@@ -8,11 +8,12 @@
 #include <QVector>
 
 class QAction;
+class QCheckBox;
+class QComboBox;
 class QLabel;
-class QPlainTextEdit;
+class QLineEdit;
 class QProgressBar;
 class QPushButton;
-class QTabWidget;
 class QStackedWidget;
 class QTableWidget;
 class QTreeWidget;
@@ -52,6 +53,11 @@ private:
     void restoreLayout();
     void submitRun();
     void appendMessage(const QString &message);
+    void appendLog(const QString &level, const QString &source, const QString &message,
+                   const QString &scope = QString());
+    void applyLogFilters();
+    void setOutputScope(const QString &scope);
+    void setOutputCollapsed(bool collapsed);
     QWidget *createSlot(WidgetSlot slot, const QString &text);
     void showOutput(int index);
 
@@ -79,7 +85,7 @@ private:
     QWidget *dataProcessPage_ = nullptr;
     QTableWidget *stateTable_ = nullptr;
     QTableWidget *batchPlanTable_ = nullptr;
-    QTabWidget *outputTabs_ = nullptr;
+    QTableWidget *outputLogTable_ = nullptr;
     QDockWidget *projectDock_ = nullptr;
     QDockWidget *propertyDock_ = nullptr;
     QDockWidget *outputDock_ = nullptr;
@@ -88,12 +94,22 @@ private:
     QLabel *suggestion_ = nullptr;
     QLabel *monitorStatus_ = nullptr;
     QLabel *monitorDetails_ = nullptr;
+    QLabel *taskMonitorTitle_ = nullptr;
+    QLabel *outputTitle_ = nullptr;
     QLabel *status_ = nullptr;
     QProgressBar *progress_ = nullptr;
     QPushButton *draftReset_ = nullptr;
-    QPlainTextEdit *log_ = nullptr;
-    QPlainTextEdit *errors_ = nullptr;
+    QPushButton *outputScopeReset_ = nullptr;
+    QPushButton *outputCollapse_ = nullptr;
+    QComboBox *logLevelFilter_ = nullptr;
+    QComboBox *logModuleFilter_ = nullptr;
+    QLineEdit *logSearch_ = nullptr;
+    QCheckBox *logAutoScroll_ = nullptr;
+    QWidget *outputBody_ = nullptr;
     QString currentPage_;
+    QString outputScope_ = QStringLiteral("current-project");
+    int expandedOutputHeight_ = 140;
+    bool outputCollapsed_ = false;
     bool projectEditingEnabled_ = false;
     QHash<QString, QVariantMap> drafts_;
 };
