@@ -8,10 +8,12 @@
 #include <QPointer>
 #include <QVariantMap>
 #include <QColor>
+#include <QStringList>
 
 class QAction;
 class QDialog;
 class QComboBox;
+class QFileDialog;
 class QLabel;
 class QListWidget;
 class QDockWidget;
@@ -42,6 +44,9 @@ public slots:
 signals:
     void viewRequested(const QString &orientation);
     void postProcessCommandRequested(const QString &command);
+    // UI requests only; no reader or exporter is currently connected.
+    void importFilesRequested(const QStringList &paths);
+    void exportFileRequested(const QString &kind, const QString &path);
     // GUI-thread view preference; a future viewer adapter must apply it to VTK.
     void backgroundChanged(const QColor &bottom, const QColor &top, bool gradient);
 
@@ -59,6 +64,8 @@ private:
     void openSelectedSettings();
     void updateSelectionActions();
     void showTaskPanel();
+    void openImportDialog();
+    void openExportDialog(const QString &kind);
     void loadUiExample(bool structured);
     void openBackgroundSettings();
     void applyBackground(const QColor &bottom, const QColor &top, bool gradient);
@@ -76,6 +83,8 @@ private:
     QAction *parameterAction_ = nullptr;
     QPointer<QDialog> styleDialog_;
     QPointer<QDialog> parameterDialog_;
+    QPointer<QFileDialog> importDialog_;
+    QPointer<QFileDialog> exportDialog_;
     QString selectedId_;
     QString selectedKind_;
     QString selectedName_;

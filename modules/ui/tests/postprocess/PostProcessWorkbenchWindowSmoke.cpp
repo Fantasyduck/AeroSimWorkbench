@@ -11,6 +11,7 @@
 #include <QDockWidget>
 #include <QDoubleSpinBox>
 #include <QFile>
+#include <QFileDialog>
 #include <QLabel>
 #include <QListWidget>
 #include <QLineEdit>
@@ -71,7 +72,7 @@ int main(int argc, char *argv[])
     // The startup sample is explicitly illustrative, not a reader result.
     CHECK(tree->topLevelItemCount()==4 && layers->count()==3);
     CHECK(action("postProcessContourAction")->isEnabled());
-    CHECK(!action("postProcessExportAction")->isEnabled());
+    CHECK(action("postProcessExportAction")->isEnabled());
     CHECK(!action("postProcessConvertAction") && !action("postProcessExcelAction"));
     auto *host = window.findChild<QWidget *>("postProcessViewportHost");
     CHECK(host->property("backgroundBottom").value<QColor>()==QColor(98,93,90));
@@ -128,7 +129,7 @@ int main(int argc, char *argv[])
         CHECK(!action("postProcessSliceAction")->isEnabled());
         chooseObject(0); // A slice retains its source fields but has surface dimension.
         CHECK(action("postProcessIsoLineAction")->isEnabled() && !action("postProcessIsoAction")->isEnabled());
-        CHECK(!action("postProcessGeometryExportAction")->isEnabled()); // UI drafts are not geometry.
+        CHECK(action("postProcessGeometryExportAction")->isEnabled()); // Request only; no file is written.
     }
     chooseZone(0); action("postProcessContourAction")->trigger(); flush();
     CHECK(nav->currentIndex()==2 && parameters->isEnabled());
@@ -139,6 +140,36 @@ int main(int argc, char *argv[])
     action("postProcessStreamAction")->trigger(); flush();
     CHECK(layers->currentItem()->data(Qt::UserRole+3).toMap().value("integrationField").toString().contains(QString::fromUtf8("速度矢量")));
     CHECK(layers->currentItem()->data(Qt::UserRole+3).toMap().value("integrationField").toString().contains(QString::fromUtf8("速度矢量")));
+    action("postProcessUnstructuredExampleAction")->trigger(); flush();
+
+    // The main entry points submit UI requests without claiming a reader/exporter exists.
+    QStringList requestedPaths;
+    QString exportKind, exportPath, appliedCommand;
+    QObject::connect(&window, &aerosim::PostProcessWorkbenchWindow::importFilesRequested, &window,
+                     [&requestedPaths](const QStringList &paths) { requestedPaths = paths; });
+    QObject::connect(&window, &aerosim::PostProcessWorkbenchWindow::exportFileRequested, &window,
+                     [&exportKind, &exportPath](const QString &kind, const QString &path) { exportKind = kind; exportPath = path; });
+    QObject::connect(&window, &aerosim::PostProcessWorkbenchWindow::postProcessCommandRequested, &window,
+                     [&appliedCommand](const QString &command) { if (command.startsWith("apply:")) appliedCommand = command; });
+    action("postProcessImportAction")->trigger(); flush();
+    auto *fileDialog = window.findChild<QFileDialog *>("postProcessImportDialog");
+    CHECK(fileDialog); fileDialog->reject(); flush(); CHECK(requestedPaths.isEmpty());
+    action("postProcessImportAction")->trigger(); flush();
+    fileDialog = window.findChild<QFileDialog *>("postProcessImportDialog"); CHECK(fileDialog);
+    fileDialog->filesSelected(QStringList{QStringLiteral("/example/result.vtk")});
+    CHECK(requestedPaths.size()==1 && tree->topLevelItemCount()==5);
+    CHECK(!action("postProcessContourAction")->isEnabled()); // pending file is not a dataset
+    fileDialog->reject(); flush();
+    chooseZone(0); action("postProcessExportAction")->trigger(); flush();
+    fileDialog = window.findChild<QFileDialog *>("postProcessExportDialog"); CHECK(fileDialog);
+    fileDialog->fileSelected(QStringLiteral("/example/output.cgns"));
+    CHECK(exportKind=="data" && exportPath=="/example/output.cgns");
+    fileDialog->reject(); flush();
+    chooseObject(0); parameters->trigger(); flush();
+    auto *applyDialog = window.findChild<QDialog *>("postProcessParameterDialog"); CHECK(applyDialog);
+    auto *applyButton = applyDialog->findChild<QPushButton *>("postProcessApplyDraft");
+    CHECK(applyButton); applyButton->click(); CHECK(appliedCommand=="apply:slice");
+    applyDialog->reject(); flush();
     action("postProcessUnstructuredExampleAction")->trigger(); flush();
 
     // Merely selecting a zone or object must never open an editor or sidebar.
