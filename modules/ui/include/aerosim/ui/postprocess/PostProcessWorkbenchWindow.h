@@ -65,7 +65,10 @@ private:
     void updateSelectionActions();
     void showTaskPanel();
     void openImportDialog();
+    void organizeImportedFiles(const QStringList &paths);
+    void recordPendingImport(const QStringList &paths, const QString &mode, const QStringList &times);
     void openExportDialog(const QString &kind);
+    void openAnalysisDialog(int analysis);
     void loadUiExample(bool structured);
     void openBackgroundSettings();
     void applyBackground(const QColor &bottom, const QColor &top, bool gradient);
@@ -85,6 +88,9 @@ private:
     QPointer<QDialog> styleDialog_;
     QPointer<QDialog> parameterDialog_;
     QPointer<QDialog> sourceDialog_;
+    QPointer<QDialog> importOrganizationDialog_;
+    QPointer<QDialog> exportSetupDialog_;
+    QPointer<QDialog> analysisDialog_;
     QPointer<QFileDialog> importDialog_;
     QPointer<QFileDialog> exportDialog_;
     QString selectedId_;

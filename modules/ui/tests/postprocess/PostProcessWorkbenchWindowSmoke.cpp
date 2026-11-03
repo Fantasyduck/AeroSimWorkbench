@@ -21,9 +21,11 @@
 #include <QSpinBox>
 #include <QSplitter>
 #include <QTabWidget>
+#include <QTableWidget>
 #include <QTextEdit>
 #include <QToolBar>
 #include <QToolButton>
+#include <QTimer>
 #include <QTreeWidget>
 
 #define CHECK(condition) do { if (!(condition)) { qCritical() << "Failed at line" << __LINE__ << #condition; return 1; } } while (false)
@@ -72,6 +74,11 @@ int main(int argc, char *argv[])
 
     // The startup sample is explicitly illustrative, not a reader result.
     CHECK(tree->topLevelItemCount()==4 && layers->count()==3);
+    auto *play = window.findChild<QToolButton *>("postProcessPlayFrame");
+    auto *playTimer = window.findChild<QTimer *>("postProcessPlayTimer");
+    CHECK(play && playTimer && !playTimer->isActive());
+    play->click(); CHECK(playTimer->isActive());
+    play->click(); CHECK(!playTimer->isActive());
     CHECK(action("postProcessContourAction")->isEnabled());
     CHECK(action("postProcessExportAction")->isEnabled());
     CHECK(!action("postProcessConvertAction") && !action("postProcessExcelAction"));
@@ -165,11 +172,28 @@ int main(int argc, char *argv[])
     CHECK(requestedPaths.size()==1 && tree->topLevelItemCount()==5);
     CHECK(!action("postProcessContourAction")->isEnabled()); // pending file is not a dataset
     fileDialog->reject(); flush();
+    action("postProcessImportAction")->trigger(); flush();
+    fileDialog = window.findChild<QFileDialog *>("postProcessImportDialog"); CHECK(fileDialog);
+    fileDialog->filesSelected(QStringList{QStringLiteral("/example/a.vtk"), QStringLiteral("/example/b.vtk")});
+    fileDialog->reject(); flush();
+    auto *organization = window.findChild<QDialog *>("postProcessImportOrganizationDialog"); CHECK(organization);
+    CHECK(capture(organization,"import-organization"));
+    auto *importMode = organization->findChild<QComboBox *>("postProcessImportMode"); CHECK(importMode);
+    importMode->setCurrentIndex(2);
+    auto *fileTable = organization->findChild<QTableWidget *>("postProcessImportFiles"); CHECK(fileTable && fileTable->rowCount()==2);
+    CHECK(fileTable->item(0,1)->text().isEmpty()); // File order is not a physical time.
+    fileTable->item(0,1)->setText(QStringLiteral("1.5"));
+    organization->findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Ok)->click(); flush();
+    CHECK(requestedPaths.size()==2 && tree->topLevelItemCount()==6);
     chooseZone(0); action("postProcessExportAction")->trigger(); flush();
+    auto *exportSetup = window.findChild<QDialog *>("postProcessExportSetupDialog"); CHECK(exportSetup);
+    CHECK(capture(exportSetup,"data-export-setup"));
+    exportSetup->findChild<QComboBox *>("postProcessExportFormat")->setCurrentIndex(1);
+    exportSetup->findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Ok)->click(); flush();
     fileDialog = window.findChild<QFileDialog *>("postProcessExportDialog"); CHECK(fileDialog);
     fileDialog->fileSelected(QStringLiteral("/example/output.cgns"));
     CHECK(exportKind=="data" && exportPath=="/example/output.cgns");
-    fileDialog->reject(); flush();
+    flush();
     chooseObject(0); parameters->trigger(); flush();
     auto *applyDialog = window.findChild<QDialog *>("postProcessParameterDialog"); CHECK(applyDialog);
     auto *applyButton = applyDialog->findChild<QPushButton *>("postProcessApplyDraft");
@@ -177,12 +201,26 @@ int main(int argc, char *argv[])
     applyDialog->reject(); flush();
     action("postProcessUnstructuredExampleAction")->trigger(); flush();
 
+    // Each analysis entry opens its own form and an explicitly empty result panel.
+    for (int i=0; i<5; ++i) {
+        auto *analysisAction = action(QStringLiteral("postProcessAnalysisAction%1").arg(i).toLatin1().constData());
+        CHECK(analysisAction); analysisAction->trigger(); flush();
+        auto *analysisDialog = window.findChild<QDialog *>("postProcessAnalysisDialog");
+        CHECK(analysisDialog && analysisDialog->findChild<QLineEdit *>("analysisDataPath"));
+        CHECK(capture(analysisDialog,QString("analysis-%1").arg(i)));
+        analysisDialog->findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Ok)->click(); flush();
+        auto *resultDock = window.findChild<QDockWidget *>("postProcessAnalysisResultDock");
+        CHECK(resultDock && resultDock->isVisible());
+        CHECK(!resultDock->findChild<QTextEdit *>("postProcessAnalysisResult")->toPlainText().isEmpty());
+        resultDock->hide();
+    }
+
     // New-object commands choose a source independently of the current object.
     chooseObject(2); // A one-dimensional streamline cannot itself supply these operations.
     auto *newButton = window.findChild<QPushButton *>("postProcessNewObjectButton");
     CHECK(newButton && newButton->menu());
     CHECK(newButton->menu()->minimumWidth() >= newButton->menu()->fontMetrics().horizontalAdvance(QString::fromUtf8("等值面")) + 80);
-    for (const char *kind : {"slice", "isoline", "iso", "stream"}) {
+    for (const char *kind : {"contour", "slice", "isoline", "iso", "stream", "trace"}) {
         auto *newAction = newButton->menu()->findChild<QAction *>(QStringLiteral("postProcessNew_%1").arg(QString::fromLatin1(kind)));
         CHECK(newAction && newAction->isEnabled());
         const int before = layers->count();
@@ -233,7 +271,10 @@ int main(int argc, char *argv[])
     CHECK(!dialog->findChild<QSpinBox *>("objectStyleOpacity"));
     CHECK(capture(dialog,"slice-parameters"));
     dialog->findChild<QDoubleSpinBox *>("offset")->setValue(1.25);
+    auto *sliceField = dialog->findChild<QComboBox *>("displayField");
+    CHECK(sliceField && sliceField->count() > 3); sliceField->setCurrentIndex(3);
     dialog->findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Ok)->click(); flush();
+    CHECK(layers->currentItem()->data(Qt::UserRole+3).toMap().value("field").toString().contains(QString::fromUtf8("温度")));
     parameters->trigger(); flush(); dialog = window.findChild<QDialog *>("postProcessParameterDialog");
     CHECK(dialog->findChild<QDoubleSpinBox *>("offset")->value() == 1.25);
     dialog->reject(); flush();

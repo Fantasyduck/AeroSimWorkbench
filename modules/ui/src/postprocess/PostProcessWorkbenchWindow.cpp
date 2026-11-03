@@ -39,11 +39,14 @@
 #include <QThread>
 #include <QSplitter>
 #include <QStatusBar>
+#include <QStyle>
 #include <QTabWidget>
 #include <QTextEdit>
 #include <QToolButton>
 #include <QTreeWidget>
 #include <QTreeWidgetItemIterator>
+#include <QTableWidget>
+#include <QHeaderView>
 #include <QVBoxLayout>
 
 #include <SARibbonBar.h>
@@ -234,7 +237,7 @@ PostProcessWorkbenchWindow::PostProcessWorkbenchWindow(QWidget *parent)
     });
     applyBackground(backgroundBottom_, backgroundTop_, false);
     timeSlider_->setEnabled(false);
-    for (const char *name : {"postProcessFirstFrame", "postProcessPreviousFrame", "postProcessNextFrame", "postProcessLastFrame"})
+    for (const char *name : {"postProcessFirstFrame", "postProcessPreviousFrame", "postProcessPlayFrame", "postProcessNextFrame", "postProcessLastFrame"})
         findChild<QToolButton *>(name)->setEnabled(false);
     timeLabel_->setText(uiText(u"无时间数据"));
     loadUiExample(false);
@@ -263,6 +266,7 @@ void PostProcessWorkbenchWindow::createActions() {
     auto *deepSeekAction = ribbonAction(this, commandIcon("harness"), uiText(u"DeepSeek"), uiText(u"打开 DeepSeek Harness，基于当前选择组织后处理任务"), uiText(u"postProcessHarnessAction"));
     auto *geometryExportAction = ribbonAction(this, commandIcon("export"), uiText(u"特征几何"), uiText(u"导出切面、等值面等派生几何"), uiText(u"postProcessGeometryExportAction"));
     auto *animationExportAction = ribbonAction(this, commandIcon("trace"), uiText(u"时序动画"), uiText(u"导出当前时间序列动画"), uiText(u"postProcessAnimationExportAction"));
+    auto *imageExportAction = ribbonAction(this, commandIcon("export"), uiText(u"保存图片"), uiText(u"设置并保存当前视图图片"), uiText(u"postProcessImageExportAction"));
     auto *selectAction = ribbonAction(this, commandIcon("select"), uiText(u"选择"), uiText(u"选择 Zone、图层或派生对象"), uiText(u"postProcessSelectAction"));
     auto *boxSelectAction = ribbonAction(this, commandIcon("boxSelect"), uiText(u"框选"), uiText(u"框选多个可见对象"), uiText(u"postProcessBoxSelectAction"));
     auto *panAction = ribbonAction(this, commandIcon("pan"), uiText(u"平移"), uiText(u"平移当前视图"), uiText(u"postProcessPanAction"));
@@ -283,7 +287,7 @@ void PostProcessWorkbenchWindow::createActions() {
     for (const QString &name : analysisNames) {
         analysisActions.append(ribbonAction(this, commandIcon(QStringList({"curve", "compare", "formula", "chart", "harness"}).at(analysisActions.size())), name,
                                             uiText(u"打开") + name + uiText(u"工作流程"),
-                                            uiText(u"postProcessAnalysisAction")));
+                                            QStringLiteral("postProcessAnalysisAction%1").arg(analysisActions.size())));
     }
 
     // Use the same SARibbon hierarchy as MainWindow.  Categories group work
@@ -319,6 +323,7 @@ void PostProcessWorkbenchWindow::createActions() {
     toolsCategory->setObjectName(uiText(u"postProcessToolsCategory"));
     auto *queryPanel = toolsCategory->addPanel(uiText(u"查询与导出"));
     queryPanel->addLargeAction(probeAction); queryPanel->addSmallAction(geometryExportAction); queryPanel->addSmallAction(animationExportAction);
+    queryPanel->addSmallAction(imageExportAction);
     auto *backgroundAction = ribbonAction(this, commandIcon("palette"), uiText(u"视口背景…"), uiText(u"调整当前视口背景，默认 ParaView 暖灰"), QStringLiteral("postProcessBackgroundAction"));
     cameraPanel->addSmallAction(backgroundAction);
     connect(backgroundAction, &QAction::triggered, this, &PostProcessWorkbenchWindow::openBackgroundSettings);
@@ -401,6 +406,7 @@ void PostProcessWorkbenchWindow::createActions() {
     connect(topAction, &QAction::triggered, this, [this] { emit viewRequested(uiText(u"top")); appendMessage(uiText(u"已切换至俯视图。")); });
     connect(geometryExportAction, &QAction::triggered, this, [this] { openExportDialog(QStringLiteral("geometry")); });
     connect(animationExportAction, &QAction::triggered, this, [this] { openExportDialog(QStringLiteral("animation")); });
+    connect(imageExportAction, &QAction::triggered, this, [this] { openExportDialog(QStringLiteral("image")); });
     connect(meshAction, &QAction::triggered, this, [command] { command(uiText(u"toggleMesh"), uiText(u"已切换当前 Zone 的网格显示。")); });
     connect(colorAction, &QAction::triggered, this, [this] { openObjectParameters(true); });
     connect(contourAction, &QAction::triggered, this, [this] {
@@ -427,7 +433,82 @@ void PostProcessWorkbenchWindow::createActions() {
         interactionHint->setText(uiText(u"探针模式 · 点击数据位置取点；当前拾取服务待接入"));
         if (auto *host = findChild<QWidget *>(QStringLiteral("postProcessViewportHost"))) host->setCursor(Qt::CrossCursor);
     });
-    for (QAction *action : analysisActions) connect(action, &QAction::triggered, this, [command, action] { command(uiText(u"openAnalysis"), uiText(u"已打开“%1”工作流程入口。").arg(action->text())); });
+    for (int i = 0; i < analysisActions.size(); ++i)
+        connect(analysisActions.at(i), &QAction::triggered, this, [this, i] { openAnalysisDialog(i); });
+}
+
+void PostProcessWorkbenchWindow::openAnalysisDialog(int analysis) {
+    if (analysisDialog_) { analysisDialog_->raise(); analysisDialog_->activateWindow(); return; }
+    const QStringList titles = {uiText(u"收敛与残差曲线"),uiText(u"多状态六分量"),uiText(u"公式与舵效"),uiText(u"系列线与图表"),uiText(u"AI 气动预测")};
+    if (analysis < 0 || analysis >= titles.size()) return;
+    auto *dialog = new QDialog(this); analysisDialog_ = dialog;
+    dialog->setObjectName(QStringLiteral("postProcessAnalysisDialog"));
+    dialog->setAttribute(Qt::WA_DeleteOnClose); dialog->setWindowTitle(titles.at(analysis));
+    dialog->resize(560, 430); dialog->setStyleSheet(centralWidget()->styleSheet());
+    auto *layout = new QVBoxLayout(dialog);
+    layout->addWidget(sectionLabel(titles.at(analysis),dialog));
+    auto *note = new QLabel(uiText(u"配置分析草稿；当前没有读取或计算服务，不会生成真实结果。"),dialog);
+    note->setWordWrap(true); layout->addWidget(note);
+    auto *form = new QFormLayout;
+    auto *path = new QLineEdit(dialog); path->setObjectName(QStringLiteral("analysisDataPath"));
+    path->setPlaceholderText(uiText(u"选择已有记录或结果表"));
+    auto *pathRow = new QWidget(dialog); auto *pathLayout = new QHBoxLayout(pathRow); pathLayout->setContentsMargins(0,0,0,0);
+    pathLayout->addWidget(path); auto *browse = new QPushButton(uiText(u"浏览…"),pathRow); pathLayout->addWidget(browse);
+    QObject::connect(browse, &QPushButton::clicked, dialog, [this, dialog, path] {
+        auto *picker = new QFileDialog(dialog, uiText(u"选择已有数据文件"));
+        picker->setAttribute(Qt::WA_DeleteOnClose); picker->setFileMode(QFileDialog::ExistingFile);
+        QObject::connect(picker, &QFileDialog::fileSelected, dialog, [path](const QString &file) { path->setText(file); });
+        picker->open();
+    });
+    form->addRow(uiText(u"数据文件"),pathRow);
+    const auto addText = [dialog, form](const QString &key, const QString &label, const QString &placeholder) {
+        auto *input = new QLineEdit(dialog); input->setObjectName(key); input->setPlaceholderText(placeholder); form->addRow(label,input);
+    };
+    const auto addChoice = [dialog, form](const QString &key, const QString &label, const QStringList &values) {
+        auto *input = new QComboBox(dialog); input->setObjectName(key); input->addItems(values); form->addRow(label,input);
+    };
+    if (analysis == 0) {
+        addChoice("analysisXAxis",uiText(u"横轴"),{uiText(u"迭代步"),uiText(u"时间")});
+        addText("analysisYFields",uiText(u"纵轴字段"),uiText(u"选择或填写已有残差/监控量"));
+        addChoice("analysisScale",uiText(u"纵轴刻度"),{uiText(u"线性"),uiText(u"对数")});
+    } else if (analysis == 1) {
+        addText("analysisStateColumns",uiText(u"状态列"),uiText(u"数据列映射待读取后确认"));
+        addText("analysisComponents",uiText(u"六分量列"),uiText(u"力和力矩或系数列"));
+        addText("analysisUnits",uiText(u"单位和坐标系"),uiText(u"未知时留空"));
+    } else if (analysis == 2) {
+        addText("analysisReference",uiText(u"基准状态"),uiText(u"填写或选择基准"));
+        addText("analysisFormula",uiText(u"计算公式"),uiText(u"公式语法待评审"));
+        addText("analysisOutput",uiText(u"结果列名"),uiText(u"例如：舵效"));
+    } else if (analysis == 3) {
+        addText("analysisXAxis",uiText(u"横轴字段"),uiText(u"填写已有状态列"));
+        addText("analysisYAxis",uiText(u"纵轴字段"),uiText(u"填写已有结果列"));
+        addText("analysisGroup",uiText(u"分组字段"),uiText(u"可留空"));
+    } else {
+        addText("analysisFeatures",uiText(u"输入特征"),uiText(u"选择或填写特征列"));
+        addText("analysisLabels",uiText(u"预测目标"),uiText(u"选择或填写目标列"));
+        addText("analysisSplit",uiText(u"训练与验证划分"),uiText(u"方案与评价指标待评审"));
+    }
+    auto *formWidget = new QWidget(dialog); formWidget->setLayout(form); layout->addWidget(scrollPanel(formWidget),1);
+    auto *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel,dialog);
+    buttons->button(QDialogButtonBox::Ok)->setText(uiText(u"查看结果面板"));
+    buttons->button(QDialogButtonBox::Cancel)->setText(uiText(u"取消")); layout->addWidget(buttons);
+    connect(buttons, &QDialogButtonBox::rejected, dialog, &QDialog::reject);
+    connect(buttons, &QDialogButtonBox::accepted, dialog, [this, dialog, analysis, titles] {
+        auto *dock = findChild<QDockWidget *>(QStringLiteral("postProcessAnalysisResultDock"));
+        if (!dock) {
+            dock = new QDockWidget(uiText(u"分析结果"),this); dock->setObjectName(QStringLiteral("postProcessAnalysisResultDock"));
+            installDockTitle(dock);
+            auto *result = new QTextEdit(dock); result->setObjectName(QStringLiteral("postProcessAnalysisResult")); result->setReadOnly(true);
+            dock->setWidget(result); addDockWidget(Qt::BottomDockWidgetArea,dock);
+        }
+        auto *result = dock->findChild<QTextEdit *>(QStringLiteral("postProcessAnalysisResult"));
+        result->setPlainText(titles.at(analysis) + uiText(u"\n\n尚无结果。数据读取、分析计算和曲线绘制服务待接入。"));
+        dock->show(); dock->raise();
+        emit postProcessCommandRequested(QStringLiteral("openAnalysis:%1").arg(analysis));
+        appendMessage(uiText(u"已打开分析结果面板；当前未执行计算。"));
+        dialog->accept();
+    });
+    dialog->show();
 }
 
 void PostProcessWorkbenchWindow::openDeepSeekHarness() {
@@ -496,39 +577,126 @@ void PostProcessWorkbenchWindow::openImportDialog() {
     dialog->setFileMode(QFileDialog::ExistingFiles);
     dialog->setNameFilters({uiText(u"结果文件 (*.vtk *.vtu *.vts *.vtr *.vtp *.vtm *.cgns *.dat *.plt *.szplt)"), uiText(u"所有文件 (*)")});
     connect(dialog, &QFileDialog::filesSelected, this, [this](const QStringList &paths) {
-        if (paths.isEmpty()) return;
-        auto *pending = new QTreeWidgetItem(datasetTree_, QStringList(uiText(u"待接入的文件")));
-        pending->setData(0, Qt::UserRole, QStringLiteral("pending"));
-        for (const QString &path : paths) {
-            auto *item = new QTreeWidgetItem(pending, QStringList(QFileInfo(path).fileName() + uiText(u" · 等待读取服务")));
-            item->setData(0, Qt::UserRole, QStringLiteral("pending"));
-            item->setToolTip(0, path);
-        }
-        pending->setExpanded(true);
-        showNavigationPanel(1); datasetTree_->setCurrentItem(pending->child(0));
-        emit importFilesRequested(paths);
-        emit postProcessCommandRequested(QStringLiteral("importResults"));
-        appendMessage(uiText(u"已选择 %1 个文件；读取服务尚未接入，尚未加载数据。").arg(paths.size()));
+        if (paths.size() > 1) organizeImportedFiles(paths);
+        else if (!paths.isEmpty()) recordPendingImport(paths, QStringLiteral("independent"), QStringList());
     });
     dialog->open();
 }
 
-void PostProcessWorkbenchWindow::openExportDialog(const QString &kind) {
-    if (exportDialog_) { exportDialog_->raise(); exportDialog_->activateWindow(); return; }
-    auto *dialog = new QFileDialog(this, uiText(u"选择导出目标（服务待接入）"));
-    exportDialog_ = dialog; dialog->setObjectName(QStringLiteral("postProcessExportDialog")); dialog->setAttribute(Qt::WA_DeleteOnClose);
-    dialog->setAcceptMode(QFileDialog::AcceptSave);
-    dialog->setFileMode(QFileDialog::AnyFile);
-    dialog->setNameFilters(kind == "data" ? QStringList{uiText(u"Tecplot (*.dat)"), uiText(u"CGNS (*.cgns)"), uiText(u"Plot3D (*.xyz)"),uiText(u"所有文件 (*)")}
-        : kind == "geometry" ? QStringList{uiText(u"VTK PolyData (*.vtp)"),uiText(u"所有文件 (*)")}
-        : QStringList{uiText(u"所有文件 (*)")});
-    connect(dialog, &QFileDialog::fileSelected, this, [this, kind](const QString &path) {
-        if (path.isEmpty()) return;
-        emit exportFileRequested(kind, path);
-        emit postProcessCommandRequested(QStringLiteral("export:") + kind);
-        appendMessage(uiText(u"已提交导出请求；导出服务尚未接入，没有生成文件。"));
+void PostProcessWorkbenchWindow::recordPendingImport(const QStringList &paths, const QString &mode, const QStringList &times) {
+    if (paths.isEmpty()) return;
+    auto *pending = new QTreeWidgetItem(datasetTree_, QStringList(uiText(u"待接入的文件")));
+    pending->setData(0, Qt::UserRole, QStringLiteral("pending"));
+    pending->setData(0, Qt::UserRole+4, mode);
+    for (int i = 0; i < paths.size(); ++i) {
+        auto *item = new QTreeWidgetItem(pending, QStringList(QFileInfo(paths.at(i)).fileName() + uiText(u" · 等待读取服务")));
+        item->setData(0, Qt::UserRole, QStringLiteral("pending"));
+        item->setData(0, Qt::UserRole+4, times.value(i)); item->setToolTip(0, paths.at(i));
+    }
+    pending->setExpanded(true); showNavigationPanel(1); datasetTree_->setCurrentItem(pending->child(0));
+    emit importFilesRequested(paths); emit postProcessCommandRequested(QStringLiteral("importResults"));
+    appendMessage(uiText(u"已组织 %1 个文件；读取服务尚未接入，尚未加载数据。").arg(paths.size()));
+}
+
+void PostProcessWorkbenchWindow::organizeImportedFiles(const QStringList &paths) {
+    if (importOrganizationDialog_) { importOrganizationDialog_->raise(); importOrganizationDialog_->activateWindow(); return; }
+    auto *dialog = new QDialog(this); importOrganizationDialog_ = dialog;
+    dialog->setAttribute(Qt::WA_DeleteOnClose); dialog->setObjectName(QStringLiteral("postProcessImportOrganizationDialog"));
+    dialog->setWindowTitle(uiText(u"组织导入文件")); dialog->resize(650,420);
+    auto *layout = new QVBoxLayout(dialog);
+    auto *mode = new QComboBox(dialog); mode->setObjectName(QStringLiteral("postProcessImportMode"));
+    mode->addItem(uiText(u"各文件作为独立结果"),QStringLiteral("independent"));
+    mode->addItem(uiText(u"网格与字段分文件"),QStringLiteral("associated"));
+    mode->addItem(uiText(u"时间序列"),QStringLiteral("timeseries"));
+    auto *form = new QFormLayout; form->addRow(uiText(u"文件关系"),mode); layout->addLayout(form);
+    auto *table = new QTableWidget(paths.size(),2,dialog); table->setObjectName(QStringLiteral("postProcessImportFiles"));
+    table->setHorizontalHeaderLabels({uiText(u"文件"),uiText(u"时间（可留空）")});
+    table->horizontalHeader()->setStretchLastSection(true); table->horizontalHeader()->setSectionResizeMode(0,QHeaderView::Stretch);
+    table->setSelectionBehavior(QAbstractItemView::SelectRows); table->setSelectionMode(QAbstractItemView::SingleSelection);
+    for (int i=0; i<paths.size(); ++i) {
+        auto *file = new QTableWidgetItem(QFileInfo(paths.at(i)).fileName()); file->setData(Qt::UserRole,paths.at(i)); file->setToolTip(paths.at(i)); file->setFlags(file->flags() & ~Qt::ItemIsEditable);
+        table->setItem(i,0,file); table->setItem(i,1,new QTableWidgetItem);
+    }
+    layout->addWidget(table,1);
+    auto *row = new QHBoxLayout; auto *up = new QPushButton(uiText(u"上移"),dialog); auto *down = new QPushButton(uiText(u"下移"),dialog);
+    row->addWidget(up); row->addWidget(down); row->addStretch(); layout->addLayout(row);
+    const auto moveRow = [table](int delta) {
+        const int from = table->currentRow(), to = from + delta;
+        if (from < 0 || to < 0 || to >= table->rowCount()) return;
+        for (int col=0; col<2; ++col) { auto *a=table->takeItem(from,col); auto *b=table->takeItem(to,col); table->setItem(from,col,b); table->setItem(to,col,a); }
+        table->selectRow(to);
+    };
+    connect(up,&QPushButton::clicked,dialog,[moveRow] { moveRow(-1); });
+    connect(down,&QPushButton::clicked,dialog,[moveRow] { moveRow(1); });
+    auto *hint = new QLabel(uiText(u"可填写已知时间；留空表示未知。当前仅读取请求，不解析文件。"),dialog); hint->setWordWrap(true); layout->addWidget(hint);
+    auto *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel,dialog);
+    buttons->button(QDialogButtonBox::Ok)->setText(uiText(u"提交读取")); buttons->button(QDialogButtonBox::Cancel)->setText(uiText(u"取消")); layout->addWidget(buttons);
+    connect(buttons,&QDialogButtonBox::rejected,dialog,&QDialog::reject);
+    connect(buttons,&QDialogButtonBox::accepted,dialog,[this,dialog,mode,table] {
+        QStringList ordered, times;
+        for (int i=0; i<table->rowCount(); ++i) { ordered << table->item(i,0)->data(Qt::UserRole).toString(); times << table->item(i,1)->text(); }
+        recordPendingImport(ordered,mode->currentData().toString(),times); dialog->accept();
     });
-    dialog->open();
+    dialog->show();
+}
+
+void PostProcessWorkbenchWindow::openExportDialog(const QString &kind) {
+    if (exportSetupDialog_) { exportSetupDialog_->raise(); exportSetupDialog_->activateWindow(); return; }
+    auto *dialog = new QDialog(this); exportSetupDialog_ = dialog;
+    dialog->setAttribute(Qt::WA_DeleteOnClose); dialog->setObjectName(QStringLiteral("postProcessExportSetupDialog"));
+    dialog->setWindowTitle(kind == "data" ? uiText(u"导出数据") : kind == "geometry" ? uiText(u"导出特征几何") : kind == "image" ? uiText(u"保存视图图片") : uiText(u"导出时序动画"));
+    dialog->resize(520,360);
+    auto *layout = new QVBoxLayout(dialog); auto *form = new QFormLayout;
+    auto *object = new QLineEdit(selectedName_,dialog); object->setReadOnly(true); object->setObjectName(QStringLiteral("postProcessExportObject"));
+    form->addRow(uiText(u"当前对象"),object);
+    auto *format = new QComboBox(dialog); format->setObjectName(QStringLiteral("postProcessExportFormat"));
+    if (kind == "data") format->addItems({"Tecplot", "CGNS", "Plot3D"});
+    else if (kind == "geometry") format->addItems({"VTK PolyData"});
+    else if (kind == "image") format->addItems({"PNG", "JPEG"});
+    else format->addItems({uiText(u"图像序列（待接入）"),uiText(u"动画（编码待定）")});
+    form->addRow(uiText(u"目标格式"),format);
+    if (kind == "data") {
+        auto *fields = new QLineEdit(selectedContext_.value("field").toString(),dialog); fields->setObjectName(QStringLiteral("postProcessExportFields"));
+        fields->setPlaceholderText(uiText(u"选择字段（读取服务接入后提供）")); form->addRow(uiText(u"字段"),fields);
+        auto *time = new QComboBox(dialog); time->addItems({uiText(u"当前帧"),uiText(u"全部时间帧")}); form->addRow(uiText(u"时间范围"),time);
+    } else if (kind == "geometry") {
+        auto *hint = new QLabel(uiText(u"仅真实计算得到的几何可导出；当前对象为界面草稿。"),dialog); hint->setWordWrap(true); form->addRow(hint);
+    } else {
+        if (kind == "animation") {
+            auto *range = new QLineEdit(dialog); range->setPlaceholderText(uiText(u"起止时间待真实帧提供")); form->addRow(uiText(u"时间范围"),range);
+            auto *fps = new QSpinBox(dialog); fps->setRange(1,120); fps->setValue(24); fps->setObjectName(QStringLiteral("postProcessExportFps")); form->addRow(uiText(u"帧率"),fps);
+        } else {
+            auto *background = new QComboBox(dialog); background->addItems({uiText(u"当前背景"),uiText(u"透明背景（待接入）")}); form->addRow(uiText(u"背景"),background);
+        }
+        auto *width = new QSpinBox(dialog); width->setRange(1,8192); width->setValue(1920); width->setObjectName(QStringLiteral("postProcessExportWidth")); form->addRow(uiText(u"宽度"),width);
+        auto *height = new QSpinBox(dialog); height->setRange(1,8192); height->setValue(1080); height->setObjectName(QStringLiteral("postProcessExportHeight")); form->addRow(uiText(u"高度"),height);
+    }
+    layout->addLayout(form);
+    auto *hint = new QLabel(uiText(u"导出服务尚未接入；此窗口只演示操作流程，不会写入文件。"),dialog); hint->setWordWrap(true); layout->addWidget(hint); layout->addStretch();
+    auto *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel,dialog);
+    buttons->button(QDialogButtonBox::Ok)->setText(uiText(u"选择保存位置…")); buttons->button(QDialogButtonBox::Cancel)->setText(uiText(u"取消")); layout->addWidget(buttons);
+    connect(buttons,&QDialogButtonBox::rejected,dialog,&QDialog::reject);
+    connect(buttons,&QDialogButtonBox::accepted,dialog,[this,dialog,kind,format] {
+        if (exportDialog_) { exportDialog_->raise(); exportDialog_->activateWindow(); return; }
+        auto *picker = new QFileDialog(dialog, uiText(u"选择导出目标（服务待接入）"));
+        exportDialog_ = picker; picker->setObjectName(QStringLiteral("postProcessExportDialog")); picker->setAttribute(Qt::WA_DeleteOnClose);
+        picker->setAcceptMode(QFileDialog::AcceptSave); picker->setFileMode(QFileDialog::AnyFile);
+        const QString selectedFormat = format->currentText();
+        if (selectedFormat == "Tecplot") picker->setNameFilter(uiText(u"Tecplot (*.dat)"));
+        else if (selectedFormat == "CGNS") picker->setNameFilter(uiText(u"CGNS (*.cgns)"));
+        else if (selectedFormat == "Plot3D") picker->setNameFilter(uiText(u"Plot3D (*.xyz)"));
+        else if (selectedFormat == "PNG") picker->setNameFilter(uiText(u"PNG (*.png)"));
+        else if (selectedFormat == "JPEG") picker->setNameFilter(uiText(u"JPEG (*.jpg *.jpeg)"));
+        else if (kind == "geometry") picker->setNameFilter(uiText(u"VTK PolyData (*.vtp)"));
+        else picker->setNameFilter(uiText(u"所有文件 (*)"));
+        connect(picker,&QFileDialog::fileSelected,dialog,[this,dialog,kind](const QString &path) {
+            if (path.isEmpty()) return;
+            emit exportFileRequested(kind,path); emit postProcessCommandRequested(QStringLiteral("export:")+kind);
+            appendMessage(uiText(u"已选择导出目标；导出服务尚未接入，没有生成文件。")); dialog->accept();
+        });
+        picker->open();
+    });
+    dialog->show();
 }
 
 void PostProcessWorkbenchWindow::loadUiExample(bool structured) {
@@ -596,7 +764,8 @@ void PostProcessWorkbenchWindow::loadUiExample(bool structured) {
         timeSlider_->setValue(0);
     }
     timeSlider_->setEnabled(true);
-    for (const char *name : {"postProcessFirstFrame", "postProcessPreviousFrame", "postProcessNextFrame", "postProcessLastFrame"})
+    if (auto *play = findChild<QToolButton *>(QStringLiteral("postProcessPlayFrame"))) play->setChecked(false);
+    for (const char *name : {"postProcessFirstFrame", "postProcessPreviousFrame", "postProcessPlayFrame", "postProcessNextFrame", "postProcessLastFrame"})
         findChild<QToolButton *>(name)->setEnabled(true);
     timeLabel_->setText(uiText(u"示例 Frame 1 / 3 · t = 0.0 s"));
     datasetTree_->setCurrentItem(volume);
@@ -653,9 +822,9 @@ QWidget *PostProcessWorkbenchWindow::createObjectPanel() {
     newMenu->setObjectName(QStringLiteral("postProcessNewObjectMenu"));
     newMenu->setMinimumWidth(newMenu->fontMetrics().horizontalAdvance(uiText(u"物面 / 切片等值线")) + 80);
     add->setMenu(newMenu);
-    const QStringList newKinds = {"slice", "isoline", "iso", "stream"};
-    const QStringList newNames = {uiText(u"添加切面"), uiText(u"等值线"), uiText(u"等值面"), uiText(u"流线")};
-    const QStringList newIcons = {"slice", "iso", "iso", "stream"};
+    const QStringList newKinds = {"contour", "slice", "isoline", "iso", "stream", "trace"};
+    const QStringList newNames = {uiText(u"云图"), uiText(u"添加切面"), uiText(u"等值线"), uiText(u"等值面"), uiText(u"流线"), uiText(u"轨迹")};
+    const QStringList newIcons = {"contour", "slice", "iso", "iso", "stream", "trace"};
     for (int i = 0; i < newKinds.size(); ++i) {
         auto *action = newMenu->addAction(commandIcon(newIcons.at(i)), newNames.at(i));
         action->setObjectName(QStringLiteral("postProcessNew_%1").arg(newKinds.at(i)));
@@ -716,9 +885,23 @@ QWidget *PostProcessWorkbenchWindow::createTimeline() {
     };
     addStepButton(uiText(u"首帧"), uiText(u"postProcessFirstFrame"), [](int) { return 0; });
     addStepButton(uiText(u"上一帧"), uiText(u"postProcessPreviousFrame"), [](int value) { return qMax(0, value - 1); });
+    auto *play = new QToolButton(frame); play->setObjectName(QStringLiteral("postProcessPlayFrame"));
+    play->setCheckable(true); play->setIcon(style()->standardIcon(QStyle::SP_MediaPlay));
+    play->setIconSize(QSize(20,20)); play->setToolTip(uiText(u"播放示例时间帧")); layout->addWidget(play);
     addStepButton(uiText(u"下一帧"), uiText(u"postProcessNextFrame"), [](int value) { return qMin(2, value + 1); });
     addStepButton(uiText(u"末帧"), uiText(u"postProcessLastFrame"), [](int) { return 2; });
     timeSlider_=new QSlider(Qt::Horizontal,frame); timeSlider_->setObjectName(uiText(u"postProcessTimeSlider")); timeSlider_->setRange(0,2); layout->addWidget(timeSlider_,1);
+    auto *playTimer = new QTimer(frame); playTimer->setObjectName(QStringLiteral("postProcessPlayTimer")); playTimer->setInterval(500);
+    connect(play, &QToolButton::toggled, frame, [this, play, playTimer](bool running) {
+        play->setIcon(style()->standardIcon(running ? QStyle::SP_MediaPause : QStyle::SP_MediaPlay));
+        play->setToolTip(running ? uiText(u"暂停示例时间帧") : uiText(u"播放示例时间帧"));
+        if (running) { if (timeSlider_->value() == timeSlider_->maximum()) timeSlider_->setValue(0); playTimer->start(); }
+        else playTimer->stop();
+    });
+    connect(playTimer, &QTimer::timeout, frame, [this, play] {
+        if (timeSlider_->value() >= timeSlider_->maximum()) { play->setChecked(false); return; }
+        timeSlider_->setValue(timeSlider_->value() + 1);
+    });
     timeLabel_=new QLabel(uiText(u"Frame 1 / 3 · t = 0.0 s"),frame); layout->addWidget(timeLabel_);
     connect(timeSlider_, &QSlider::valueChanged, this, [this](int value) {
         timeLabel_->setText(uiText(u"示例 Frame %1 / 3 · t = %2 s").arg(value + 1).arg(value * .5, 0, 'f', 1));
@@ -763,7 +946,7 @@ void PostProcessWorkbenchWindow::openBackgroundSettings() {
     bottom->setObjectName(QStringLiteral("postProcessBackgroundBottom"));
     top->setObjectName(QStringLiteral("postProcessBackgroundTop"));
     form->addRow(uiText(u"预设"),preset); form->addRow(gradient);
-    const auto colorRow = [dialog, form](const QString &title, QLineEdit *input) {
+    const auto colorRow = [this, dialog, form](const QString &title, QLineEdit *input) {
         auto *row = new QWidget(dialog); auto *box = new QHBoxLayout(row); box->setContentsMargins(0,0,0,0);
         box->addWidget(input); auto *choose = new QPushButton(uiText(u"选色…"),row); box->addWidget(choose);
         QObject::connect(choose,&QPushButton::clicked,dialog,[dialog,input] {
@@ -852,7 +1035,8 @@ void PostProcessWorkbenchWindow::updateSelectionActions() {
     enable("postProcessExportAction",spatial,uiText(u"请先选择要导出的数据。"));
     enable("postProcessGeometryExportAction",derived,uiText(u"请先选择特征对象。"));
     enable("postProcessAnimationExportAction",spatial && selectedContext_.value("frames").toInt()>1,uiText(u"请选择包含时间帧的数据。"));
-    for (const char *name : {"postProcessExportAction", "postProcessGeometryExportAction", "postProcessAnimationExportAction"}) {
+    enable("postProcessImageExportAction",spatial,uiText(u"请选择要保存的视图。"));
+    for (const char *name : {"postProcessExportAction", "postProcessGeometryExportAction", "postProcessAnimationExportAction", "postProcessImageExportAction"}) {
         auto *action = findChild<QAction *>(QString::fromLatin1(name));
         if (action && action->isEnabled()) action->setToolTip(uiText(u"选择导出目标并提交请求；导出服务尚未接入，不会生成文件。"));
     }
@@ -866,8 +1050,9 @@ void PostProcessWorkbenchWindow::updateSelectionActions() {
 void PostProcessWorkbenchWindow::openNewFeatureDialog(const QString &kind) {
     if (sourceDialog_) { sourceDialog_->raise(); sourceDialog_->activateWindow(); return; }
     if (parameterDialog_) { parameterDialog_->raise(); parameterDialog_->activateWindow(); return; }
-    const QString title = kind == "slice" ? uiText(u"新建切面") : kind == "isoline" ? uiText(u"新建等值线")
-                          : kind == "iso" ? uiText(u"新建等值面") : uiText(u"新建流线");
+    const QString title = kind == "contour" ? uiText(u"新建云图") : kind == "slice" ? uiText(u"新建切面")
+        : kind == "isoline" ? uiText(u"新建等值线") : kind == "iso" ? uiText(u"新建等值面")
+        : kind == "trace" ? uiText(u"新建轨迹") : uiText(u"新建流线");
     auto *dialog = new QDialog(this);
     sourceDialog_ = dialog;
     dialog->setAttribute(Qt::WA_DeleteOnClose);
@@ -888,7 +1073,8 @@ void PostProcessWorkbenchWindow::openNewFeatureDialog(const QString &kind) {
         if (context.value("sourceId").toString().isEmpty()) return;
         if ((kind == "slice" || kind == "iso") && dimension != 3) return;
         if (kind == "isoline" && dimension != 2) return;
-        if (kind == "stream" && dimension < 2) return;
+        if ((kind == "stream" || kind == "contour") && dimension < 2) return;
+        if (kind == "trace" && (dimension != 3 || context.value("frames").toInt() < 2)) return;
         QVariantMap candidate = context;
         candidate["inputObjectId"] = id;
         sources->addItem(label, candidate);
@@ -904,7 +1090,7 @@ void PostProcessWorkbenchWindow::openNewFeatureDialog(const QString &kind) {
         addSource(item->text(), item->data(Qt::UserRole+1).toString(), item->data(Qt::UserRole+3).toMap());
     }
     form->addRow(uiText(u"数据源"), sources);
-    form->addRow(kind == "stream" ? uiText(u"积分矢量") : uiText(u"字段"), fields);
+    form->addRow(kind == "stream" || kind == "trace" ? uiText(u"积分矢量") : uiText(u"字段"), fields);
     layout->addLayout(form);
     auto *hint = new QLabel(dialog);
     hint->setObjectName(QStringLiteral("postProcessFeatureSourceHint"));
@@ -917,7 +1103,8 @@ void PostProcessWorkbenchWindow::openNewFeatureDialog(const QString &kind) {
         fields->clear();
         const QVariantMap source = sources->itemData(index).toMap();
         if (kind == "slice") fields->addItem(uiText(u"仅切片网格"), QString());
-        const QStringList available = source.value(kind == "stream" ? "vectors" : "scalars").toStringList();
+        QStringList available = source.value(kind == "stream" || kind == "trace" ? "vectors" : "scalars").toStringList();
+        if (kind == "contour") available.append(source.value("vectors").toStringList());
         for (const QString &name : available) fields->addItem(name, name);
         const int preferred = fields->findData(source.value("field"));
         if (preferred >= 0) fields->setCurrentIndex(preferred);
@@ -935,7 +1122,8 @@ void PostProcessWorkbenchWindow::openNewFeatureDialog(const QString &kind) {
         QVariantMap context = sources->currentData().toMap();
         if (context.isEmpty()) return;
         context["field"] = fields->currentData().toString();
-        context["components"] = context.value("field").toString().isEmpty() ? 0 : (kind == "stream" ? 3 : 1);
+        context["components"] = context.value("field").toString().isEmpty() ? 0
+            : (context.value("vectors").toStringList().contains(context.value("field").toString()) ? 3 : 1);
         selectedContext_ = context;
         selectedId_ = context.value("inputObjectId").toString();
         dialog->accept();
@@ -1076,7 +1264,8 @@ void PostProcessWorkbenchWindow::openObjectParameters(bool colorOnly) {
         : kind == "stream" ? uiText(u"编辑流线") : kind == "trace" ? uiText(u"编辑轨迹")
         : kind == "curve" ? uiText(u"曲线设置") : (kind == "field" || kind == "contour") ? uiText(u"字段与色标") : uiText(u"对象参数");
     dialog->setWindowTitle(title + uiText(u" · ") + name);
-    dialog->setStyleSheet(centralWidget()->styleSheet()); dialog->resize(520, kind == "stream" || kind == "trace" ? 360 : 280);
+    dialog->setStyleSheet(centralWidget()->styleSheet());
+    dialog->resize(520, kind == "slice" || kind == "stream" || kind == "trace" ? 540 : 380);
     auto *layout = new QVBoxLayout(dialog);
     layout->addWidget(sectionLabel(title, dialog));
     auto *context = new QLabel(uiText(u"当前对象：") + name, dialog); context->setWordWrap(true); layout->addWidget(context);
@@ -1084,6 +1273,7 @@ void PostProcessWorkbenchWindow::openObjectParameters(bool colorOnly) {
     form->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
     QMap<QString, QDoubleSpinBox *> numbers;
     QMap<QString, QComboBox *> choices;
+    QMap<QString, QLineEdit *> texts;
     const auto number = [&](const QString &key, const QString &label, double value) {
         auto *input = new QDoubleSpinBox(dialog); input->setObjectName(key);
         input->setDecimals(4); input->setRange(-1.e9,1.e9); input->setValue(draft.value(key,value).toDouble());
@@ -1093,16 +1283,33 @@ void PostProcessWorkbenchWindow::openObjectParameters(bool colorOnly) {
         auto *input = new QComboBox(dialog); input->setObjectName(key); input->addItems(items);
         input->setCurrentIndex(draft.value(key,0).toInt()); form->addRow(label,input); choices.insert(key,input);
     };
+    const auto textInput = [&](const QString &key, const QString &label, const QString &placeholder) {
+        auto *input = new QLineEdit(draft.value(key).toString(), dialog);
+        input->setObjectName(key); input->setPlaceholderText(placeholder);
+        form->addRow(label, input); texts.insert(key, input);
+    };
     if (kind == "slice") {
-        choice("normal",uiText(u"法向"), {"X", "Y", "Z"});
+        choice("normal",uiText(u"切面定义"), {"X", "Y", "Z", uiText(u"原点和法向")});
         number("offset",uiText(u"位置 / m"),0.0);
+        number("originX",uiText(u"原点 X"),0.0); number("originY",uiText(u"原点 Y"),0.0); number("originZ",uiText(u"原点 Z"),0.0);
+        number("normalX",uiText(u"法向 X"),1.0); number("normalY",uiText(u"法向 Y"),0.0); number("normalZ",uiText(u"法向 Z"),0.0);
+        choice("sliceStyle",uiText(u"切面显示"),{uiText(u"表面"),uiText(u"网格线"),uiText(u"表面和网格线")});
     } else if (kind == "iso" || kind == "isoline") {
         number("isoValue",uiText(u"等值"),0.0);
+        textInput("additionalValues",uiText(u"其他等值"),uiText(u"用逗号分隔，可留空"));
+        choice("featureColor",uiText(u"颜色"),{uiText(u"按字段着色"),uiText(u"蓝色"),uiText(u"白色"),uiText(u"黑色")});
+        if (kind == "iso") number("opacity",uiText(u"不透明度 / %"),100.0);
+        else number("lineWidth",uiText(u"线宽"),1.0);
     } else if (kind == "stream" || kind == "trace") {
+        choice("seedMode",uiText(u"种子方式"),{uiText(u"单点坐标"),uiText(u"线段（待接入）"),uiText(u"视口拾取（待接入）")});
         number("seedX",uiText(u"种子 X / m"),0.0);
         number("seedY",uiText(u"种子 Y / m"),0.0);
         number("seedZ",uiText(u"种子 Z / m"),0.0);
         choice("direction",uiText(u"积分方向"), {uiText(u"向前"),uiText(u"向后"),uiText(u"双向")});
+        number("maxLength",uiText(u"最大长度"),1.0);
+        number("maxSteps",uiText(u"最大步数"),1000.0);
+        textInput("filter",uiText(u"筛选条件"),uiText(u"可留空，规则待评审"));
+        choice("streamColor",uiText(u"显示着色"),{uiText(u"单色"),uiText(u"按标量字段")});
     }
     if (kind == "field" || kind == "contour") {
         QStringList fields = selectedContext_.value("scalars").toStringList();
@@ -1113,6 +1320,9 @@ void PostProcessWorkbenchWindow::openObjectParameters(bool colorOnly) {
         if (!draft.contains("displayField"))
             choices.value("displayField")->setCurrentIndex(qMax(0, fields.indexOf(selectedContext_.value("field").toString())));
         choice("palette",uiText(u"色标"),{uiText(u"蓝-青-黄-红"),uiText(u"灰度"),uiText(u"蓝-白-红")});
+        choice("rangeMode",uiText(u"范围模式"),{uiText(u"自动范围"),uiText(u"手动范围")});
+        number("rangeMin",uiText(u"手动最小值"),0.0); number("rangeMax",uiText(u"手动最大值"),1.0);
+        choice("legendVisible",uiText(u"色标显示"),{uiText(u"显示"),uiText(u"隐藏")});
         auto *range = new QLabel(uiText(u"真实结果读取后计算"),dialog); form->addRow(uiText(u"值域"),range);
     } else if (kind == "curve") {
         choice("xAxis",uiText(u"横轴"),{uiText(u"迭代步"),uiText(u"时间"),uiText(u"工况序号")});
@@ -1121,6 +1331,7 @@ void PostProcessWorkbenchWindow::openObjectParameters(bool colorOnly) {
         QStringList fields = integration ? QStringList{selectedContext_.value("integrationField").toString()}
                                          : selectedContext_.value("scalars").toStringList();
         fields.removeAll(QString());
+        if (kind == "slice") fields.prepend(uiText(u"仅切片网格"));
         choice("displayField", integration ? uiText(u"积分矢量") : uiText(u"字段"), fields);
         if (!draft.contains("displayField"))
             choices.value("displayField")->setCurrentIndex(qMax(0, fields.indexOf(selectedContext_.value(integration ? "integrationField" : "field").toString())));
@@ -1128,7 +1339,8 @@ void PostProcessWorkbenchWindow::openObjectParameters(bool colorOnly) {
         auto *hint = new QLabel(uiText(u"通用对象尚未指定特征类型，请先创建切面、等值面或流线对象。"),dialog);
         hint->setWordWrap(true); form->addRow(hint);
     }
-    layout->addLayout(form);
+    auto *formWidget = new QWidget(dialog); formWidget->setLayout(form);
+    layout->addWidget(scrollPanel(formWidget), 1);
     auto *hint = new QLabel(uiText(u"仅保存当前对象的参数草稿，不执行数据读取、特征计算或专业参数校验。"),dialog);
     hint->setWordWrap(true); hint->setObjectName(QStringLiteral("mutedText")); layout->addWidget(hint); layout->addStretch();
     auto *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel,dialog);
@@ -1136,21 +1348,43 @@ void PostProcessWorkbenchWindow::openObjectParameters(bool colorOnly) {
     buttons->button(QDialogButtonBox::Cancel)->setText(uiText(u"取消")); layout->addWidget(buttons);
     auto *apply = buttons->addButton(uiText(u"应用（待接入）"), QDialogButtonBox::ApplyRole);
     apply->setObjectName(QStringLiteral("postProcessApplyDraft"));
-    connect(apply, &QPushButton::clicked, dialog, [this, dialog, id, kind, numbers, choices] {
+    const auto updateDraftField = [this, id, kind, choices] {
+        if (!choices.contains("displayField")) return;
+        QString field = choices.value("displayField")->currentText();
+        if (kind == "slice" && choices.value("displayField")->currentIndex() == 0) field.clear();
+        for (int i=0; i<sceneList_->count(); ++i) {
+            auto *item = sceneList_->item(i);
+            if (item->data(Qt::UserRole+1).toString() != id) continue;
+            QVariantMap context = item->data(Qt::UserRole+3).toMap();
+            if (kind == "stream" || kind == "trace") context["integrationField"] = field;
+            else {
+                context["field"] = field;
+                context["components"] = field.isEmpty() ? 0 : (context.value("vectors").toStringList().contains(field) ? 3 : 1);
+            }
+            item->setData(Qt::UserRole+3,context);
+            if (selectedId_ == id) { selectedContext_ = context; updateSelectionActions(); }
+            break;
+        }
+    };
+    connect(apply, &QPushButton::clicked, dialog, [this, dialog, id, kind, numbers, choices, texts, updateDraftField] {
         QVariantMap saved = parameterDrafts_.value(id);
         for (auto it=numbers.cbegin(); it!=numbers.cend(); ++it) saved.insert(it.key(),it.value()->value());
         for (auto it=choices.cbegin(); it!=choices.cend(); ++it) saved.insert(it.key(),it.value()->currentIndex());
+        for (auto it=texts.cbegin(); it!=texts.cend(); ++it) saved.insert(it.key(),it.value()->text());
         parameterDrafts_[id] = saved;
+        updateDraftField();
         dialog->setProperty("draftApplied", true);
         emit postProcessCommandRequested(QStringLiteral("apply:") + kind);
         appendMessage(uiText(u"已提交应用请求；特征服务尚未接入，未生成结果。"));
     });
     connect(buttons, &QDialogButtonBox::rejected,dialog,&QDialog::reject);
-    connect(buttons, &QDialogButtonBox::accepted,dialog,[this, dialog, id, name, numbers, choices] {
+    connect(buttons, &QDialogButtonBox::accepted,dialog,[this, dialog, id, name, numbers, choices, texts, updateDraftField] {
         QVariantMap saved = parameterDrafts_.value(id);
         for (auto it=numbers.cbegin();it!=numbers.cend();++it) saved.insert(it.key(),it.value()->value());
         for (auto it=choices.cbegin();it!=choices.cend();++it) saved.insert(it.key(),it.value()->currentIndex());
+        for (auto it=texts.cbegin();it!=texts.cend();++it) saved.insert(it.key(),it.value()->text());
         parameterDrafts_[id]=saved;
+        updateDraftField();
         appendMessage(uiText(u"已保存“%1”的参数草稿；尚未执行计算。").arg(name));
         dialog->accept();
     });
