@@ -300,25 +300,6 @@ void PostProcessWorkbenchWindow::createActions() {
     dataCategory->setObjectName(uiText(u"postProcessDataCategory"));
     auto *dataSourcePanel = dataCategory->addPanel(uiText(u"结果数据"));
     dataSourcePanel->addLargeAction(importAction); dataSourcePanel->addSmallAction(exportAction);
-    auto *sequenceAction = ribbonAction(this, commandIcon("trace"), uiText(u"时间序列…"), uiText(u"配置结果文件顺序和已知时间"), QStringLiteral("postProcessSequenceAction"));
-    dataSourcePanel->addSmallAction(sequenceAction);
-    connect(sequenceAction, &QAction::triggered, this, [this] {
-        if (auto *existing = findChild<QDialog *>(QStringLiteral("postProcessSequenceDialog"))) { existing->raise(); existing->activateWindow(); return; }
-        auto *dialog = new QDialog(this); dialog->setAttribute(Qt::WA_DeleteOnClose); dialog->setObjectName(QStringLiteral("postProcessSequenceDialog"));
-        dialog->setWindowTitle(uiText(u"配置时间序列")); dialog->resize(620, 400);
-        auto *layout = new QVBoxLayout(dialog); auto *hint = new QLabel(uiText(u"选择同一结果的多个文件，按实际顺序排列；时间未知时留空。"), dialog); hint->setWordWrap(true); layout->addWidget(hint);
-        auto *table = new QTableWidget(0, 2, dialog); table->setObjectName(QStringLiteral("postProcessSequenceTable")); table->setHorizontalHeaderLabels({uiText(u"结果文件"), uiText(u"时间（可留空）")}); table->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch); table->horizontalHeader()->setStretchLastSection(true); table->setSelectionBehavior(QAbstractItemView::SelectRows); table->setSelectionMode(QAbstractItemView::SingleSelection); layout->addWidget(table);
-        auto *row = new QHBoxLayout; auto *add = new QPushButton(uiText(u"添加文件…"), dialog); auto *remove = new QPushButton(uiText(u"移除"), dialog); auto *up = new QPushButton(uiText(u"上移"), dialog); auto *down = new QPushButton(uiText(u"下移"), dialog); row->addWidget(add); row->addWidget(remove); row->addWidget(up); row->addWidget(down); row->addStretch(); layout->addLayout(row);
-        QObject::connect(add, &QPushButton::clicked, dialog, [dialog, table] { const QStringList paths = QFileDialog::getOpenFileNames(dialog, uiText(u"选择时间序列文件"), QString(), uiText(u"结果文件 (*.cgns *.tec)")); for (const QString &path : paths) { const int row = table->rowCount(); table->insertRow(row); auto *item = new QTableWidgetItem(path); item->setFlags(item->flags() & ~Qt::ItemIsEditable); table->setItem(row, 0, item); table->setItem(row, 1, new QTableWidgetItem); } });
-        QObject::connect(remove, &QPushButton::clicked, dialog, [table] { if (table->currentRow() >= 0) table->removeRow(table->currentRow()); });
-        const auto move = [table](int delta) { const int from = table->currentRow(), to = from + delta; if (from < 0 || to < 0 || to >= table->rowCount()) return; for (int col = 0; col < 2; ++col) { auto *a = table->takeItem(from, col); auto *b = table->takeItem(to, col); table->setItem(from, col, b); table->setItem(to, col, a); } table->selectRow(to); };
-        QObject::connect(up, &QPushButton::clicked, dialog, [move] { move(-1); }); QObject::connect(down, &QPushButton::clicked, dialog, [move] { move(1); });
-        auto *status = new QLabel(uiText(u"时间序列读取尚未接入。"), dialog); layout->addWidget(status);
-        auto *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, dialog); buttons->button(QDialogButtonBox::Ok)->setText(uiText(u"提交读取")); layout->addWidget(buttons);
-        QObject::connect(buttons, &QDialogButtonBox::rejected, dialog, &QDialog::reject);
-        QObject::connect(buttons, &QDialogButtonBox::accepted, dialog, [this, dialog, table, status] { if (table->rowCount() == 0) { status->setText(uiText(u"请先添加结果文件。")); return; } QStringList paths; auto *group = new QTreeWidgetItem(datasetTree_, QStringList(uiText(u"时间序列 · 等待读取"))); group->setData(0, Qt::UserRole, QStringLiteral("pending")); for (int i = 0; i < table->rowCount(); ++i) { const QString path = table->item(i, 0)->text(); paths << path; auto *item = new QTreeWidgetItem(group, QStringList(QFileInfo(path).fileName() + uiText(u" · 时间：") + (table->item(i, 1)->text().isEmpty() ? uiText(u"未知") : table->item(i, 1)->text()))); item->setData(0, Qt::UserRole, QStringLiteral("pending")); item->setToolTip(0, path); } group->setExpanded(true); showNavigationPanel(1); emit importFilesRequested(paths); appendMessage(uiText(u"时间序列已提交；读取服务尚未接入。")); dialog->accept(); });
-        dialog->show();
-    });
 
     auto *displayCategory = ribbonBar()->addCategoryPage(uiText(u"显示"));
     displayCategory->setObjectName(uiText(u"postProcessDisplayCategory"));

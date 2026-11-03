@@ -117,12 +117,7 @@ int main(int argc, char *argv[])
         auto *item = tree->topLevelItem(1)->child(index);
         tree->setCurrentItem(item); tree->itemClicked(item,0); flush();
     };
-    action("postProcessSequenceAction")->trigger(); flush();
-    auto *sequenceDialog = window.findChild<QDialog *>("postProcessSequenceDialog"); CHECK(sequenceDialog);
-    CHECK(sequenceDialog->findChild<QTableWidget *>("postProcessSequenceTable"));
-    sequenceDialog->findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Ok)->click();
-    CHECK(sequenceDialog->isVisible());
-    sequenceDialog->reject(); flush();
+    CHECK(!action("postProcessSequenceAction"));
     CHECK(action("postProcessRotationCenterAction"));
 
     // Data and object panels can be closed and reopened independently.
