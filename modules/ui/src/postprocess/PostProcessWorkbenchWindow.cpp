@@ -19,7 +19,6 @@
 #include <QFormLayout>
 #include <QFrame>
 #include <QFont>
-#include <QGroupBox>
 #include <QHBoxLayout>
 #include <QIcon>
 #include <QLabel>
@@ -187,7 +186,7 @@ PostProcessWorkbenchWindow::PostProcessWorkbenchWindow(QWidget *parent)
     });
     content->addWidget(tabs); content->addWidget(createViewportPanel()); content->setStretchFactor(1, 1); content->setSizes({270, 1170}); content->setChildrenCollapsible(false);
     root->addWidget(content, 1); root->addWidget(createTimeline()); setCentralWidget(workbench);
-    auto *dock = new QDockWidget(uiText(u"任务与消息"), this); taskDock_ = dock; dock->setObjectName(uiText(u"postProcessMessageDock")); events_ = new QTextEdit(dock); events_->setReadOnly(true); events_->document()->setMaximumBlockCount(2000); events_->setPlaceholderText(uiText(u"暂无任务事件。读取、计算和导出服务的进度与错误将在这里显示。")); dock->setWidget(events_); installDockTitle(dock); addDockWidget(Qt::BottomDockWidgetArea, dock); dock->hide();
+    auto *dock = new QDockWidget(uiText(u"操作消息"), this); taskDock_ = dock; dock->setObjectName(uiText(u"postProcessMessageDock")); events_ = new QTextEdit(dock); events_->setReadOnly(true); events_->document()->setMaximumBlockCount(2000); events_->setPlaceholderText(uiText(u"暂无操作消息。读取、特征处理和导出的状态与错误将在这里显示。")); dock->setWidget(events_); installDockTitle(dock); addDockWidget(Qt::BottomDockWidgetArea, dock); dock->hide();
     statusBar()->showMessage(uiText(u"请选择结果集；结果读取服务尚未接入。"));
     // Scope workspace styling so SARibbon's buttons, tabs and window controls
     // retain their own metrics. Native inputs use the same style as MainWindow.
@@ -216,8 +215,6 @@ PostProcessWorkbenchWindow::PostProcessWorkbenchWindow(QWidget *parent)
         "QTreeWidget,QListWidget { border:0; background:white; alternate-background-color:#f4f7fb; }"
         "QTreeWidget::item,QListWidget::item { padding:5px 2px; }"
         "QTreeWidget::item:selected,QListWidget::item:selected { background:#dceafd; color:#153b6b; }"
-        "QGroupBox { border:0; margin-top:22px; }"
-        "QGroupBox::title { subcontrol-origin:margin; left:0; top:3px; color:#234d7a; }"
 
         "QFrame#postProcessTimeline { border:0; background:#e9eef5; }"
         "QToolButton { border:1px solid transparent; padding:4px; background:transparent; }"
@@ -249,8 +246,7 @@ PostProcessWorkbenchWindow::PostProcessWorkbenchWindow(QWidget *parent)
 
 void PostProcessWorkbenchWindow::createActions() {
     auto *importAction = ribbonAction(this, commandIcon("import"), uiText(u"导入结果集"), uiText(u"选择 CGNS 流场、TEC 物面和 CSV 系数文件"), uiText(u"postProcessImportAction"));
-    auto *exportAction = ribbonAction(this, commandIcon("export"), uiText(u"导出"), uiText(u"导出图层、几何、图像或动画"), uiText(u"postProcessExportAction"));
-    auto *meshAction = ribbonAction(this, commandIcon("mesh"), uiText(u"网格 / 边线"), uiText(u"切换当前 Zone 的网格和边线"), uiText(u"postProcessMeshAction"));
+    auto *exportAction = ribbonAction(this, commandIcon("export"), uiText(u"导出数据"), uiText(u"导出选定数据和字段"), uiText(u"postProcessExportAction"));
     auto *contourAction = ribbonAction(this, commandIcon("contour"), uiText(u"新建云图"), uiText(u"将选中字段以云图方式添加到图层"), uiText(u"postProcessContourAction"));
     auto *colorAction = ribbonAction(this, commandIcon("palette"), uiText(u"色标范围"), uiText(u"配置字段的色标和值域"), uiText(u"postProcessColorAction"));
     auto *sliceAction = ribbonAction(this, commandIcon("slice"), uiText(u"添加切面"), uiText(u"在体网格中创建可编辑的切面"), uiText(u"postProcessSliceAction"));
@@ -299,7 +295,7 @@ void PostProcessWorkbenchWindow::createActions() {
     auto *dataCategory = ribbonBar()->addCategoryPage(uiText(u"数据"));
     dataCategory->setObjectName(uiText(u"postProcessDataCategory"));
     auto *dataSourcePanel = dataCategory->addPanel(uiText(u"结果数据"));
-    dataSourcePanel->addLargeAction(importAction); dataSourcePanel->addSmallAction(exportAction);
+    dataSourcePanel->addLargeAction(importAction);
 
     auto *displayCategory = ribbonBar()->addCategoryPage(uiText(u"显示"));
     displayCategory->setObjectName(uiText(u"postProcessDisplayCategory"));
@@ -307,7 +303,7 @@ void PostProcessWorkbenchWindow::createActions() {
     interactionPanel->addLargeAction(selectAction); interactionPanel->addSmallAction(boxSelectAction);
     interactionPanel->addSmallAction(panAction); interactionPanel->addSmallAction(zoomAction); interactionPanel->addSmallAction(rotateAction);
     auto *layerPanel = displayCategory->addPanel(uiText(u"图层"));
-    layerPanel->addLargeAction(meshAction); layerPanel->addLargeAction(contourAction); layerPanel->addSmallAction(colorAction); layerPanel->addSmallAction(styleAction_);
+    layerPanel->addLargeAction(contourAction); layerPanel->addSmallAction(colorAction); layerPanel->addSmallAction(styleAction_);
     auto *cameraPanel = displayCategory->addPanel(uiText(u"视图"));
     cameraPanel->addLargeAction(fitAction); cameraPanel->addSmallAction(focusAction); cameraPanel->addSmallAction(centerAction); cameraPanel->addSmallAction(frontAction); cameraPanel->addSmallAction(rightAction); cameraPanel->addSmallAction(topAction);
 
@@ -316,21 +312,22 @@ void PostProcessWorkbenchWindow::createActions() {
     auto *spatialPanel = featureCategory->addPanel(uiText(u"空间特征"));
     spatialPanel->addLargeAction(sliceAction); spatialPanel->addSmallAction(isoAction);
     spatialPanel->addSmallAction(streamAction); spatialPanel->addSmallAction(traceAction);
-    spatialPanel->addSmallAction(isoLineAction); spatialPanel->addSmallAction(parameterAction_);
+    spatialPanel->addSmallAction(isoLineAction);
 
-    auto *analysisCategory = ribbonBar()->addCategoryPage(uiText(u"分析"));
-    analysisCategory->setObjectName(uiText(u"postProcessAnalysisCategory"));
-    auto *analysisPanel = analysisCategory->addPanel(uiText(u"结果分析"));
     auto *coeffAction = ribbonAction(this, commandIcon("analysis"), uiText(u"系数表"), uiText(u"查看或导入 CSV 系数文件"), QStringLiteral("postProcessCoefficientAction"));
-    analysisPanel->addLargeAction(coeffAction);
-    dataSourcePanel->addSmallAction(coeffAction);
+    dataSourcePanel->addLargeAction(coeffAction);
     connect(coeffAction, &QAction::triggered, this, &PostProcessWorkbenchWindow::openCoefficientDialog);
+
+    auto *outputCategory = ribbonBar()->addCategoryPage(uiText(u"输出"));
+    outputCategory->setObjectName(uiText(u"postProcessOutputCategory"));
+    auto *outputPanel = outputCategory->addPanel(uiText(u"导出结果"));
+    outputPanel->addLargeAction(exportAction); outputPanel->addSmallAction(geometryExportAction);
+    outputPanel->addSmallAction(imageExportAction); outputPanel->addSmallAction(animationExportAction);
 
     auto *toolsCategory = ribbonBar()->addCategoryPage(uiText(u"工具"));
     toolsCategory->setObjectName(uiText(u"postProcessToolsCategory"));
-    auto *queryPanel = toolsCategory->addPanel(uiText(u"查询与导出"));
-    queryPanel->addLargeAction(probeAction); queryPanel->addSmallAction(geometryExportAction); queryPanel->addSmallAction(animationExportAction);
-    queryPanel->addSmallAction(imageExportAction);
+    auto *queryPanel = toolsCategory->addPanel(uiText(u"查询"));
+    queryPanel->addLargeAction(probeAction);
     auto *backgroundAction = ribbonAction(this, commandIcon("palette"), uiText(u"视口背景…"), uiText(u"调整当前视口背景，默认 ParaView 蓝灰渐变"), QStringLiteral("postProcessBackgroundAction"));
     cameraPanel->addSmallAction(backgroundAction);
     connect(backgroundAction, &QAction::triggered, this, &PostProcessWorkbenchWindow::openBackgroundSettings);
@@ -344,27 +341,10 @@ void PostProcessWorkbenchWindow::createActions() {
     }
 
 
-    // The landing page carries the former quick actions in the same ribbon
-    // row as data operations. Reuse QActions so checked/enabled state stays in
-    // sync with their specialist categories; never add a second toolbar.
-    auto *quickLayers = dataCategory->addPanel(uiText(u"显示"));
-    quickLayers->addLargeAction(contourAction);
-    quickLayers->addSmallAction(meshAction); quickLayers->addSmallAction(colorAction); quickLayers->addSmallAction(styleAction_);
-    auto *quickFeatures = dataCategory->addPanel(uiText(u"空间特征"));
-    quickFeatures->addLargeAction(sliceAction);
-    for (QAction *action : {isoAction, streamAction, traceAction}) quickFeatures->addSmallAction(action);
-    quickFeatures->addSmallAction(isoLineAction);
-    auto *quickCamera = dataCategory->addPanel(uiText(u"视图"));
-    quickCamera->addLargeAction(fitAction);
-    quickCamera->addSmallAction(backgroundAction); quickCamera->addSmallAction(focusAction); quickCamera->addSmallAction(centerAction);
-    for (QAction *action : {frontAction, rightAction, topAction}) quickCamera->addSmallAction(action);
-    auto *quickQuery = dataCategory->addPanel(uiText(u"查询与辅助"));
-    quickQuery->addSmallAction(probeAction);
-
     auto *panelsMenu = new QMenu(uiText(u"面板"), this);
     panelsMenu->setObjectName(QStringLiteral("postProcessPanelsMenu"));
     auto *resultsAction = ribbonAction(this, commandIcon("probe"), uiText(u"探针结果"), uiText(u"查看已有取点结果，不改变鼠标模式"), QStringLiteral("postProcessProbeResultsAction"));
-    auto *tasksAction = ribbonAction(this, commandIcon("analysis"), uiText(u"任务与消息"), uiText(u"查看任务事件与操作消息"), QStringLiteral("postProcessTasksAction"));
+    auto *tasksAction = ribbonAction(this, commandIcon("analysis"), uiText(u"操作消息"), uiText(u"查看后处理操作状态和错误消息"), QStringLiteral("postProcessTasksAction"));
     for (int i=1; i<3; ++i) {
         const QStringList names = {uiText(u"视图面板"), uiText(u"数据面板"), uiText(u"对象面板")};
         const QStringList ids = {"postProcessShowViewPanel", "postProcessShowDataPanel", "postProcessShowObjectPanel"};
@@ -374,13 +354,10 @@ void PostProcessWorkbenchWindow::createActions() {
     }
     panelsMenu->addSeparator();
     panelsMenu->addAction(resultsAction); panelsMenu->addAction(tasksAction);
-    auto *panelsAction = ribbonAction(this, commandIcon("dock"), uiText(u"面板"), uiText(u"按需打开结果与任务面板"), QStringLiteral("postProcessPanelsAction"));
+    auto *panelsAction = ribbonAction(this, commandIcon("dock"), uiText(u"面板"), uiText(u"打开数据、对象及消息面板"), QStringLiteral("postProcessPanelsAction"));
     panelsAction->setMenu(panelsMenu);
-    quickQuery->addSmallAction(panelsAction);
     auto *panelGroup = toolsCategory->addPanel(uiText(u"面板"));
-    for (const char *name : {"postProcessShowDataPanel", "postProcessShowObjectPanel"})
-        panelGroup->addLargeAction(findChild<QAction *>(QString::fromLatin1(name)));
-    panelGroup->addSmallAction(resultsAction); panelGroup->addSmallAction(tasksAction);
+    panelGroup->addLargeAction(panelsAction);
     connect(resultsAction, &QAction::triggered, this, &PostProcessWorkbenchWindow::showProbePanel);
     connect(tasksAction, &QAction::triggered, this, &PostProcessWorkbenchWindow::showTaskPanel);
     connect(styleAction_, &QAction::triggered, this, &PostProcessWorkbenchWindow::openObjectStyle);
@@ -410,7 +387,6 @@ void PostProcessWorkbenchWindow::createActions() {
     connect(geometryExportAction, &QAction::triggered, this, [this] { openExportDialog(QStringLiteral("geometry")); });
     connect(animationExportAction, &QAction::triggered, this, [this] { openExportDialog(QStringLiteral("animation")); });
     connect(imageExportAction, &QAction::triggered, this, [this] { openExportDialog(QStringLiteral("image")); });
-    connect(meshAction, &QAction::triggered, this, [command] { command(uiText(u"toggleMesh"), uiText(u"已切换当前 Zone 的网格显示。")); });
     connect(colorAction, &QAction::triggered, this, [this] { openObjectParameters(true); });
     connect(contourAction, &QAction::triggered, this, [this] {
         addDerivedLayer("contour", selectedContext_.value("field").toString() + uiText(u"云图"), uiText(u"已创建云图草稿；可调整字段与色标，尚未执行渲染。"));
@@ -918,7 +894,6 @@ void PostProcessWorkbenchWindow::updateSelectionActions() {
         action->setToolTip(enabled ? action->property("availableToolTip").toString() : reason);
     };
     enable("postProcessFocusAction",spatial,uiText(u"请先选择空间对象。"));
-    enable("postProcessMeshAction",spatial,uiText(u"请先选择网格或空间对象。"));
     enable("postProcessContourAction",spatial && (scalar || vector),uiText(u"请先选择标量或矢量模长进行着色。"));
     enable("postProcessSliceAction",spatial && dimension==3,uiText(u"切片需要三维体网格；不要求存在标量场。"));
     enable("postProcessIsoAction",scalar && dimension==3,uiText(u"等值面需要三维体网格和标量；矢量请先选择模长标量。"));
@@ -1071,7 +1046,7 @@ void PostProcessWorkbenchWindow::addDerivedLayer(const QString &kind, const QStr
     }
 }
 bool PostProcessWorkbenchWindow::insertWidget(WidgetSlot slot,QWidget *widget){if(slot!=WidgetSlot::Viewport||!widget||!viewportLayout_)return false;if(emptyViewport_){viewportLayout_->removeWidget(emptyViewport_);emptyViewport_->deleteLater();emptyViewport_=nullptr;}if(viewportLayout_->count()!=0)return false;viewportLayout_->addWidget(widget);return true;}
-void PostProcessWorkbenchWindow::bindServices(const ServiceBindings &services){if(bound_)return;services_=services;bound_=true;if(services_.tasks)connect(services_.tasks,&ITaskService::taskEventOccurred,this,[this](const TaskEvent &event){appendMessage(event.message);},Qt::QueuedConnection);}
+void PostProcessWorkbenchWindow::bindServices(const ServiceBindings &services){if(bound_)return;services_=services;bound_=true;}
 void PostProcessWorkbenchWindow::appendMessage(const QString &message){events_->append(message.toHtmlEscaped());statusBar()->showMessage(message,5000);}
 void PostProcessWorkbenchWindow::updateSelectionDetails() {
     auto *item = sceneList_->currentItem();
@@ -1114,10 +1089,6 @@ void PostProcessWorkbenchWindow::openObjectStyle() {
     representation->setObjectName(QStringLiteral("objectStyleRepresentation"));
     representation->addItems({uiText(u"表面"), uiText(u"线框"), uiText(u"表面和边线"), uiText(u"点")});
     representation->setCurrentIndex(draft.value("representation", 0).toInt());
-    auto *mesh = new QCheckBox(uiText(u"显示网格 / 边线"), dialog);
-    mesh->setObjectName(QStringLiteral("objectStyleMesh"));
-    mesh->setChecked(draft.value("mesh", true).toBool());
-    mesh->setEnabled(selectedKind_ != "curve");
     auto *color = new QComboBox(dialog);
     color->setObjectName(QStringLiteral("objectStyleColor"));
     color->addItems({uiText(u"继承图层"), uiText(u"蓝色"), uiText(u"青色"), uiText(u"橙色"), uiText(u"灰色")});
@@ -1125,7 +1096,7 @@ void PostProcessWorkbenchWindow::openObjectStyle() {
     auto *opacity = new QSpinBox(dialog);
     opacity->setObjectName(QStringLiteral("objectStyleOpacity"));
     opacity->setRange(0,100); opacity->setSuffix(" %"); opacity->setValue(draft.value("opacity",100).toInt());
-    form->addRow(visible); form->addRow(uiText(u"显示方式"), representation); form->addRow(mesh);
+    form->addRow(visible); form->addRow(uiText(u"显示方式"), representation);
     form->addRow(uiText(u"颜色"), color); form->addRow(uiText(u"不透明度"), opacity);
     layout->addLayout(form);
     auto *hint = new QLabel(uiText(u"当前保存的是此对象的界面草稿。场景服务接入后才会更新实际渲染。"), dialog);
@@ -1135,8 +1106,8 @@ void PostProcessWorkbenchWindow::openObjectStyle() {
     buttons->button(QDialogButtonBox::Ok)->setText(uiText(u"保存草稿"));
     buttons->button(QDialogButtonBox::Cancel)->setText(uiText(u"取消")); layout->addWidget(buttons);
     connect(buttons, &QDialogButtonBox::rejected, dialog, &QDialog::reject);
-    connect(buttons, &QDialogButtonBox::accepted, dialog, [this, dialog, id, name, visible, mesh, color, opacity, representation] {
-        styleDrafts_[id] = {{"visible", visible->isChecked()}, {"mesh", mesh->isChecked()}, {"representation", representation->currentIndex()},
+    connect(buttons, &QDialogButtonBox::accepted, dialog, [this, dialog, id, name, visible, color, opacity, representation] {
+        styleDrafts_[id] = {{"visible", visible->isChecked()}, {"representation", representation->currentIndex()},
                             {"color", color->currentIndex()}, {"opacity", opacity->value()}};
         for (int i = 0; i < sceneList_->count(); ++i) {
             auto *item = sceneList_->item(i);

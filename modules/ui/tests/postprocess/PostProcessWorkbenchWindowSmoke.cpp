@@ -1,5 +1,6 @@
 #include "aerosim/ui/postprocess/PostProcessWorkbenchWindow.h"
 #include <SARibbonBar.h>
+#include <SARibbonCategory.h>
 #include <QAction>
 #include <QApplication>
 #include <QCheckBox>
@@ -50,6 +51,9 @@ int main(int argc, char *argv[])
     auto *tasks = action("postProcessTasksAction");
     CHECK(tree && layers && nav && content && style && parameters && probe && results && select && pan && tasks);
     CHECK(content->count() == 2);
+    CHECK(window.findChild<SARibbonCategory *>("postProcessOutputCategory"));
+    CHECK(!window.findChild<SARibbonCategory *>("postProcessAnalysisCategory"));
+    CHECK(!action("postProcessMeshAction"));
     CHECK(!window.findChild<QWidget *>("postProcessInspectorTabs"));
     CHECK(!window.findChild<QDockWidget *>("postProcessProbeDock"));
     CHECK(QFile::exists(":/SARibbonTheme/resource/palettes/office2013-default.json"));
