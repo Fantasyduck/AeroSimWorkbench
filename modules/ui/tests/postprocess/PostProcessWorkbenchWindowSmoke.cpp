@@ -75,6 +75,9 @@ int main(int argc, char *argv[])
     // Start empty; the example is explicitly requested.
     CHECK(tree->topLevelItemCount()==0 && layers->count()==0);
     CHECK(!action("postProcessContourAction")->isEnabled());
+    CHECK(!window.findChild<QSlider *>("postProcessTimeSlider")->isEnabled());
+    for (const char *name : {"postProcessFirstFrame", "postProcessPreviousFrame", "postProcessPlayFrame", "postProcessNextFrame", "postProcessLastFrame"})
+        CHECK(!window.findChild<QToolButton *>(name)->isEnabled());
     action("postProcessUnstructuredExampleAction")->trigger(); flush();
     CHECK(tree->topLevelItemCount()==3 && layers->count()==3);
     auto *play = window.findChild<QToolButton *>("postProcessPlayFrame");
