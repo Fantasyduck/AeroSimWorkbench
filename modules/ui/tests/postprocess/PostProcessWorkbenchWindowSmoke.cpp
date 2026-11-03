@@ -197,6 +197,15 @@ int main(int argc, char *argv[])
     coefficient->accept(); flush();
     delete tree->takeTopLevelItem(3);
     QFileDialog *fileDialog = nullptr;
+    // Each output command opens its own settings dialog, without creating a file.
+    chooseZone(0);
+    for (const char *name : {"postProcessImageExportAction", "postProcessAnimationExportAction"}) {
+        CHECK(action(name)->isEnabled()); action(name)->trigger(); flush();
+        auto *output = window.findChild<QDialog *>("postProcessExportSetupDialog"); CHECK(output);
+        CHECK(output->findChild<QComboBox *>("postProcessExportFormat")); output->reject(); flush();
+    }
+    chooseObject(0); action("postProcessGeometryExportAction")->trigger(); flush();
+    auto *geometry = window.findChild<QDialog *>("postProcessExportSetupDialog"); CHECK(geometry); geometry->reject(); flush();
     chooseZone(0); action("postProcessExportAction")->trigger(); flush();
     auto *exportSetup = window.findChild<QDialog *>("postProcessExportSetupDialog"); CHECK(exportSetup);
     CHECK(capture(exportSetup,"data-export-setup"));
