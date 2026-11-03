@@ -61,12 +61,12 @@ int main(int argc, char *argv[])
         return captureDir.isEmpty() || widget->grab().save(captureDir + "/" + name + ".png");
     };
     const auto chooseZone = [&] (int index) {
-        nav->setCurrentIndex(1);
+        nav->setCurrentIndex(0);
         auto *item = tree->topLevelItem(0)->child(index);
         tree->setCurrentItem(item); tree->itemClicked(item,0); flush();
     };
     const auto chooseObject = [&] (int index) {
-        nav->setCurrentIndex(2); layers->setCurrentRow(index); layers->itemClicked(layers->currentItem()); flush();
+        nav->setCurrentIndex(1); layers->setCurrentRow(index); layers->itemClicked(layers->currentItem()); flush();
     };
     window.show(); flush();
     for (auto *dock : window.findChildren<QDockWidget *>()) CHECK(!dock->isVisible());
@@ -113,18 +113,27 @@ int main(int argc, char *argv[])
 
     CHECK(!window.findChild<QComboBox *>("postProcessFieldSelector"));
     const auto chooseField = [&] (int index) {
-        nav->setCurrentIndex(1);
+        nav->setCurrentIndex(0);
         auto *item = tree->topLevelItem(1)->child(index);
         tree->setCurrentItem(item); tree->itemClicked(item,0); flush();
     };
-    // Close independently; menu actions reopen each panel in its original order.
-    emit nav->tabCloseRequested(1); CHECK(nav->count()==2);
-    action("postProcessShowDataPanel")->trigger(); CHECK(nav->count()==3 && nav->currentIndex()==1);
-    emit nav->tabCloseRequested(2); emit nav->tabCloseRequested(1); emit nav->tabCloseRequested(0);
+    action("postProcessSequenceAction")->trigger(); flush();
+    auto *sequenceDialog = window.findChild<QDialog *>("postProcessSequenceDialog"); CHECK(sequenceDialog);
+    CHECK(sequenceDialog->findChild<QTableWidget *>("postProcessSequenceTable"));
+    sequenceDialog->findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Ok)->click();
+    CHECK(sequenceDialog->isVisible());
+    sequenceDialog->reject(); flush();
+    CHECK(action("postProcessRotationCenterAction"));
+
+    // Data and object panels can be closed and reopened independently.
+    CHECK(nav->count()==2 && !action("postProcessShowViewPanel"));
+    emit nav->tabCloseRequested(0); CHECK(nav->count()==1);
+    action("postProcessShowDataPanel")->trigger(); CHECK(nav->count()==2 && nav->currentIndex()==0);
+    emit nav->tabCloseRequested(1); emit nav->tabCloseRequested(0);
     CHECK(nav->count()==0 && !nav->isVisible());
     action("postProcessShowObjectPanel")->trigger(); CHECK(nav->count()==1 && nav->isVisible());
-    action("postProcessShowViewPanel")->trigger(); action("postProcessShowDataPanel")->trigger();
-    CHECK(nav->count()==3 && nav->currentIndex()==1);
+    action("postProcessShowDataPanel")->trigger();
+    CHECK(nav->count()==2 && nav->currentIndex()==0);
     // Same UI capabilities for structured and unstructured topology.
     for (const char *example : {"postProcessStructuredExampleAction","postProcessUnstructuredExampleAction"}) {
         action(example)->trigger(); flush(); chooseZone(0);
@@ -143,7 +152,7 @@ int main(int argc, char *argv[])
         CHECK(action("postProcessGeometryExportAction")->isEnabled()); // Request only; no file is written.
     }
     chooseZone(0); action("postProcessContourAction")->trigger(); flush();
-    CHECK(nav->currentIndex()==2 && parameters->isEnabled());
+    CHECK(nav->currentIndex()==1 && parameters->isEnabled());
     auto *createdDialog = window.findChild<QDialog *>("postProcessParameterDialog"); CHECK(createdDialog);
     createdDialog->findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Ok)->click(); flush();
     CHECK(action("postProcessSliceAction")->isEnabled() && action("postProcessIsoAction")->isEnabled());
@@ -233,6 +242,7 @@ int main(int argc, char *argv[])
     style->trigger(); flush();
     auto *dialog = window.findChild<QDialog *>("postProcessObjectStyleDialog");
     CHECK(dialog && dialog->isVisible());
+    CHECK(dialog->findChild<QComboBox *>("objectStyleRepresentation"));
     CHECK(capture(dialog,"object-style"));
     auto *opacity = dialog->findChild<QSpinBox *>("objectStyleOpacity");
     CHECK(opacity && opacity->value() == 100);
@@ -272,7 +282,7 @@ int main(int argc, char *argv[])
         CHECK(capture(dialog, i==1 ? "iso-parameters" : "stream-parameters"));
         dialog->reject(); flush();
     }
-    nav->setCurrentIndex(1);
+    nav->setCurrentIndex(0);
     for (int group : {1}) {
         auto *item = tree->topLevelItem(group)->child(0); tree->setCurrentItem(item); tree->itemClicked(item,0);
         parameters->trigger(); flush(); dialog = window.findChild<QDialog *>("postProcessParameterDialog");
@@ -320,7 +330,7 @@ int main(int argc, char *argv[])
     for (const QSize size : {QSize(1120,680), QSize(1440,960)}) {
         window.resize(size);
         for (int category=0; category<5; ++category) {
-            window.ribbonBar()->setCurrentIndex(category); nav->setCurrentIndex(category%3); flush();
+            window.ribbonBar()->setCurrentIndex(category); nav->setCurrentIndex(category%2); flush();
             CHECK(window.size() == size);
             for (auto *button : window.findChildren<QToolButton *>()) {
                 if (button->isVisible() && button->objectName().startsWith("postProcess"))

@@ -52,7 +52,6 @@ signals:
 
 private:
     QWidget *createDataPanel();
-    QWidget *createViewPanel();
     QWidget *createObjectPanel();
     QWidget *createViewportPanel();
     QWidget *createTimeline();
