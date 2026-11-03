@@ -28,6 +28,15 @@ try {
             $process.Dispose()
         }
     }
+    if (Test-Path -LiteralPath $targetPath -PathType Leaf) {
+        try {
+            $file = [System.IO.File]::Open($targetPath, [System.IO.FileMode]::Open,
+                [System.IO.FileAccess]::Write, [System.IO.FileShare]::ReadWrite)
+            $file.Dispose()
+        } catch {
+            throw "The build executable is still locked or is not writable. Close the other instance, or run this script with the same permissions as that instance. Path: $targetPath"
+        }
+    }
 } catch {
     Write-Error "Unable to close the previous postprocess instance: $_"
     exit 1
