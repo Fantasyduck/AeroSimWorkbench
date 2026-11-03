@@ -129,6 +129,21 @@ int main(int argc, char *argv[])
     CHECK(!action("postProcessSequenceAction"));
     CHECK(action("postProcessRotationCenterAction"));
 
+    // Panel commands must be direct clickable ribbon buttons.
+    window.ribbonBar()->setCurrentIndex(4); flush();
+    for (const char *name : {"postProcessShowDataPanel", "postProcessShowObjectPanel", "postProcessProbeResultsAction", "postProcessTasksAction"}) {
+        QToolButton *button = nullptr;
+        for (auto *candidate : window.findChildren<QToolButton *>()) {
+            if (candidate->defaultAction() == action(name) && candidate->isVisible()) { button = candidate; break; }
+        }
+        CHECK(button && button->isEnabled());
+        button->click(); flush();
+    }
+    auto *directProbe = window.findChild<QDockWidget *>("postProcessProbeDock");
+    CHECK(directProbe && directProbe->isVisible()); directProbe->hide();
+    auto *directMessages = window.findChild<QDockWidget *>("postProcessMessageDock");
+    CHECK(directMessages && directMessages->isVisible()); directMessages->hide();
+
     // Data and object panels can be closed and reopened independently.
     CHECK(nav->count()==2 && !action("postProcessShowViewPanel"));
     emit nav->tabCloseRequested(0); CHECK(nav->count()==1);
@@ -320,7 +335,7 @@ int main(int argc, char *argv[])
     // Probe is an exclusive mouse mode; results visibility is a separate action.
     pan->trigger(); CHECK(pan->isChecked());
     probe->trigger(); CHECK(probe->isChecked() && !pan->isChecked());
-    CHECK(!window.findChild<QDockWidget *>("postProcessProbeDock"));
+    CHECK(!window.findChild<QDockWidget *>("postProcessProbeDock")->isVisible());
     CHECK(window.findChild<QWidget *>("postProcessViewportHost")->cursor().shape() == Qt::CrossCursor);
     results->trigger(); flush();
     auto *probeDock = window.findChild<QDockWidget *>("postProcessProbeDock");
