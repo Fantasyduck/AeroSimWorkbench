@@ -20,6 +20,10 @@ if not exist "%AEROSIM_SARIBBON_SOURCE_DIR%\src\SARibbonBar\SARibbonBar.h" (
     exit /b 2
 )
 
+rem Only close instances of the executable that this build will overwrite.
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0stop-postprocess-instance.ps1" "%AEROSIM_BUILD_DIR%\postprocess\Debug\aerosim_postprocess.exe"
+if errorlevel 1 exit /b %errorlevel%
+
 call scripts\build-windows.cmd aerosim_postprocess Debug
 if errorlevel 1 exit /b %errorlevel%
 
