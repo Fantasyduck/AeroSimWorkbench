@@ -11,6 +11,8 @@
 #include <QDockWidget>
 #include <QDialog>
 #include <QDialogButtonBox>
+#include <QDir>
+#include <QStandardPaths>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QDoubleSpinBox>
@@ -341,23 +343,17 @@ void PostProcessWorkbenchWindow::createActions() {
     }
 
 
-    auto *panelsMenu = new QMenu(uiText(u"面板"), this);
-    panelsMenu->setObjectName(QStringLiteral("postProcessPanelsMenu"));
     auto *resultsAction = ribbonAction(this, commandIcon("probe"), uiText(u"探针结果"), uiText(u"查看已有取点结果，不改变鼠标模式"), QStringLiteral("postProcessProbeResultsAction"));
     auto *tasksAction = ribbonAction(this, commandIcon("analysis"), uiText(u"操作消息"), uiText(u"查看后处理操作状态和错误消息"), QStringLiteral("postProcessTasksAction"));
+    auto *panelGroup = toolsCategory->addPanel(uiText(u"面板"));
     for (int i=1; i<3; ++i) {
-        const QStringList names = {uiText(u"视图面板"), uiText(u"数据面板"), uiText(u"对象面板")};
-        const QStringList ids = {"postProcessShowViewPanel", "postProcessShowDataPanel", "postProcessShowObjectPanel"};
+        const QStringList names = {QString(), uiText(u"数据面板"), uiText(u"对象面板")};
+        const QStringList ids = {QString(), QStringLiteral("postProcessShowDataPanel"), QStringLiteral("postProcessShowObjectPanel")};
         auto *action = ribbonAction(this, commandIcon("dock"), names.at(i), uiText(u"打开") + names.at(i), ids.at(i));
-        panelsMenu->addAction(action);
+        panelGroup->addSmallAction(action);
         connect(action, &QAction::triggered, this, [this, i] { showNavigationPanel(i); });
     }
-    panelsMenu->addSeparator();
-    panelsMenu->addAction(resultsAction); panelsMenu->addAction(tasksAction);
-    auto *panelsAction = ribbonAction(this, commandIcon("dock"), uiText(u"面板"), uiText(u"打开数据、对象及消息面板"), QStringLiteral("postProcessPanelsAction"));
-    panelsAction->setMenu(panelsMenu);
-    auto *panelGroup = toolsCategory->addPanel(uiText(u"面板"));
-    panelGroup->addLargeAction(panelsAction);
+    panelGroup->addSmallAction(resultsAction); panelGroup->addSmallAction(tasksAction);
     connect(resultsAction, &QAction::triggered, this, &PostProcessWorkbenchWindow::showProbePanel);
     connect(tasksAction, &QAction::triggered, this, &PostProcessWorkbenchWindow::showTaskPanel);
     connect(styleAction_, &QAction::triggered, this, &PostProcessWorkbenchWindow::openObjectStyle);
@@ -581,6 +577,13 @@ void PostProcessWorkbenchWindow::openExportDialog(const QString &kind) {
         auto *picker = new QFileDialog(dialog, uiText(u"选择导出目标（服务待接入）"));
         exportDialog_ = picker; picker->setObjectName(QStringLiteral("postProcessExportDialog")); picker->setAttribute(Qt::WA_DeleteOnClose);
         picker->setAcceptMode(QFileDialog::AcceptSave); picker->setFileMode(QFileDialog::AnyFile);
+        const QString documents = QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation);
+        if (!documents.isEmpty()) {
+            const QString outputDir = QDir(documents).filePath(uiText(u"AeroSimWorkbench/后处理"));
+            if (QDir().mkpath(outputDir)) picker->setDirectory(outputDir);
+            else appendMessage(uiText(u"无法创建默认后处理目录，请选择其他保存位置。"));
+        }
+
         const QString selectedFormat = format->currentText();
         if (selectedFormat == "Tecplot") picker->setNameFilter(uiText(u"Tecplot (*.dat)"));
         else if (selectedFormat == "CGNS") picker->setNameFilter(uiText(u"CGNS (*.cgns)"));

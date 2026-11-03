@@ -21,6 +21,7 @@
 #include <QSlider>
 #include <QSpinBox>
 #include <QSplitter>
+#include <QStandardPaths>
 #include <QTabWidget>
 #include <QTableWidget>
 #include <QTextEdit>
@@ -50,6 +51,7 @@ int main(int argc, char *argv[])
     auto *pan = action("postProcessPanAction");
     auto *tasks = action("postProcessTasksAction");
     CHECK(tree && layers && nav && content && style && parameters && probe && results && select && pan && tasks);
+    CHECK(!action("postProcessPanelsAction"));
     CHECK(content->count() == 2);
     CHECK(window.findChild<SARibbonCategory *>("postProcessOutputCategory"));
     CHECK(!window.findChild<SARibbonCategory *>("postProcessAnalysisCategory"));
@@ -212,6 +214,8 @@ int main(int argc, char *argv[])
     exportSetup->findChild<QComboBox *>("postProcessExportFormat")->setCurrentIndex(1);
     exportSetup->findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Ok)->click(); flush();
     fileDialog = window.findChild<QFileDialog *>("postProcessExportDialog"); CHECK(fileDialog);
+    const QString outputDir = QDir(QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation)).filePath(QString::fromUtf8("AeroSimWorkbench/后处理"));
+    CHECK(QDir::cleanPath(fileDialog->directory().absolutePath()) == QDir::cleanPath(outputDir));
     fileDialog->fileSelected(QStringLiteral("/example/output.cgns"));
     CHECK(exportKind=="data" && exportPath=="/example/output.cgns");
     flush();
