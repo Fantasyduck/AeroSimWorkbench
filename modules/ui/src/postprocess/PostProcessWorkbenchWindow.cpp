@@ -248,7 +248,6 @@ PostProcessWorkbenchWindow::PostProcessWorkbenchWindow(QWidget *parent)
 
 void PostProcessWorkbenchWindow::createActions() {
     auto *importAction = ribbonAction(this, commandIcon("import"), uiText(u"导入结果集"), uiText(u"选择 CGNS 流场、TEC 物面和 CSV 系数文件"), uiText(u"postProcessImportAction"));
-    auto *exportAction = ribbonAction(this, commandIcon("export"), uiText(u"导出数据"), uiText(u"导出选定数据和字段"), uiText(u"postProcessExportAction"));
     auto *contourAction = ribbonAction(this, commandIcon("contour"), uiText(u"新建云图"), uiText(u"将选中字段以云图方式添加到图层"), uiText(u"postProcessContourAction"));
     auto *colorAction = ribbonAction(this, commandIcon("palette"), uiText(u"色标范围"), uiText(u"配置字段的色标和值域"), uiText(u"postProcessColorAction"));
     auto *sliceAction = ribbonAction(this, commandIcon("slice"), uiText(u"添加切面"), uiText(u"在体网格中创建可编辑的切面"), uiText(u"postProcessSliceAction"));
@@ -274,7 +273,6 @@ void PostProcessWorkbenchWindow::createActions() {
     styleAction_ = ribbonAction(this, commandIcon("style"), uiText(u"对象样式…"), uiText(u"编辑选中对象的颜色、网格和可见性"), QStringLiteral("postProcessObjectStyleAction"));
     parameterAction_ = ribbonAction(this, commandIcon("parameters"), uiText(u"编辑参数…"), uiText(u"编辑选中对象的专属参数草稿"), QStringLiteral("postProcessParametersAction"));
     auto *deepSeekAction = ribbonAction(this, commandIcon("harness"), uiText(u"DeepSeek"), uiText(u"打开 DeepSeek Harness，基于当前选择组织后处理任务"), uiText(u"postProcessHarnessAction"));
-    auto *geometryExportAction = ribbonAction(this, commandIcon("export"), uiText(u"特征几何"), uiText(u"导出切面、等值面等派生几何"), uiText(u"postProcessGeometryExportAction"));
     auto *animationExportAction = ribbonAction(this, commandIcon("trace"), uiText(u"时序动画"), uiText(u"导出当前时间序列动画"), uiText(u"postProcessAnimationExportAction"));
     auto *imageExportAction = ribbonAction(this, commandIcon("export"), uiText(u"保存图片"), uiText(u"设置并保存当前视图图片"), uiText(u"postProcessImageExportAction"));
     auto *selectAction = ribbonAction(this, commandIcon("select"), uiText(u"选择"), uiText(u"选择 Zone、图层或派生对象"), uiText(u"postProcessSelectAction"));
@@ -323,8 +321,7 @@ void PostProcessWorkbenchWindow::createActions() {
     auto *outputCategory = ribbonBar()->addCategoryPage(uiText(u"输出"));
     outputCategory->setObjectName(uiText(u"postProcessOutputCategory"));
     auto *outputPanel = outputCategory->addPanel(uiText(u"导出结果"));
-    outputPanel->addLargeAction(exportAction); outputPanel->addSmallAction(geometryExportAction);
-    outputPanel->addSmallAction(imageExportAction); outputPanel->addSmallAction(animationExportAction);
+    outputPanel->addLargeAction(imageExportAction); outputPanel->addLargeAction(animationExportAction);
 
     auto *toolsCategory = ribbonBar()->addCategoryPage(uiText(u"工具"));
     toolsCategory->setObjectName(uiText(u"postProcessToolsCategory"));
@@ -364,7 +361,6 @@ void PostProcessWorkbenchWindow::createActions() {
     statusBar()->addPermanentWidget(interactionHint, 1);
     const auto command = [this](const QString &key, const QString &message) { emit postProcessCommandRequested(key); appendMessage(message); };
     connect(importAction, &QAction::triggered, this, &PostProcessWorkbenchWindow::openImportDialog);
-    connect(exportAction, &QAction::triggered, this, [this] { openExportDialog(QStringLiteral("data")); });
     const auto setInteractionMode = [this, interactionHint](const QString &key, const QString &mode, const QString &hint) {
         interactionHint->setText(hint);
         if (auto *host = findChild<QWidget *>(QStringLiteral("postProcessViewportHost")))
@@ -380,7 +376,6 @@ void PostProcessWorkbenchWindow::createActions() {
     connect(frontAction, &QAction::triggered, this, [this] { emit viewRequested(uiText(u"front")); appendMessage(uiText(u"已切换至前视图。")); });
     connect(rightAction, &QAction::triggered, this, [this] { emit viewRequested(uiText(u"right")); appendMessage(uiText(u"已切换至右视图。")); });
     connect(topAction, &QAction::triggered, this, [this] { emit viewRequested(uiText(u"top")); appendMessage(uiText(u"已切换至俯视图。")); });
-    connect(geometryExportAction, &QAction::triggered, this, [this] { openExportDialog(QStringLiteral("geometry")); });
     connect(animationExportAction, &QAction::triggered, this, [this] { openExportDialog(QStringLiteral("animation")); });
     connect(imageExportAction, &QAction::triggered, this, [this] { openExportDialog(QStringLiteral("image")); });
     connect(colorAction, &QAction::triggered, this, [this] { openObjectParameters(true); });
@@ -540,33 +535,23 @@ void PostProcessWorkbenchWindow::openExportDialog(const QString &kind) {
     if (exportSetupDialog_) { exportSetupDialog_->raise(); exportSetupDialog_->activateWindow(); return; }
     auto *dialog = new QDialog(this); exportSetupDialog_ = dialog;
     dialog->setAttribute(Qt::WA_DeleteOnClose); dialog->setObjectName(QStringLiteral("postProcessExportSetupDialog"));
-    dialog->setWindowTitle(kind == "data" ? uiText(u"导出数据") : kind == "geometry" ? uiText(u"导出特征几何") : kind == "image" ? uiText(u"保存视图图片") : uiText(u"导出时序动画"));
+    dialog->setWindowTitle(kind == "image" ? uiText(u"保存视图图片") : uiText(u"导出时序动画"));
     dialog->resize(520,360);
     auto *layout = new QVBoxLayout(dialog); auto *form = new QFormLayout;
     auto *object = new QLineEdit(selectedName_,dialog); object->setReadOnly(true); object->setObjectName(QStringLiteral("postProcessExportObject"));
     form->addRow(uiText(u"当前对象"),object);
     auto *format = new QComboBox(dialog); format->setObjectName(QStringLiteral("postProcessExportFormat"));
-    if (kind == "data") format->addItems({"Tecplot", "CGNS", "Plot3D"});
-    else if (kind == "geometry") format->addItems({"VTK PolyData"});
-    else if (kind == "image") format->addItems({"PNG", "JPEG"});
+    if (kind == "image") format->addItems({"PNG", "JPEG"});
     else format->addItems({uiText(u"图像序列（待接入）"),uiText(u"动画（编码待定）")});
     form->addRow(uiText(u"目标格式"),format);
-    if (kind == "data") {
-        auto *fields = new QLineEdit(selectedContext_.value("field").toString(),dialog); fields->setObjectName(QStringLiteral("postProcessExportFields"));
-        fields->setPlaceholderText(uiText(u"选择字段（读取服务接入后提供）")); form->addRow(uiText(u"字段"),fields);
-        auto *time = new QComboBox(dialog); time->addItems({uiText(u"当前帧"),uiText(u"全部时间帧")}); form->addRow(uiText(u"时间范围"),time);
-    } else if (kind == "geometry") {
-        auto *hint = new QLabel(uiText(u"仅真实计算得到的几何可导出；当前对象为界面草稿。"),dialog); hint->setWordWrap(true); form->addRow(hint);
+    if (kind == "animation") {
+        auto *range = new QLineEdit(dialog); range->setPlaceholderText(uiText(u"起止时间待真实帧提供")); form->addRow(uiText(u"时间范围"),range);
+        auto *fps = new QSpinBox(dialog); fps->setRange(1,120); fps->setValue(24); fps->setObjectName(QStringLiteral("postProcessExportFps")); form->addRow(uiText(u"帧率"),fps);
     } else {
-        if (kind == "animation") {
-            auto *range = new QLineEdit(dialog); range->setPlaceholderText(uiText(u"起止时间待真实帧提供")); form->addRow(uiText(u"时间范围"),range);
-            auto *fps = new QSpinBox(dialog); fps->setRange(1,120); fps->setValue(24); fps->setObjectName(QStringLiteral("postProcessExportFps")); form->addRow(uiText(u"帧率"),fps);
-        } else {
-            auto *background = new QComboBox(dialog); background->addItems({uiText(u"当前背景"),uiText(u"透明背景（待接入）")}); form->addRow(uiText(u"背景"),background);
-        }
-        auto *width = new QSpinBox(dialog); width->setRange(1,8192); width->setValue(1920); width->setObjectName(QStringLiteral("postProcessExportWidth")); form->addRow(uiText(u"宽度"),width);
-        auto *height = new QSpinBox(dialog); height->setRange(1,8192); height->setValue(1080); height->setObjectName(QStringLiteral("postProcessExportHeight")); form->addRow(uiText(u"高度"),height);
+        auto *background = new QComboBox(dialog); background->addItems({uiText(u"当前背景"),uiText(u"透明背景（待接入）")}); form->addRow(uiText(u"背景"),background);
     }
+    auto *width = new QSpinBox(dialog); width->setRange(1,8192); width->setValue(1920); width->setObjectName(QStringLiteral("postProcessExportWidth")); form->addRow(uiText(u"宽度"),width);
+    auto *height = new QSpinBox(dialog); height->setRange(1,8192); height->setValue(1080); height->setObjectName(QStringLiteral("postProcessExportHeight")); form->addRow(uiText(u"高度"),height);
     layout->addLayout(form);
     auto *hint = new QLabel(uiText(u"导出服务尚未接入；此窗口只演示操作流程，不会写入文件。"),dialog); hint->setWordWrap(true); layout->addWidget(hint); layout->addStretch();
     auto *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel,dialog);
@@ -585,12 +570,8 @@ void PostProcessWorkbenchWindow::openExportDialog(const QString &kind) {
         }
 
         const QString selectedFormat = format->currentText();
-        if (selectedFormat == "Tecplot") picker->setNameFilter(uiText(u"Tecplot (*.dat)"));
-        else if (selectedFormat == "CGNS") picker->setNameFilter(uiText(u"CGNS (*.cgns)"));
-        else if (selectedFormat == "Plot3D") picker->setNameFilter(uiText(u"Plot3D (*.xyz)"));
-        else if (selectedFormat == "PNG") picker->setNameFilter(uiText(u"PNG (*.png)"));
+        if (selectedFormat == "PNG") picker->setNameFilter(uiText(u"PNG (*.png)"));
         else if (selectedFormat == "JPEG") picker->setNameFilter(uiText(u"JPEG (*.jpg *.jpeg)"));
-        else if (kind == "geometry") picker->setNameFilter(uiText(u"VTK PolyData (*.vtp)"));
         else picker->setNameFilter(uiText(u"所有文件 (*)"));
         connect(picker,&QFileDialog::fileSelected,dialog,[this,dialog,kind](const QString &path) {
             if (path.isEmpty()) return;
@@ -907,11 +888,9 @@ void PostProcessWorkbenchWindow::updateSelectionActions() {
     parameterAction_->setEnabled(derived || selectedKind_=="field" || selectedKind_=="curve");
     enable("postProcessColorAction",spatial && (scalar || vector),uiText(u"请先选择一个可着色的字段或空间对象。"));
     // Export actions open a request dialog; no file is written by the UI.
-    enable("postProcessExportAction",spatial,uiText(u"请先选择要导出的数据。"));
-    enable("postProcessGeometryExportAction",derived,uiText(u"请先选择特征对象。"));
     enable("postProcessAnimationExportAction",spatial && selectedContext_.value("frames").toInt()>1,uiText(u"请选择包含时间帧的数据。"));
     enable("postProcessImageExportAction",spatial,uiText(u"请选择要保存的视图。"));
-    for (const char *name : {"postProcessExportAction", "postProcessGeometryExportAction", "postProcessAnimationExportAction", "postProcessImageExportAction"}) {
+    for (const char *name : {"postProcessAnimationExportAction", "postProcessImageExportAction"}) {
         auto *action = findChild<QAction *>(QString::fromLatin1(name));
         if (action && action->isEnabled()) action->setToolTip(uiText(u"选择导出目标并提交请求；导出服务尚未接入，不会生成文件。"));
     }

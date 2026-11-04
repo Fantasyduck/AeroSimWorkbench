@@ -92,7 +92,7 @@ int main(int argc, char *argv[])
     play->click(); CHECK(playTimer->isActive());
     play->click(); CHECK(!playTimer->isActive());
     CHECK(action("postProcessContourAction")->isEnabled());
-    CHECK(action("postProcessExportAction")->isEnabled());
+    CHECK(!action("postProcessExportAction") && !action("postProcessGeometryExportAction"));
     CHECK(!action("postProcessConvertAction") && !action("postProcessExcelAction"));
     auto *host = window.findChild<QWidget *>("postProcessViewportHost");
     CHECK(host->property("backgroundBottom").value<QColor>()==QColor(255,255,255));
@@ -168,7 +168,6 @@ int main(int argc, char *argv[])
         CHECK(!action("postProcessSliceAction")->isEnabled());
         chooseObject(0); // A slice retains its source fields but has surface dimension.
         CHECK(action("postProcessIsoLineAction")->isEnabled() && !action("postProcessIsoAction")->isEnabled());
-        CHECK(action("postProcessGeometryExportAction")->isEnabled()); // Request only; no file is written.
     }
     chooseZone(0); action("postProcessContourAction")->trigger(); flush();
     CHECK(nav->currentIndex()==1 && parameters->isEnabled());
@@ -221,18 +220,15 @@ int main(int argc, char *argv[])
         auto *output = window.findChild<QDialog *>("postProcessExportSetupDialog"); CHECK(output);
         CHECK(output->findChild<QComboBox *>("postProcessExportFormat")); output->reject(); flush();
     }
-    chooseObject(0); action("postProcessGeometryExportAction")->trigger(); flush();
-    auto *geometry = window.findChild<QDialog *>("postProcessExportSetupDialog"); CHECK(geometry); geometry->reject(); flush();
-    chooseZone(0); action("postProcessExportAction")->trigger(); flush();
+    chooseZone(0); action("postProcessImageExportAction")->trigger(); flush();
     auto *exportSetup = window.findChild<QDialog *>("postProcessExportSetupDialog"); CHECK(exportSetup);
-    CHECK(capture(exportSetup,"data-export-setup"));
-    exportSetup->findChild<QComboBox *>("postProcessExportFormat")->setCurrentIndex(1);
+    CHECK(capture(exportSetup,"image-export-setup"));
     exportSetup->findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Ok)->click(); flush();
     fileDialog = window.findChild<QFileDialog *>("postProcessExportDialog"); CHECK(fileDialog);
     const QString outputDir = QDir(QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation)).filePath(QString::fromUtf8("AeroSimWorkbench/后处理"));
     CHECK(QDir::cleanPath(fileDialog->directory().absolutePath()) == QDir::cleanPath(outputDir));
-    fileDialog->fileSelected(QStringLiteral("/example/output.cgns"));
-    CHECK(exportKind=="data" && exportPath=="/example/output.cgns");
+    fileDialog->fileSelected(QStringLiteral("/example/output.png"));
+    CHECK(exportKind=="image" && exportPath=="/example/output.png");
     flush();
     chooseObject(0); parameters->trigger(); flush();
     auto *applyDialog = window.findChild<QDialog *>("postProcessParameterDialog"); CHECK(applyDialog);
