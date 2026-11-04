@@ -38,6 +38,7 @@ public:
 
 signals:
     void openPostProcessRequested();
+    void showStartupRequested();
     void navigationRequested(const QString &pageId, const QString &objectId, const QString &fieldKey);
     void parameterDraftChanged(const QString &pageId, const QVariantMap &values);
 
@@ -48,6 +49,7 @@ private:
     void selectPage(const QString &pageId);
     void switchNavigationForCategory(int index);
     void handleNavigationSelection(QTreeWidgetItem *item);
+    void showParameterDialog(const QString &pageId, const QString &title);
     void showWorkspacePage(const QString &pageId);
     void selectNavigationNode(QTreeWidget *tree, const QString &objectId);
     void restoreLayout();
@@ -71,11 +73,8 @@ private:
     WorkflowView workflowView_;
     QAction *runAction_ = nullptr;
     QTreeWidget *projectTree_ = nullptr;
-    QTreeWidget *monitorTree_ = nullptr;
-    QTreeWidget *dataTree_ = nullptr;
     QTreeWidget *workflowTree_ = nullptr;
     QTreeWidget *taskTree_ = nullptr;
-    QStackedWidget *navigationStack_ = nullptr;
     QStackedWidget *workspaceStack_ = nullptr;
     QWidget *viewportPage_ = nullptr;
     QWidget *stateListPage_ = nullptr;
@@ -83,6 +82,7 @@ private:
     QWidget *batchMonitorPage_ = nullptr;
     QWidget *taskMonitorPage_ = nullptr;
     QWidget *dataProcessPage_ = nullptr;
+    QHash<QString, QWidget *> workspacePages_;
     QTableWidget *stateTable_ = nullptr;
     QTableWidget *batchPlanTable_ = nullptr;
     QTableWidget *outputLogTable_ = nullptr;
@@ -111,6 +111,7 @@ private:
     int expandedOutputHeight_ = 140;
     bool outputCollapsed_ = false;
     bool projectEditingEnabled_ = false;
+    bool syncingRibbonTree_ = false;
     QHash<QString, QVariantMap> drafts_;
 };
 
