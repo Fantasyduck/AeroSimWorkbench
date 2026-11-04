@@ -23,18 +23,22 @@ class QFormLayout;
 class QDockWidget;
 
 namespace aerosim {
+class ComputeMonitorPage;
 
 // UI shell: business validation and persistence remain in injected services.
 class MainWindow final : public SARibbonMainWindow, public IWidgetHost {
     Q_OBJECT
 public:
     explicit MainWindow(QWidget *parent = nullptr);
+    ~MainWindow() override;
     QWidget *windowWidget() override { return this; }
     bool insertWidget(WidgetSlot slot, QWidget *widget) override;
     void bindServices(const ServiceBindings &services) override;
     void setRunContext(const RunRequest &request);
     void displayWorkflow(const WorkflowView &view);
     void displayTaskEvent(const TaskEvent &event);
+    ComputeMonitorPage *monitorPage() const { return monitorPage_; }
+    void showComputeMonitor();
 
 signals:
     void openPostProcessRequested();
@@ -46,6 +50,9 @@ private:
     void createRibbon();
     void applyWindowTheme(const QString &id);
     void createWorkspace();
+    void updateMonitorNavigation(const TaskRecord &record);
+    void clearMonitorNavigation();
+    void syncMonitorSelection(const QString &taskId, const QString &batchId);
     void selectPage(const QString &pageId);
     void switchNavigationForCategory(int index);
     void handleNavigationSelection(QTreeWidgetItem *item);
@@ -74,13 +81,21 @@ private:
     QAction *runAction_ = nullptr;
     QTreeWidget *projectTree_ = nullptr;
     QTreeWidget *workflowTree_ = nullptr;
-    QTreeWidget *taskTree_ = nullptr;
+    ComputeMonitorPage *monitorPage_ = nullptr;
+    QWidget *monitorWorkspace_ = nullptr;
+    QTreeWidgetItem *singleRuns_ = nullptr;
+    QTreeWidgetItem *batchRuns_ = nullptr;
+    QHash<QString, QTreeWidgetItem *> monitorTaskItems_;
+    QHash<QString, QTreeWidgetItem *> monitorBatchItems_;
+    QHash<QString, QString> monitorAttempts_;
+    quint64 serviceGeneration_ = 0;
+    bool monitorActive_ = false;
+    bool propertiesBeforeMonitor_ = true;
+    bool outputCollapsedBeforeMonitor_ = false;
     QStackedWidget *workspaceStack_ = nullptr;
     QWidget *viewportPage_ = nullptr;
     QWidget *stateListPage_ = nullptr;
     QWidget *batchPlanPage_ = nullptr;
-    QWidget *batchMonitorPage_ = nullptr;
-    QWidget *taskMonitorPage_ = nullptr;
     QWidget *dataProcessPage_ = nullptr;
     QHash<QString, QWidget *> workspacePages_;
     QTableWidget *stateTable_ = nullptr;
@@ -91,13 +106,10 @@ private:
     QDockWidget *outputDock_ = nullptr;
     QFormLayout *propertyForm_ = nullptr;
     QLabel *propertyTitle_ = nullptr;
+    QLabel *propertyNotice_ = nullptr;
     QLabel *suggestion_ = nullptr;
-    QLabel *monitorStatus_ = nullptr;
-    QLabel *monitorDetails_ = nullptr;
-    QLabel *taskMonitorTitle_ = nullptr;
     QLabel *outputTitle_ = nullptr;
     QLabel *status_ = nullptr;
-    QProgressBar *progress_ = nullptr;
     QPushButton *draftReset_ = nullptr;
     QPushButton *outputScopeReset_ = nullptr;
     QPushButton *outputCollapse_ = nullptr;

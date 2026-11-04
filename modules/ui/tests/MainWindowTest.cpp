@@ -1,4 +1,5 @@
 #include "aerosim/ui/MainWindow.h"
+#include "aerosim/ui/monitor/ComputeMonitorPage.h"
 #include "aerosim/ui/postprocess/PostProcessWorkbenchWindow.h"
 #include <QAction>
 #include <QSettings>
@@ -119,12 +120,24 @@ int main(int argc, char **argv)
     app.processEvents();
     if (!check(projectTree->currentItem() == calculationNode && calculationNode->isExpanded()
                && parameterNode->isExpanded(), "Ribbon location collapsed another module")) return 55;
+    // Task data comes from the provider; normal startup has no fabricated runs.
+    if (!check(calculationNode->child(1)->child(0)->childCount() == 0
+               && calculationNode->child(1)->child(1)->childCount() == 0,
+               "Normal startup must not populate mock monitoring tasks")) return 57;
+    for (const QString &id : {QStringLiteral("Run_001"), QStringLiteral("Task_001"),
+                             QStringLiteral("Task_002"), QStringLiteral("Task_003")}) {
+        aerosim::TaskRecord record;
+        record.taskId = id;
+        record.batchId = id.startsWith("Task") ? QStringLiteral("BatchRun_001") : QString();
+        record.status = aerosim::TaskStatus::Preparing;
+        window.monitorPage()->upsertTask(record);
+    }
     auto *rememberedMonitorItem = calculationNode->child(1)->child(0)->child(0);
     projectTree->setCurrentItem(rememberedMonitorItem);
     window.ribbonBar()->raiseCategory(window.findChild<SARibbonCategory *>("intelligentDataCategory"));
     app.processEvents();
     if (!check(projectTree->currentItem() == intelligentDataNode
-               && workspace->currentWidget()->objectName() == "taskMonitorPage",
+               && workspace->currentWidget()->objectName() == "monitorWorkspace",
                "Reserved data entry must not replace the current page")) return 53;
     window.ribbonBar()->raiseCategory(window.findChild<SARibbonCategory *>("postprocessAnalysisCategory"));
     app.processEvents();
@@ -132,8 +145,9 @@ int main(int argc, char **argv)
     window.ribbonBar()->raiseCategory(preprocess);
     app.processEvents();
     if (!check(projectTree->currentItem() == preprocessNode
-               && workspace->currentWidget()->objectName() == "taskMonitorPage",
+               && workspace->currentWidget()->objectName() == "monitorWorkspace",
                "Preprocess Ribbon tab must retain the persistent main display")) return 51;
+    projectTree->setCurrentItem(preprocessNode->child(0)->child(0));
     window.show();
     app.processEvents();
     auto *projectDock = window.findChild<QDockWidget *>("projectDock");
@@ -206,16 +220,16 @@ int main(int argc, char **argv)
     auto *batchTaskItem = batchRunItem->child(0);
     projectTree->setCurrentItem(batchRunItem);
     app.processEvents();
-    if (!check(workspace->currentWidget()->objectName() == "batchMonitorPage"
+    if (!check(workspace->currentWidget()->objectName() == "monitorWorkspace"
                && window.findChild<QLabel *>("outputTitle")->text().contains("BatchRun_001")
-               && window.findChild<QTreeWidget *>("taskTree")->topLevelItemCount() == 3,
+               && window.findChild<QTableWidget *>("monitorBatchChildren")->rowCount() == 3,
                "BatchRun selection did not open the integrated batch monitor")) return 48;
     projectTree->setCurrentItem(batchTaskItem);
     app.processEvents();
-    if (!check(workspace->currentWidget()->objectName() == "taskMonitorPage"
-               && window.findChild<QLabel *>("taskMonitorTitle")->text().contains("Task_001")
-               && window.findChild<QWidget *>("convergenceCurvePanel")
-               && window.findChild<QLabel *>("taskResourceSummary")
+    if (!check(workspace->currentWidget()->objectName() == "monitorWorkspace"
+               && window.findChild<QLabel *>("monitorTaskTitle")->text().contains("Task_001")
+               && window.findChild<QWidget *>("monitorCurveLogSplit")
+               && window.monitorPage()->selectedTaskId() == "Task_001"
                && window.findChild<QLabel *>("outputTitle")->text().contains("Task_001"),
                "Task selection did not open the integrated monitor and scoped output")) return 49;
     for (auto *action : window.findChildren<QAction *>()) {
@@ -297,11 +311,8 @@ int main(int argc, char **argv)
     window.displayTaskEvent(event);
     event.status = aerosim::TaskStatus::Finished;
     window.displayTaskEvent(event);
-    QTreeWidgetItem *taskRow = nullptr;
-    auto *taskTree = window.findChild<QTreeWidget *>("taskTree");
-    for (int row = 0; row < taskTree->topLevelItemCount(); ++row)
-        if (taskTree->topLevelItem(row)->text(0) == "test-task") taskRow = taskTree->topLevelItem(row);
-    if (!check(taskRow && taskTree->topLevelItemCount() == 4, "Task rows not updated by id")) return 7;
+    if (!check(window.monitorPage()->taskRecord("test-task").status == aerosim::TaskStatus::Finished,
+               "Task records not updated by id")) return 7;
     QTreeWidgetItem *navigationTask = nullptr;
     for (QTreeWidgetItemIterator it(projectTree); *it; ++it)
         if ((*it)->data(0, Qt::UserRole + 1).toString() == "test-task") navigationTask = *it;

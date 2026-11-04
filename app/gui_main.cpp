@@ -4,6 +4,9 @@
 #include "aerosim/ui/postprocess/PostProcessWorkbenchWindow.h"
 #include "aerosim/ui/MainWindow.h"
 #include "aerosim/ui/StartupLandingPage.h"
+#ifndef AEROSIM_POSTPROCESS_STANDALONE
+#include "../demos/monitor/MonitorDemo.h"
+#endif
 #include <QPixmap>
 
 #ifdef AEROSIM_HAS_VTK_VIEWER
@@ -45,6 +48,11 @@ int main(int argc, char *argv[])
         controller.workflow(), controller.tasks(), nullptr, nullptr, nullptr, nullptr};
 #ifndef AEROSIM_POSTPROCESS_STANDALONE
     window.bindServices(bindings);
+    if (app.arguments().contains(QStringLiteral("--monitor-demo"))) {
+        aerosim::populateMonitorDemo(window.monitorPage());
+        window.setWindowTitle(QStringLiteral(u"AeroSimWorkbench · 计算监控联动演示（无真实求解）"));
+        window.showComputeMonitor();
+    } else if (app.arguments().contains(QStringLiteral("--monitor"))) window.showComputeMonitor();
 #endif
     postprocess.bindServices(bindings);
 #ifndef AEROSIM_POSTPROCESS_STANDALONE
@@ -103,7 +111,9 @@ int main(int argc, char *argv[])
 #else
     QWidget *initialWindow = app.arguments().contains(QStringLiteral("--postprocess"))
         ? static_cast<QWidget *>(&postprocess)
-        : app.arguments().contains(QStringLiteral("--workbench"))
+        : (app.arguments().contains(QStringLiteral("--workbench"))
+           || app.arguments().contains(QStringLiteral("--monitor"))
+           || app.arguments().contains(QStringLiteral("--monitor-demo")))
             ? static_cast<QWidget *>(&window) : static_cast<QWidget *>(&landing);
 #endif
     initialWindow->show();

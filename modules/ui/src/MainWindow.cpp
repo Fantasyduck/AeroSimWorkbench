@@ -1,4 +1,6 @@
 #include "aerosim/ui/MainWindow.h"
+#include "aerosim/ui/monitor/ComputeMonitorPage.h"
+#include <QSignalBlocker>
 
 #include <SARibbonBar.h>
 #include <SARibbonCategory.h>
@@ -155,6 +157,76 @@ MainWindow::MainWindow(QWidget *parent) : SARibbonMainWindow(initializeRibbonRes
     });
     restoreLayout();
     appendMessage(uiText(u"\u4e3b\u754c\u9762\u5df2\u5c31\u7eea\u3002\u5de5\u4f5c\u533a\u6811\u4e0e\u53c2\u6570\u4e3a\u754c\u9762\u793a\u4f8b\uff1b\u5c1a\u672a\u63a5\u5165\u5de5\u4f5c\u533a\u3001\u914d\u7f6e\u3001VTK \u548c\u771f\u5b9e\u6c42\u89e3\u670d\u52a1\u3002"));
+}
+
+MainWindow::~MainWindow()
+{
+    disconnect(projectTree_, nullptr, this, nullptr);
+    disconnect(monitorPage_, nullptr, this, nullptr);
+}
+
+void MainWindow::showComputeMonitor()
+{
+    syncingRibbonTree_ = true;
+    if (auto *category = findChild<SARibbonCategory *>("calculationCategory")) ribbonBar()->raiseCategory(category);
+    syncingRibbonTree_ = false;
+    showWorkspacePage(QStringLiteral("task-monitor"));
+    syncMonitorSelection(monitorPage_->selectedTaskId(), monitorPage_->selectedBatchId());
+}
+
+void MainWindow::updateMonitorNavigation(const TaskRecord &record)
+{
+    QSignalBlocker blocker(projectTree_);
+    auto *parent = singleRuns_;
+    if (!record.batchId.isEmpty()) {
+        parent = monitorBatchItems_.value(record.batchId);
+        if (!parent) {
+            parent = addNavigationItem(batchRuns_, record.batchId, "batch-run", record.batchId, "batch-run");
+            monitorBatchItems_.insert(record.batchId, parent);
+            parent->setExpanded(true);
+        }
+    }
+    auto *item = monitorTaskItems_.value(record.taskId);
+    if (!item) {
+        item = addNavigationItem(parent, record.taskId, "task", record.taskId, "task");
+        monitorTaskItems_.insert(record.taskId, item);
+    } else if (item->parent() != parent) {
+        const bool selected = projectTree_->currentItem() == item;
+        item->parent()->takeChild(item->parent()->indexOfChild(item));
+        parent->addChild(item);
+        if (selected) projectTree_->setCurrentItem(item);
+    }
+    setTaskItemStatus(item, record.status);
+    item->setText(0, record.taskId + QStringLiteral(u" · ") + taskStatus(record.status));
+    item->setToolTip(0, QStringLiteral(u"任务：%1\n工况：%2\n状态：%3").arg(record.taskId, record.caseId, taskStatus(record.status)));
+    if (currentPage_ == "task|" + record.taskId) selectPage(currentPage_);
+}
+
+void MainWindow::clearMonitorNavigation()
+{
+    QSignalBlocker blocker(projectTree_);
+    qDeleteAll(singleRuns_->takeChildren());
+    qDeleteAll(batchRuns_->takeChildren());
+    monitorTaskItems_.clear();
+    monitorBatchItems_.clear();
+    monitorAttempts_.clear();
+}
+
+void MainWindow::syncMonitorSelection(const QString &taskId, const QString &batchId)
+{
+    if (taskId.isEmpty() && batchId.isEmpty() && !monitorActive_
+        && !currentPage_.startsWith("task|") && !currentPage_.startsWith("batch-run|")) return;
+    auto *item = taskId.isEmpty() ? monitorBatchItems_.value(batchId) : monitorTaskItems_.value(taskId);
+    if (item) {
+        QSignalBlocker blocker(projectTree_);
+        for (auto *parent = item->parent(); parent; parent = parent->parent()) parent->setExpanded(true);
+        projectTree_->setCurrentItem(item);
+        projectTree_->scrollToItem(item);
+    }
+    if (!taskId.isEmpty()) selectPage("task|" + taskId);
+    else if (!batchId.isEmpty()) selectPage("batch-run|" + batchId);
+    else selectPage("task-monitor");
+    setOutputScope(taskId.isEmpty() ? (batchId.isEmpty() ? QStringLiteral("current-project") : batchId) : taskId);
 }
 
 void MainWindow::createRibbon()
@@ -515,31 +587,25 @@ void MainWindow::createWorkspace()
     newPlan->setToolTip(uiText(u"\u7b49\u5f85\u5de5\u4f5c\u533a\u4e0e\u6279\u5904\u7406\u670d\u52a1\u63a5\u5165"));
     batchLayout->addWidget(newPlan, 0, Qt::AlignLeft);
 
-    batchMonitorPage_ = createWorkspacePage(QStringLiteral("batchMonitorPage"), uiText(u"\u6279\u5904\u7406\u603b\u4f53\u76d1\u63a7"),
-        uiText(u"Mock \u754c\u9762\u793a\u4f8b\uff1a3 \u4e2a\u5b50\u4efb\u52a1\uff0c\u5df2\u5b8c\u6210 1\uff0c\u8fd0\u884c\u4e2d 1\uff0c\u7b49\u5f85 1\uff0c\u5931\u8d25 0\u3002\u5c1a\u672a\u63a5\u5165\u771f\u5b9e BatchRun \u6570\u636e\u3002"));
-    auto *batchMonitorLayout = qobject_cast<QVBoxLayout *>(batchMonitorPage_->layout());
-    auto *batchProgress = new QProgressBar(batchMonitorPage_);
-    batchProgress->setObjectName(QStringLiteral("batchRunProgress"));
-    batchProgress->setRange(0, 3);
-    batchProgress->setValue(1);
-    batchProgress->setFormat(uiText(u"Mock \u793a\u4f8b\uff1a%v / %m \u5df2\u5b8c\u6210"));
-    batchMonitorLayout->addWidget(batchProgress);
-    auto *batchSummary = new QLabel(uiText(u"\u603b\u6570 3    \u8fd0\u884c\u4e2d 1    \u5df2\u5b8c\u6210 1    \u5931\u8d25 0    \u7b49\u5f85 1    \uff08Mock\uff09"), batchMonitorPage_);
-    batchSummary->setObjectName(QStringLiteral("batchRunSummary"));
-    batchMonitorLayout->addWidget(batchSummary);
-    batchMonitorLayout->addStretch();
-    taskMonitorPage_ = createWorkspacePage(QStringLiteral("taskMonitorPage"), uiText(u"\u5355\u4efb\u52a1\u76d1\u63a7"),
-        uiText(u"\u7efc\u5408\u663e\u793a\u4efb\u52a1\u8fdb\u5ea6\u3001\u6536\u655b\u8d8b\u52bf\u548c\u8d44\u6e90\u4fe1\u606f\u3002\u672a\u63a5\u5165\u771f\u5b9e\u6570\u636e\u7684\u5b57\u6bb5\u5747\u6807\u8bb0\u4e3a Mock\u3002"));
+    monitorWorkspace_ = createSlot(WidgetSlot::Monitor, {});
+    monitorWorkspace_->setObjectName(QStringLiteral("monitorWorkspace"));
+    auto *monitorLayout = slotLayouts_.value(static_cast<int>(WidgetSlot::Monitor));
+    auto *placeholder = monitorLayout->takeAt(0);
+    delete placeholder->widget();
+    delete placeholder;
+    monitorPage_ = new ComputeMonitorPage(monitorWorkspace_);
+    monitorPage_->setTaskNavigationVisible(false);
+    monitorLayout->addWidget(monitorPage_);
     dataProcessPage_ = createWorkspacePage(QStringLiteral("dataProcessPage"), uiText(u"\u6570\u636e\u5904\u7406\u5de5\u4f5c\u533a"),
         uiText(u"\u591a\u5de5\u51b5\u6570\u636e\u3001\u516d\u5206\u91cf\u6570\u636e\u4e0e\u5206\u6790\u4efb\u52a1\u7684\u754c\u9762\u5165\u53e3\u3002\u672c\u9636\u6bb5\u4e0d\u6267\u884c\u8235\u6548\u6216\u6c14\u52a8\u529b\u5206\u6790\u7b97\u6cd5\u3002"));
     qobject_cast<QVBoxLayout *>(dataProcessPage_->layout())->addStretch();
-    for (auto *page : {stateListPage_, batchPlanPage_, batchMonitorPage_, taskMonitorPage_, dataProcessPage_})
+    for (auto *page : {stateListPage_, batchPlanPage_, monitorWorkspace_, dataProcessPage_})
         workspaceStack_->addWidget(page);
     workspacePages_.insert(QStringLiteral("viewport"), viewportPage_);
     workspacePages_.insert(QStringLiteral("states"), stateListPage_);
     workspacePages_.insert(QStringLiteral("batch-plan"), batchPlanPage_);
-    workspacePages_.insert(QStringLiteral("batch-monitor"), batchMonitorPage_);
-    workspacePages_.insert(QStringLiteral("task-monitor"), taskMonitorPage_);
+    workspacePages_.insert(QStringLiteral("batch-monitor"), monitorWorkspace_);
+    workspacePages_.insert(QStringLiteral("task-monitor"), monitorWorkspace_);
     workspacePages_.insert(QStringLiteral("data-process"), dataProcessPage_);
     const struct PlaceholderPage { const char *id; const char16_t *title; const char16_t *description; } placeholderPages[] = {
         {"mesh-transform", u"\u7f51\u683c\u53d8\u6362", u"\u914d\u7f6e\u7f51\u683c\u5e73\u79fb\u3001\u65cb\u8f6c\u4e0e\u7f29\u653e\u3002\u5f53\u524d\u4ec5\u4fdd\u7559 UI \u5165\u53e3\uff0c\u4e0d\u6267\u884c\u7f51\u683c\u64cd\u4f5c\u3002"},
@@ -566,6 +632,7 @@ void MainWindow::createWorkspace()
     projectDock_->setMinimumWidth(220);
     projectTree_ = new QTreeWidget(projectDock_);
     projectTree_->setObjectName(QStringLiteral("workspaceTree"));
+    projectTree_->setIndentation(14);
     projectTree_->setHeaderHidden(true);
     auto *root = new QTreeWidgetItem(projectTree_, {uiText(u"\u5de5\u4f5c\u533a Workspace\uff08\u672a\u6253\u5f00\uff09")});
     root->setData(0, NodeTypeRole, QStringLiteral("workspace-root"));
@@ -606,17 +673,11 @@ void MainWindow::createWorkspace()
     addNavigationItem(startCalculation, uiText(u"\u5355\u6b21\u8ba1\u7b97"), QStringLiteral("single-calculation"), QStringLiteral("single-calculation"), QStringLiteral("feature"));
     addNavigationItem(startCalculation, uiText(u"\u6279\u91cf\u8ba1\u7b97"), QStringLiteral("batch-calculation"), QStringLiteral("batch-calculation"), QStringLiteral("feature"));
     auto *calculationMonitor = addNavigationItem(calculationModule, uiText(u"\u8ba1\u7b97\u76d1\u63a7"), {}, QStringLiteral("calculation-monitor"), QStringLiteral("group"));
-    auto *singleRuns = addNavigationItem(calculationMonitor, uiText(u"\u5355\u6b21\u8ba1\u7b97\u4efb\u52a1"), {}, QStringLiteral("single-runs"), QStringLiteral("group"));
-    auto *run = addNavigationItem(singleRuns, uiText(u"Run_001\uff08Mock \u793a\u4f8b\uff09"), QStringLiteral("task"), QStringLiteral("Run_001"), QStringLiteral("task"));
-    setTaskItemStatus(run, TaskStatus::Running);
-    auto *batchRuns = addNavigationItem(calculationMonitor, uiText(u"\u6279\u5904\u7406\u4efb\u52a1"), {}, QStringLiteral("batch-runs"), QStringLiteral("group"));
-    auto *batchRun = addNavigationItem(batchRuns, uiText(u"BatchRun_001\uff08Mock \u793a\u4f8b\uff09"), QStringLiteral("batch-run"), QStringLiteral("BatchRun_001"), QStringLiteral("batch-run"));
-    setTaskItemStatus(batchRun, TaskStatus::Running);
-    for (int i = 1; i <= 3; ++i) {
-        const QString id = QStringLiteral("Task_%1").arg(i, 3, 10, QLatin1Char('0'));
-        auto *task = addNavigationItem(batchRun, id + uiText(u"\uff08Mock \u793a\u4f8b\uff09"), QStringLiteral("task"), id, QStringLiteral("task"));
-        setTaskItemStatus(task, i == 1 ? TaskStatus::Finished : i == 2 ? TaskStatus::Running : TaskStatus::Preparing);
-    }
+    singleRuns_ = addNavigationItem(calculationMonitor, QStringLiteral(u"单次计算任务"), QStringLiteral("task-monitor"), QStringLiteral("single-runs"), QStringLiteral("group"));
+    batchRuns_ = addNavigationItem(calculationMonitor, QStringLiteral(u"批处理任务"), QStringLiteral("task-monitor"), QStringLiteral("batch-runs"), QStringLiteral("group"));
+    calculationMonitor->setData(0, PageRole, QStringLiteral("task-monitor"));
+    singleRuns_->setExpanded(true);
+    batchRuns_->setExpanded(true);
     addNavigationItem(root, uiText(u"\u667a\u80fd\u6570\u636e\u5904\u7406"), {}, QStringLiteral("module-intelligent-data"), QStringLiteral("module"));
     addNavigationItem(root, uiText(u"\u540e\u5904\u7406\u5206\u6790"), {}, QStringLiteral("module-postprocess-analysis"), QStringLiteral("module"));
     root->setExpanded(true);
@@ -660,6 +721,7 @@ void MainWindow::createWorkspace()
     propertyTitle_->setObjectName(QStringLiteral("propertyTitle"));
     propertyLayout->addWidget(propertyTitle_);
     auto *notice = new QLabel(uiText(u"\u53c2\u6570\u8349\u7a3f\u793a\u4f8b \u00b7 \u4ec5\u4fdd\u5b58\u5728\u5f53\u524d\u7a97\u53e3\n\u672a\u6253\u5f00\u771f\u5b9e\u5de5\u4f5c\u533a\u65f6\u7f16\u8f91\u63a7\u4ef6\u9501\u5b9a"), properties);
+    propertyNotice_ = notice;
     notice->setWordWrap(true);
     propertyLayout->addWidget(notice);
     propertyForm_ = new QFormLayout;
@@ -672,67 +734,6 @@ void MainWindow::createWorkspace()
     propertyLayout->addWidget(draftReset_);
     propertyDock_->setWidget(properties);
     selectPage(QStringLiteral("viewport"));
-
-    // Reuse the existing monitor slot and task list in the right-hand monitor
-    // workspaces. The bottom dock is reserved for unified runtime output.
-    auto *taskMonitorLayout = qobject_cast<QVBoxLayout *>(taskMonitorPage_->layout());
-    taskMonitorTitle_ = new QLabel(uiText(u"Task_001 \u00b7 \u8fd0\u884c\u4e2d\uff08Mock\uff09"), taskMonitorPage_);
-    taskMonitorTitle_->setObjectName(QStringLiteral("taskMonitorTitle"));
-    QFont taskTitleFont = taskMonitorTitle_->font();
-    taskTitleFont.setPointSize(taskTitleFont.pointSize() + 2);
-    taskTitleFont.setBold(true);
-    taskMonitorTitle_->setFont(taskTitleFont);
-    taskMonitorLayout->addWidget(taskMonitorTitle_);
-    auto *monitorSlot = createSlot(WidgetSlot::Monitor, {});
-    monitorSlot->setObjectName(QStringLiteral("monitorWorkspaceSlot"));
-    auto *monitorLayout = slotLayouts_.value(static_cast<int>(WidgetSlot::Monitor));
-    auto *oldMonitorItem = monitorLayout->takeAt(0);
-    delete oldMonitorItem->widget();
-    delete oldMonitorItem;
-    auto *monitor = new QFrame(monitorSlot);
-    monitor->setObjectName(QStringLiteral("taskMetricsFrame"));
-    monitor->setFrameShape(QFrame::StyledPanel);
-    auto *monitorForm = new QFormLayout(monitor);
-    monitorStatus_ = new QLabel(uiText(u"Running\uff08Mock\uff09"), monitor);
-    monitorDetails_ = new QLabel(uiText(u"\u5f53\u524d\u8fed\u4ee3\uff1a1250    \u603b\u8fed\u4ee3\uff1a10000    \u6b8b\u5dee\uff1a1.2e-4\uff08Mock\uff09"), monitor);
-    progress_ = new QProgressBar(monitor);
-    progress_->setRange(0, 1000);
-    progress_->setValue(125);
-    progress_->setFormat(uiText(u"12.5%\uff08Mock\uff09"));
-    monitorForm->addRow(uiText(u"\u8fd0\u884c\u72b6\u6001"), monitorStatus_);
-    monitorForm->addRow(uiText(u"\u8fed\u4ee3\u4fe1\u606f"), monitorDetails_);
-    monitorForm->addRow(uiText(u"\u8ba1\u7b97\u8fdb\u5ea6"), progress_);
-    monitorLayout->addWidget(monitor);
-    taskMonitorLayout->addWidget(monitorSlot);
-    auto *curveFrame = new QFrame(taskMonitorPage_);
-    curveFrame->setObjectName(QStringLiteral("convergenceCurvePanel"));
-    curveFrame->setFrameShape(QFrame::StyledPanel);
-    curveFrame->setMinimumHeight(150);
-    auto *curveLayout = new QVBoxLayout(curveFrame);
-    auto *curveTitle = new QLabel(uiText(u"\u6536\u655b\u66f2\u7ebf"), curveFrame);
-    QFont curveTitleFont = curveTitle->font();
-    curveTitleFont.setBold(true);
-    curveTitle->setFont(curveTitleFont);
-    curveLayout->addWidget(curveTitle);
-    curveLayout->addWidget(emptyState(uiText(u"Mock \u66f2\u7ebf\u533a\u57df\n\u7b49\u5f85\u6b8b\u5dee\u91c7\u6837\u6570\u636e\u4e0e\u66f2\u7ebf\u7ec4\u4ef6\u63a5\u5165"), curveFrame), 1);
-    taskMonitorLayout->addWidget(curveFrame, 1);
-    auto *resourceSummary = new QLabel(uiText(u"CPU 76%    \u5185\u5b58 18.3 GB    MPI 32    \u8ba1\u7b97\u65f6\u95f4 00:12:35    \uff08Mock\uff09"), taskMonitorPage_);
-    resourceSummary->setObjectName(QStringLiteral("taskResourceSummary"));
-    taskMonitorLayout->addWidget(resourceSummary);
-
-    taskTree_ = new QTreeWidget(batchMonitorPage_);
-    taskTree_->setObjectName(QStringLiteral("taskTree"));
-    taskTree_->setHeaderLabels({uiText(u"\u4efb\u52a1 ID"), uiText(u"\u72b6\u6001"), uiText(u"\u6d88\u606f"), uiText(u"\u65f6\u95f4")});
-    taskTree_->header()->setSectionResizeMode(QHeaderView::ResizeToContents);
-    taskTree_->header()->setSectionResizeMode(2, QHeaderView::Stretch);
-    taskTree_->setAlternatingRowColors(true);
-    new QTreeWidgetItem(taskTree_, {QStringLiteral("Task_001"), uiText(u"\u5df2\u5b8c\u6210\uff08Mock\uff09"), uiText(u"\u793a\u4f8b\u5b50\u4efb\u52a1"), QStringLiteral("00:08:21")});
-    new QTreeWidgetItem(taskTree_, {QStringLiteral("Task_002"), uiText(u"\u8fd0\u884c\u4e2d\uff08Mock\uff09"), uiText(u"\u793a\u4f8b\u5b50\u4efb\u52a1"), QStringLiteral("00:04:10")});
-    new QTreeWidgetItem(taskTree_, {QStringLiteral("Task_003"), uiText(u"\u51c6\u5907\u4e2d\uff08Mock\uff09"), uiText(u"\u793a\u4f8b\u5b50\u4efb\u52a1"), QStringLiteral("--")});
-    connect(taskTree_, &QTreeWidget::currentItemChanged, this, [this](QTreeWidgetItem *item) {
-        if (item) selectNavigationNode(projectTree_, item->text(0));
-    });
-    batchMonitorLayout->insertWidget(batchMonitorLayout->count() - 1, taskTree_, 1);
 
     outputDock_ = new QDockWidget(uiText(u"\u8f93\u51fa"), this);
     outputDock_->setObjectName(QStringLiteral("outputDock"));
@@ -852,11 +853,10 @@ void MainWindow::createWorkspace()
     appendLog(QStringLiteral("INFO"), QStringLiteral("Mesh"), uiText(u"Mock\uff1a\u7f51\u683c\u6587\u4ef6\u52a0\u8f7d\u5b8c\u6210"), QStringLiteral("current-project"));
     appendLog(QStringLiteral("WARN"), QStringLiteral("Validation"), uiText(u"Mock\uff1a\u5de5\u51b5\u53c2\u6570\u5c1a\u672a\u5b8c\u6210\u6821\u9a8c"), QStringLiteral("current-project"));
     appendLog(QStringLiteral("ERROR"), QStringLiteral("Solver"), uiText(u"Mock\uff1a\u6c42\u89e3\u5668\u8f93\u5165\u6587\u4ef6\u4e0d\u5b58\u5728"), QStringLiteral("current-project"));
-    appendLog(QStringLiteral("INFO"), QStringLiteral("Task"), uiText(u"Mock\uff1aTask_001 \u5df2\u542f\u52a8"), QStringLiteral("Task_001"));
-    appendLog(QStringLiteral("WARN"), QStringLiteral("Task"), uiText(u"Mock\uff1aTask_001 \u6536\u655b\u901f\u5ea6\u4f4e\u4e8e\u9884\u671f"), QStringLiteral("Task_001"));
-    appendLog(QStringLiteral("INFO"), QStringLiteral("Batch"), uiText(u"Mock\uff1aBatchRun_001 \u5df2\u521b\u5efa 3 \u4e2a\u5b50\u4efb\u52a1"), QStringLiteral("BatchRun_001"));
-    appendLog(QStringLiteral("DEBUG"), QStringLiteral("Task"), uiText(u"Mock\uff1aTask_002 \u7b49\u5f85\u8d44\u6e90"), QStringLiteral("Task_002"));
     setOutputScope(QStringLiteral("current-project"));
+    connect(monitorPage_, &ComputeMonitorPage::taskChanged, this, &MainWindow::updateMonitorNavigation);
+    connect(monitorPage_, &ComputeMonitorPage::tasksCleared, this, &MainWindow::clearMonitorNavigation);
+    connect(monitorPage_, &ComputeMonitorPage::selectionContextChanged, this, &MainWindow::syncMonitorSelection);
 }
 
 void MainWindow::switchNavigationForCategory(int index)
@@ -903,6 +903,7 @@ void MainWindow::handleNavigationSelection(QTreeWidgetItem *item)
     }
     const QString page = item->data(0, PageRole).toString();
     if (page.isEmpty()) return;
+    if (page == QStringLiteral("task-monitor")) { monitorPage_->clearSelection(); showComputeMonitor(); return; }
     const QString objectId = item->data(0, ObjectIdRole).toString();
     if (page == QStringLiteral("parameter-dialog")) {
         selectPage(page + QLatin1Char('|') + objectId);
@@ -918,11 +919,12 @@ void MainWindow::handleNavigationSelection(QTreeWidgetItem *item)
     else if (page == QStringLiteral("batch-plans") || page == QStringLiteral("batch-plan")) showWorkspacePage(QStringLiteral("batch-plan"));
     else if (page == QStringLiteral("batch-run")) {
         showWorkspacePage(QStringLiteral("batch-monitor"));
+        monitorPage_->selectBatch(objectId);
         setOutputScope(objectId);
     } else if (page == QStringLiteral("task")) {
         showWorkspacePage(QStringLiteral("task-monitor"));
         setOutputScope(objectId);
-        if (taskMonitorTitle_) taskMonitorTitle_->setText(objectId + uiText(u" \u00b7 \u7efc\u5408\u76d1\u63a7\uff08Mock\uff09"));
+        monitorPage_->selectTask(objectId);
     }
     else if (workspacePages_.contains(page)) showWorkspacePage(page);
     else if (page == QStringLiteral("dataset") || page == QStringLiteral("data-process")) showWorkspacePage(QStringLiteral("data-process"));
@@ -934,7 +936,30 @@ void MainWindow::handleNavigationSelection(QTreeWidgetItem *item)
 
 void MainWindow::showWorkspacePage(const QString &pageId)
 {
-    if (auto *target = workspacePages_.value(pageId, nullptr)) workspaceStack_->setCurrentWidget(target);
+    if (auto *target = workspacePages_.value(pageId, nullptr)) {
+        const bool enteringMonitor = target == monitorWorkspace_;
+        if (enteringMonitor != monitorActive_) {
+            if (enteringMonitor) {
+                propertiesBeforeMonitor_ = !propertyDock_->isHidden();
+                outputCollapsedBeforeMonitor_ = outputCollapsed_;
+                propertyDock_->hide();
+                setOutputCollapsed(true);
+                resizeDocks({projectDock_}, {260}, Qt::Horizontal);
+                // Dock relayout and the deferred theme application can change
+                // the tree viewport. Locate the selection after they finish.
+                QTimer::singleShot(0, this, [this] {
+                    if (!monitorActive_) return;
+                    resizeDocks({projectDock_}, {260}, Qt::Horizontal);
+                    if (auto *item = projectTree_->currentItem()) projectTree_->scrollToItem(item);
+                });
+            } else {
+                propertyDock_->setVisible(propertiesBeforeMonitor_);
+                setOutputCollapsed(outputCollapsedBeforeMonitor_);
+            }
+            monitorActive_ = enteringMonitor;
+        }
+        workspaceStack_->setCurrentWidget(target);
+    }
 }
 
 void MainWindow::showParameterDialog(const QString &pageId, const QString &title)
@@ -1036,6 +1061,9 @@ void MainWindow::selectNavigationNode(QTreeWidget *tree, const QString &objectId
 void MainWindow::selectPage(const QString &pageId)
 {
     currentPage_ = pageId;
+    const bool monitorProperty = pageId.startsWith("task|") || pageId.startsWith("batch-run|") || pageId == "task-monitor";
+    propertyNotice_->setVisible(!monitorProperty);
+    draftReset_->setVisible(!monitorProperty);
     const QString pageType = pageId.section(QLatin1Char('|'), 0, 0);
     const QString objectId = pageId.section(QLatin1Char('|'), 1, 1);
     while (propertyForm_->rowCount()) propertyForm_->removeRow(0);
@@ -1107,7 +1135,25 @@ void MainWindow::selectPage(const QString &pageId)
             {uiText(u"\u6267\u884c\u7b56\u7565"), uiText(u"\u987a\u5e8f\u6267\u884c\uff08\u754c\u9762\u793a\u4f8b\uff09")},
             {uiText(u"\u5de5\u51b5\u6570\u91cf"), QStringLiteral("3")}, {uiText(u"\u6821\u9a8c\u72b6\u6001"), uiText(u"\u5f85\u4e1a\u52a1\u670d\u52a1\u786e\u8ba4")}};
         for (const auto &value : values) propertyForm_->addRow(value.first, new QLabel(value.second, this));
-    } else if (pageType == "batch-run" || pageType == "task" || pageType == "dataset" || pageType == "data-process") {
+    } else if (pageType == "task") {
+        const auto record = monitorPage_->taskRecord(objectId);
+        QVariantMap values = monitorPage_->taskParameters(objectId);
+        values.insert(QStringLiteral(u"任务"), objectId);
+        values.insert(QStringLiteral(u"状态"), taskStatus(record.status));
+        values.insert(QStringLiteral(u"工况"), record.caseId);
+        values.insert(QStringLiteral(u"批次"), record.batchId);
+        values.insert(QStringLiteral(u"输入快照"), record.inputSnapshot.snapshotId);
+        for (auto it = values.cbegin(); it != values.cend(); ++it) {
+            auto *value = new QLabel(it.value().toString(), this);
+            value->setTextFormat(Qt::PlainText);
+            value->setWordWrap(true);
+            propertyForm_->addRow(it.key(), value);
+        }
+    } else if (pageType == "batch-run" || pageType == "task-monitor") {
+        auto *note = new QLabel(QStringLiteral(u"选择任务查看运行参数快照；批次统计与子任务入口显示在中央监控页。"), this);
+        note->setWordWrap(true);
+        propertyForm_->addRow(note);
+    } else if (pageType == "dataset" || pageType == "data-process") {
         auto *note = new QLabel(uiText(u"\u5bf9\u8c61\uff1a%1\n\u5f53\u524d\u4ec5\u5c55\u793a Mock / \u5360\u4f4d\u4fe1\u606f\uff0c\u5c1a\u672a\u4ece\u5de5\u4f5c\u533a\u3001\u4efb\u52a1\u6216\u6570\u636e\u670d\u52a1\u52a0\u8f7d\u3002").arg(objectId), this);
         note->setWordWrap(true);
         propertyForm_->addRow(note);
@@ -1116,7 +1162,7 @@ void MainWindow::selectPage(const QString &pageId)
         note->setWordWrap(true);
         propertyForm_->addRow(note);
     }
-    propertyDock_->show();
+    if (!monitorProperty && !monitorActive_) propertyDock_->show();
 }
 
 void MainWindow::restoreLayout()
@@ -1135,6 +1181,7 @@ void MainWindow::restoreLayout()
     resizeDocks({projectDock_, propertyDock_}, {250, 330}, Qt::Horizontal);
     if (outputCollapsed_) setOutputCollapsed(false);
     resizeDocks({outputDock_}, {140}, Qt::Vertical);
+    if (monitorActive_) { propertyDock_->hide(); setOutputCollapsed(true); }
 }
 
 bool MainWindow::insertWidget(WidgetSlot slot, QWidget *widget)
@@ -1159,6 +1206,8 @@ void MainWindow::bindServices(const ServiceBindings &services)
 {
     for (const auto &connection : serviceConnections_) disconnect(connection);
     serviceConnections_.clear();
+    const auto generation = ++serviceGeneration_;
+    if (tasks_ != services.tasks) monitorPage_->clearTasks();
     workflowView_ = {};
     workflow_ = services.workflow;
     tasks_ = services.tasks;
@@ -1168,7 +1217,9 @@ void MainWindow::bindServices(const ServiceBindings &services)
     registerContractMetaTypes();
     if (workflow_) {
         serviceConnections_.append(connect(workflow_, &IWorkflowService::workflowViewChanged, this,
-            &MainWindow::displayWorkflow, Qt::QueuedConnection));
+            [this, generation](const WorkflowView &view) {
+                if (generation == serviceGeneration_) displayWorkflow(view);
+            }, Qt::QueuedConnection));
         // view()/requestRun() are synchronous contracts; do not call across threads.
         serviceConnections_.append(connect(workflow_, &QObject::destroyed, this, [this] {
             runAction_->setEnabled(false);
@@ -1179,7 +1230,9 @@ void MainWindow::bindServices(const ServiceBindings &services)
         suggestion_->setText(uiText(u"\u7b49\u5f85\u5de5\u4f5c\u6d41\u670d\u52a1"));
     }
     if (tasks_) serviceConnections_.append(connect(tasks_, &ITaskService::taskEventOccurred, this,
-        &MainWindow::displayTaskEvent, Qt::QueuedConnection));
+        [this, generation](const TaskEvent &event) {
+            if (generation == serviceGeneration_) displayTaskEvent(event);
+        }, Qt::QueuedConnection));
     if (runAction_) runAction_->setEnabled(false);
     if (workflow_ && workflow_->thread() == thread()) displayWorkflow(workflow_->view(runRequest_.scope));
 }
@@ -1236,43 +1289,19 @@ void MainWindow::submitRun()
 
 void MainWindow::displayTaskEvent(const TaskEvent &event)
 {
-    QTreeWidgetItem *row = nullptr;
-    for (int i = 0; i < taskTree_->topLevelItemCount(); ++i) {
-        if (taskTree_->topLevelItem(i)->text(0) == event.taskId) { row = taskTree_->topLevelItem(i); break; }
+    if (event.taskId.isEmpty()) return;
+    // Synchronous record() is only safe for a provider in the GUI thread.
+    if (tasks_ && tasks_->thread() == thread()
+        && (!monitorAttempts_.contains(event.taskId) || monitorAttempts_.value(event.taskId) != event.attemptId)) {
+        const auto record = tasks_->record(event.taskId);
+        if (record.taskId == event.taskId && record.attemptId == event.attemptId) {
+            const auto parameters = monitorPage_->taskRecord(event.taskId).attemptId == record.attemptId
+                ? monitorPage_->taskParameters(event.taskId) : QVariantMap{};
+            monitorPage_->upsertTask(record, parameters);
+            monitorAttempts_.insert(event.taskId, event.attemptId);
+        }
     }
-    if (!row) {
-        if (taskTree_->topLevelItemCount() >= 500) delete taskTree_->takeTopLevelItem(0);
-        row = new QTreeWidgetItem(taskTree_, {event.taskId});
-    }
-    row->setText(1, taskStatus(event.status));
-    row->setText(2, event.message);
-    row->setText(3, event.timestamp.toLocalTime().toString("HH:mm:ss"));
-    QTreeWidgetItem *navigationTask = nullptr;
-    QTreeWidgetItem *singleRuns = nullptr;
-    for (QTreeWidgetItemIterator it(projectTree_); *it; ++it) {
-        const QString objectId = (*it)->data(0, ObjectIdRole).toString();
-        if (objectId == event.taskId) navigationTask = *it;
-        if (objectId == QStringLiteral("single-runs")) singleRuns = *it;
-    }
-    if (!navigationTask && singleRuns && !event.taskId.isEmpty()) {
-        navigationTask = addNavigationItem(singleRuns, event.taskId + uiText(u"\uff08Mock \u4e8b\u4ef6\uff09"),
-                                           QStringLiteral("task"), event.taskId, QStringLiteral("task"));
-    }
-    if (navigationTask) {
-        setTaskItemStatus(navigationTask, event.status);
-        navigationTask->setToolTip(0, uiText(u"\u72b6\u6001\uff1a%1\n%2").arg(taskStatus(event.status), event.message));
-    }
-    monitorStatus_->setText(event.taskId + uiText(u" \u00b7 ") + taskStatus(event.status));
-    if (event.progress.totalSteps > 0) {
-        const int progressValue = qBound(0, static_cast<int>(1000.0 * event.progress.currentStep / event.progress.totalSteps), 1000);
-        progress_->setValue(progressValue);
-        progress_->setFormat(QStringLiteral("%1%").arg(progressValue / 10.0, 0, 'f', 1));
-        monitorDetails_->setText(uiText(u"\u8fed\u4ee3\uff1a%1 / %2    \u6b8b\u5dee\uff1a%3").arg(event.progress.currentStep).arg(event.progress.totalSteps).arg(event.progress.residual));
-    } else {
-        progress_->setValue(0);
-        progress_->setFormat(uiText(u"\u6682\u65e0\u8fdb\u5ea6\u6570\u636e"));
-        monitorDetails_->setText(uiText(u"\u6682\u65e0\u8fed\u4ee3 / \u6b8b\u5dee\u6570\u636e\uff1bMock \u6d88\u606f\u4e0d\u4ee3\u8868\u771f\u5b9e\u8ba1\u7b97"));
-    }
+    if (!monitorPage_->displayTaskEvent(event)) return;
     const QString level = event.type == TaskEventType::Failed ? QStringLiteral("ERROR")
         : event.type == TaskEventType::Warning ? QStringLiteral("WARN") : QStringLiteral("INFO");
     appendLog(level, QStringLiteral("Task"),

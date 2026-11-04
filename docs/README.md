@@ -14,6 +14,7 @@
 | 文档 | 用途与适用范围 | 状态 |
 | --- | --- | --- |
 | [第一阶段主工程集成说明](phase1-integration.md) | 当前 GUI/CLI、ApplicationController、contracts、Mock 和正式模块接入边界 | 现行骨架说明；正式业务目标尚未接入 |
+| [单任务 / 多任务计算监控](ComputeMonitor-WXD.md) | 基于 main 的统一任务选择、参数/状态/日志联动、邱的曲线组件接入口与验证步骤 | UI 联动已验证；真实求解与曲线组件待接入 |
 
 ## 后处理接口和功能规范
 
