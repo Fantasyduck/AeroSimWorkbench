@@ -49,8 +49,7 @@ int main(int argc, char *argv[])
     auto *results = action("postProcessProbeResultsAction");
     auto *select = action("postProcessSelectAction");
     auto *pan = action("postProcessPanAction");
-    auto *tasks = action("postProcessTasksAction");
-    CHECK(tree && layers && nav && content && style && parameters && probe && results && select && pan && tasks);
+    CHECK(tree && layers && nav && content && style && parameters && probe && results && select && pan);
     CHECK(!action("postProcessPanelsAction"));
     CHECK(content->count() == 2);
     CHECK(window.findChild<SARibbonCategory *>("postProcessOutputCategory"));
@@ -131,7 +130,7 @@ int main(int argc, char *argv[])
 
     // Panel commands must be direct clickable ribbon buttons.
     window.ribbonBar()->setCurrentIndex(4); flush();
-    for (const char *name : {"postProcessShowDataPanel", "postProcessShowObjectPanel", "postProcessProbeResultsAction", "postProcessTasksAction"}) {
+    for (const char *name : {"postProcessShowDataPanel", "postProcessShowObjectPanel", "postProcessProbeResultsAction"}) {
         QToolButton *button = nullptr;
         for (auto *candidate : window.findChildren<QToolButton *>()) {
             if (candidate->defaultAction() == action(name) && candidate->isVisible()) { button = candidate; break; }
@@ -141,8 +140,8 @@ int main(int argc, char *argv[])
     }
     auto *directProbe = window.findChild<QDockWidget *>("postProcessProbeDock");
     CHECK(directProbe && directProbe->isVisible()); directProbe->hide();
-    auto *directMessages = window.findChild<QDockWidget *>("postProcessMessageDock");
-    CHECK(directMessages && directMessages->isVisible()); directMessages->hide();
+    CHECK(!action("postProcessTasksAction"));
+    CHECK(!window.findChild<QDockWidget *>("postProcessMessageDock"));
 
     // Data and object panels can be closed and reopened independently.
     CHECK(nav->count()==2 && !action("postProcessShowViewPanel"));
@@ -349,9 +348,6 @@ int main(int argc, char *argv[])
     probeDock->hide(); results->trigger();
     CHECK(window.findChild<QTextEdit *>("postProcessProbeResult")->toPlainText().contains("node 7"));
     probeDock->hide();
-    tasks->trigger(); flush();
-    auto *taskDock = window.findChild<QDockWidget *>("postProcessMessageDock");
-    CHECK(taskDock && taskDock->isVisible() && capture(&window,"tasks")); taskDock->hide();
 
     for (const QSize size : {QSize(1120,680), QSize(1440,960)}) {
         window.resize(size);

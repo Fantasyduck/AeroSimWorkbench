@@ -188,7 +188,6 @@ PostProcessWorkbenchWindow::PostProcessWorkbenchWindow(QWidget *parent)
     });
     content->addWidget(tabs); content->addWidget(createViewportPanel()); content->setStretchFactor(1, 1); content->setSizes({270, 1170}); content->setChildrenCollapsible(false);
     root->addWidget(content, 1); root->addWidget(createTimeline()); setCentralWidget(workbench);
-    auto *dock = new QDockWidget(uiText(u"操作消息"), this); taskDock_ = dock; dock->setObjectName(uiText(u"postProcessMessageDock")); events_ = new QTextEdit(dock); events_->setReadOnly(true); events_->document()->setMaximumBlockCount(2000); events_->setPlaceholderText(uiText(u"暂无操作消息。读取、特征处理和导出的状态与错误将在这里显示。")); dock->setWidget(events_); installDockTitle(dock); addDockWidget(Qt::BottomDockWidgetArea, dock); dock->hide();
     statusBar()->showMessage(uiText(u"请选择结果集；结果读取服务尚未接入。"));
     // Scope workspace styling so SARibbon's buttons, tabs and window controls
     // retain their own metrics. Native inputs use the same style as MainWindow.
@@ -341,7 +340,6 @@ void PostProcessWorkbenchWindow::createActions() {
 
 
     auto *resultsAction = ribbonAction(this, commandIcon("probe"), uiText(u"探针结果"), uiText(u"查看已有取点结果，不改变鼠标模式"), QStringLiteral("postProcessProbeResultsAction"));
-    auto *tasksAction = ribbonAction(this, commandIcon("analysis"), uiText(u"操作消息"), uiText(u"查看后处理操作状态和错误消息"), QStringLiteral("postProcessTasksAction"));
     auto *panelGroup = toolsCategory->addPanel(uiText(u"面板"));
     for (int i=1; i<3; ++i) {
         const QStringList names = {QString(), uiText(u"数据面板"), uiText(u"对象面板")};
@@ -350,9 +348,8 @@ void PostProcessWorkbenchWindow::createActions() {
         panelGroup->addSmallAction(action);
         connect(action, &QAction::triggered, this, [this, i] { showNavigationPanel(i); });
     }
-    panelGroup->addSmallAction(resultsAction); panelGroup->addSmallAction(tasksAction);
+    panelGroup->addSmallAction(resultsAction);
     connect(resultsAction, &QAction::triggered, this, &PostProcessWorkbenchWindow::showProbePanel);
-    connect(tasksAction, &QAction::triggered, this, &PostProcessWorkbenchWindow::showTaskPanel);
     connect(styleAction_, &QAction::triggered, this, &PostProcessWorkbenchWindow::openObjectStyle);
     connect(parameterAction_, &QAction::triggered, this, &PostProcessWorkbenchWindow::openObjectParameters);
 
@@ -1029,7 +1026,7 @@ void PostProcessWorkbenchWindow::addDerivedLayer(const QString &kind, const QStr
 }
 bool PostProcessWorkbenchWindow::insertWidget(WidgetSlot slot,QWidget *widget){if(slot!=WidgetSlot::Viewport||!widget||!viewportLayout_)return false;if(emptyViewport_){viewportLayout_->removeWidget(emptyViewport_);emptyViewport_->deleteLater();emptyViewport_=nullptr;}if(viewportLayout_->count()!=0)return false;viewportLayout_->addWidget(widget);return true;}
 void PostProcessWorkbenchWindow::bindServices(const ServiceBindings &services){if(bound_)return;services_=services;bound_=true;}
-void PostProcessWorkbenchWindow::appendMessage(const QString &message){events_->append(message.toHtmlEscaped());statusBar()->showMessage(message,5000);}
+void PostProcessWorkbenchWindow::appendMessage(const QString &message){statusBar()->showMessage(message,5000);}
 void PostProcessWorkbenchWindow::updateSelectionDetails() {
     auto *item = sceneList_->currentItem();
     selectedId_ = item ? item->data(Qt::UserRole+1).toString() : QString();
@@ -1247,10 +1244,6 @@ void PostProcessWorkbenchWindow::openObjectParameters(bool colorOnly) {
         dialog->accept();
     });
     dialog->show();
-}
-
-void PostProcessWorkbenchWindow::showTaskPanel() {
-    taskDock_->show(); taskDock_->raise();
 }
 
 void PostProcessWorkbenchWindow::showProbePanel() {

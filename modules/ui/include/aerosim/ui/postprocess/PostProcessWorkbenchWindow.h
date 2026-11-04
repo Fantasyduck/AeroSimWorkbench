@@ -62,7 +62,6 @@ private:
     void openObjectParameters(bool colorOnly = false);
     void openSelectedSettings();
     void updateSelectionActions();
-    void showTaskPanel();
     void openImportDialog();
     void openCoefficientDialog();
     void openExportDialog(const QString &kind);
@@ -107,8 +106,6 @@ private:
     QLabel *selectionSummary_ = nullptr;
     QTextEdit *probeResult_ = nullptr;
     QDockWidget *probeDock_ = nullptr;
-    QDockWidget *taskDock_ = nullptr;
-    QTextEdit *events_ = nullptr;
     QDockWidget *deepSeekHarnessDock_ = nullptr;
     ServiceBindings services_;
     bool bound_ = false;
