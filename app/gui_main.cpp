@@ -3,6 +3,7 @@
 #include "MockWorkflowService.h"
 #include "aerosim/ui/postprocess/PostProcessWorkbenchWindow.h"
 #include "aerosim/ui/MainWindow.h"
+#include "aerosim/ui/StartupLandingPage.h"
 #include <QPixmap>
 
 #ifdef AEROSIM_HAS_VTK_VIEWER
@@ -37,6 +38,7 @@ int main(int argc, char *argv[])
     const bool smoke = app.arguments().contains(QStringLiteral("--smoke"));
 #ifndef AEROSIM_POSTPROCESS_STANDALONE
     aerosim::MainWindow window;
+    aerosim::StartupLandingPage landing;
 #endif
     aerosim::PostProcessWorkbenchWindow postprocess;
     const aerosim::ServiceBindings bindings = {
@@ -50,6 +52,29 @@ int main(int argc, char *argv[])
         postprocess.show();
         postprocess.raise();
         postprocess.activateWindow();
+    });
+    QObject::connect(&landing, &aerosim::StartupLandingPage::enterWorkbenchRequested,
+                     &window, [&landing, &window](const QString &) {
+        landing.setReturnAvailable(true);
+        landing.hide();
+        window.show();
+        window.raise();
+        window.activateWindow();
+    });
+    QObject::connect(&landing, &aerosim::StartupLandingPage::returnToWorkbenchRequested,
+                     &window, [&landing, &window] {
+        landing.hide();
+        window.show();
+        window.raise();
+        window.activateWindow();
+    });
+    QObject::connect(&window, &aerosim::MainWindow::showStartupRequested,
+                     &landing, [&landing, &window] {
+        window.hide();
+        landing.setReturnAvailable(true);
+        landing.show();
+        landing.raise();
+        landing.activateWindow();
     });
 #endif
 #ifdef AEROSIM_HAS_VTK_VIEWER
@@ -77,7 +102,9 @@ int main(int argc, char *argv[])
     QWidget *initialWindow = &postprocess;
 #else
     QWidget *initialWindow = app.arguments().contains(QStringLiteral("--postprocess"))
-        ? static_cast<QWidget *>(&postprocess) : static_cast<QWidget *>(&window);
+        ? static_cast<QWidget *>(&postprocess)
+        : app.arguments().contains(QStringLiteral("--workbench"))
+            ? static_cast<QWidget *>(&window) : static_cast<QWidget *>(&landing);
 #endif
     initialWindow->show();
 
