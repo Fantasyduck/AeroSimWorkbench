@@ -291,19 +291,17 @@ void PostProcessWorkbenchWindow::createActions() {
     selectAction->setChecked(true);
     // Use the same SARibbon hierarchy as MainWindow.  Categories group work
     // by intent; the data/scene workspace below remains the post-process UI.
-    auto *dataCategory = ribbonBar()->addCategoryPage(uiText(u"数据"));
+    auto *dataCategory = ribbonBar()->addCategoryPage(uiText(u"数据与显示"));
     dataCategory->setObjectName(uiText(u"postProcessDataCategory"));
     auto *dataSourcePanel = dataCategory->addPanel(uiText(u"结果数据"));
     dataSourcePanel->addLargeAction(importAction);
 
-    auto *displayCategory = ribbonBar()->addCategoryPage(uiText(u"显示"));
-    displayCategory->setObjectName(uiText(u"postProcessDisplayCategory"));
-    auto *interactionPanel = displayCategory->addPanel(uiText(u"交互"));
+    auto *interactionPanel = dataCategory->addPanel(uiText(u"交互"));
     interactionPanel->addLargeAction(selectAction); interactionPanel->addSmallAction(boxSelectAction);
     interactionPanel->addSmallAction(panAction); interactionPanel->addSmallAction(zoomAction); interactionPanel->addSmallAction(rotateAction);
-    auto *layerPanel = displayCategory->addPanel(uiText(u"图层"));
+    auto *layerPanel = dataCategory->addPanel(uiText(u"图层"));
     layerPanel->addLargeAction(contourAction); layerPanel->addSmallAction(colorAction); layerPanel->addSmallAction(styleAction_);
-    auto *cameraPanel = displayCategory->addPanel(uiText(u"视图"));
+    auto *cameraPanel = dataCategory->addPanel(uiText(u"视图"));
     cameraPanel->addLargeAction(fitAction); cameraPanel->addSmallAction(focusAction); cameraPanel->addSmallAction(centerAction); cameraPanel->addSmallAction(frontAction); cameraPanel->addSmallAction(rightAction); cameraPanel->addSmallAction(topAction);
 
     auto *featureCategory = ribbonBar()->addCategoryPage(uiText(u"特征"));
@@ -317,13 +315,11 @@ void PostProcessWorkbenchWindow::createActions() {
     dataSourcePanel->addLargeAction(coeffAction);
     connect(coeffAction, &QAction::triggered, this, &PostProcessWorkbenchWindow::openCoefficientDialog);
 
-    auto *outputCategory = ribbonBar()->addCategoryPage(uiText(u"输出"));
-    outputCategory->setObjectName(uiText(u"postProcessOutputCategory"));
-    auto *outputPanel = outputCategory->addPanel(uiText(u"导出结果"));
+    auto *toolsCategory = ribbonBar()->addCategoryPage(uiText(u"工具与输出"));
+    toolsCategory->setObjectName(uiText(u"postProcessToolsCategory"));
+    auto *outputPanel = toolsCategory->addPanel(uiText(u"导出结果"));
     outputPanel->addLargeAction(imageExportAction); outputPanel->addLargeAction(animationExportAction);
 
-    auto *toolsCategory = ribbonBar()->addCategoryPage(uiText(u"工具"));
-    toolsCategory->setObjectName(uiText(u"postProcessToolsCategory"));
     auto *queryPanel = toolsCategory->addPanel(uiText(u"查询"));
     queryPanel->addLargeAction(probeAction);
     auto *backgroundAction = ribbonAction(this, commandIcon("palette"), uiText(u"视口背景…"), uiText(u"调整当前视口背景，默认 ParaView 蓝灰渐变"), QStringLiteral("postProcessBackgroundAction"));
