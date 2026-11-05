@@ -293,6 +293,11 @@ QStringList MonitorChartView::curveIds() const
     return ids;
 }
 
+QVector<QPointF> MonitorChartView::curvePoints(const QString &curveId) const
+{
+    return curvesById_.value(curveId).points;
+}
+
 void MonitorChartView::setAxisLabel(const QString &label)
 {
     axisLabel_ = label;

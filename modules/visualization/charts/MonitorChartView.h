@@ -210,6 +210,10 @@ public:
     static QString makeCurveId(const QString &datasetId, const QString &key);
     // Identities of the curves known to the last setCurves(), in drawing order.
     QStringList curveIds() const;
+    // Samples the widget holds for one curve, in the order they were given.
+    // Read-back for callers that build the series themselves and need to prove
+    // what was actually retained. Empty for an unknown id.
+    QVector<QPointF> curvePoints(const QString &curveId) const;
 
     // Legend text per curve. A record may carry several physical quantities and
     // one quantity may arrive in several records, so the caption is a decision

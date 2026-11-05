@@ -29,12 +29,16 @@ endif()
 add_subdirectory(contracts)
 add_subdirectory(mocks/services)
 
-if(AEROSIM_BUILD_GUI)
-    add_subdirectory(modules/ui)
-endif()
-
+# Visualization is configured before the UI so that modules/ui can see
+# aerosim_monitor_charts and opt into the concrete curve widget. The UI never
+# requires it: whenever visualization is off, the monitor page keeps its
+# placeholder and the abstract MonitorCurveWidget injection point.
 if(AEROSIM_BUILD_VISUALIZATION)
     add_subdirectory(modules/visualization)
+endif()
+
+if(AEROSIM_BUILD_GUI)
+    add_subdirectory(modules/ui)
 endif()
 
 add_subdirectory(app)

@@ -21,6 +21,22 @@ target_link_libraries(aerosim_monitor_ui PUBLIC aerosim_contracts Qt5::Widgets)
 if(MSVC)
     target_compile_options(aerosim_monitor_ui PRIVATE /utf-8)
 endif()
+# The concrete curve widget needs the chart widget, and the chart widget needs
+# Qwt. Visualization is an optional subproject (AEROSIM_BUILD_VISUALIZATION is
+# OFF by default), so this adapter is built only when that target is present.
+# The monitor page itself keeps talking to the abstract MonitorCurveWidget, which
+# is why the workbench can still be built and tested with no charting library.
+if(TARGET aerosim_monitor_charts)
+    add_library(aerosim_monitor_curve STATIC
+        ../src/monitor/MonitorSampleCurveWidget.cpp
+        ../include/aerosim/ui/monitor/MonitorSampleCurveWidget.h)
+    target_include_directories(aerosim_monitor_curve PUBLIC "${CMAKE_CURRENT_LIST_DIR}/../include")
+    target_link_libraries(aerosim_monitor_curve PUBLIC aerosim_monitor_ui aerosim_monitor_charts Qt5::Widgets)
+    if(MSVC)
+        target_compile_options(aerosim_monitor_curve PRIVATE /utf-8)
+    endif()
+endif()
+
 if(AEROSIM_BUILD_TESTS)
     find_package(Qt5 5.12.12 EXACT REQUIRED COMPONENTS Test)
     add_executable(aerosim_monitor_ui_test ../tests/monitor/ComputeMonitorPageTest.cpp)

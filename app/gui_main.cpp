@@ -7,6 +7,10 @@
 #ifndef AEROSIM_POSTPROCESS_STANDALONE
 #include "../demos/monitor/MonitorDemo.h"
 #endif
+#ifdef AEROSIM_HAS_MONITOR_CURVES
+#include "aerosim/ui/monitor/ComputeMonitorPage.h"
+#include "aerosim/ui/monitor/MonitorSampleCurveWidget.h"
+#endif
 #include <QPixmap>
 
 #ifdef AEROSIM_HAS_VTK_VIEWER
@@ -48,6 +52,18 @@ int main(int argc, char *argv[])
         controller.workflow(), controller.tasks(), nullptr, nullptr, nullptr, nullptr};
 #ifndef AEROSIM_POSTPROCESS_STANDALONE
     window.bindServices(bindings);
+#ifdef AEROSIM_HAS_MONITOR_CURVES
+    // The curve slot is filled here, in the assembly layer, and not inside the
+    // window: the page owns the slot and accepts exactly one widget, so a test
+    // that injects its own double would be locked out by a self-installed one.
+    {
+        auto *curves = new aerosim::MonitorSampleCurveWidget;
+        if (!window.monitorPage()->insertCurveWidget(curves)) {
+            delete curves;
+            QTextStream(stderr) << "Failed to insert monitor curve widget\n";
+        }
+    }
+#endif
     if (app.arguments().contains(QStringLiteral("--monitor-demo"))) {
         aerosim::populateMonitorDemo(window.monitorPage());
         window.setWindowTitle(QStringLiteral(u"AeroSimWorkbench · 计算监控联动演示（无真实求解）"));
