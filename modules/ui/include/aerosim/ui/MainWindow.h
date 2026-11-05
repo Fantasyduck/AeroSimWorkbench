@@ -4,6 +4,7 @@
 #include <SARibbonMainWindow.h>
 #include <QHash>
 #include <QPointer>
+#include <QPair>
 #include <QVariantMap>
 #include <QVector>
 
@@ -13,6 +14,7 @@ class QComboBox;
 class QLabel;
 class QLineEdit;
 class QProgressBar;
+class QPlainTextEdit;
 class QPushButton;
 class QStackedWidget;
 class QTableWidget;
@@ -62,6 +64,10 @@ private:
     void applyLogFilters();
     void setOutputScope(const QString &scope);
     void setOutputCollapsed(bool collapsed);
+    void showTaskMonitor(const QString &taskId);
+    void refreshTaskLog();
+    void appendTaskLogMock(const QString &stream, const QString &message);
+    void updateTaskProgressMock(const QString &message);
     QWidget *createSlot(WidgetSlot slot, const QString &text);
     void showOutput(int index);
 
@@ -103,6 +109,8 @@ private:
     QLabel *monitorStatus_ = nullptr;
     QLabel *monitorDetails_ = nullptr;
     QLabel *taskMonitorTitle_ = nullptr;
+    QLabel *taskCurveState_ = nullptr;
+    QLabel *taskResourceSummary_ = nullptr;
     QLabel *outputTitle_ = nullptr;
     QLabel *status_ = nullptr;
     QProgressBar *progress_ = nullptr;
@@ -111,11 +119,15 @@ private:
     QPushButton *outputCollapse_ = nullptr;
     QComboBox *logLevelFilter_ = nullptr;
     QComboBox *logModuleFilter_ = nullptr;
+    QComboBox *taskLogStreamFilter_ = nullptr;
     QLineEdit *logSearch_ = nullptr;
     QCheckBox *logAutoScroll_ = nullptr;
+    QCheckBox *taskLogAutoScroll_ = nullptr;
+    QPlainTextEdit *taskLogView_ = nullptr;
     QWidget *outputBody_ = nullptr;
     QString currentPage_;
     QString outputScope_ = QStringLiteral("current-project");
+    QString currentTaskId_ = QStringLiteral("Task_001");
     int expandedOutputHeight_ = 140;
     bool outputCollapsed_ = false;
     bool projectEditingEnabled_ = false;
@@ -124,6 +136,8 @@ private:
     bool propertyDockVisibleBeforeMesh_ = true;
     bool meshOutputInitialCollapseApplied_ = false;
     QHash<QString, QVariantMap> drafts_;
+    QHash<QString, QVector<QPair<QString, QString>>> taskLogEntries_;
+    QHash<QString, int> taskLogScrollPositions_;
 };
 
 } // namespace aerosim

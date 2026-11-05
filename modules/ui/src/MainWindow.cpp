@@ -11,6 +11,7 @@
 #include <QBrush>
 #include <QCheckBox>
 #include <QClipboard>
+#include <QColor>
 #include <QMenu>
 #include <QSettings>
 #include <QPalette>
@@ -21,6 +22,7 @@
 #include <QDockWidget>
 #include <QDoubleSpinBox>
 #include <QFormLayout>
+#include <QFontDatabase>
 #include <QFrame>
 #include <QGroupBox>
 #include <QHeaderView>
@@ -42,6 +44,11 @@
 #include <QTimer>
 #include <QResource>
 #include <QScrollArea>
+#include <QScrollBar>
+#include <QSplitter>
+#include <QTextCharFormat>
+#include <QTextBlock>
+#include <QTextCursor>
 #include <QTreeWidget>
 #include <QTreeWidgetItemIterator>
 #include <QVBoxLayout>
@@ -499,7 +506,28 @@ void MainWindow::createWorkspace()
     calculationOverviewPage_ = createWorkspacePage(
         QStringLiteral("calculationOverviewPage"), uiText(u"\u8ba1\u7b97"),
         uiText(u"\u8ba1\u7b97\u6a21\u5757\u524d\u7aef\u5165\u53e3\u3002\u53ef\u5728\u5de6\u4fa7\u9009\u62e9\u5de5\u51b5\u7ba1\u7406\u3001\u6279\u5904\u7406\u8ba1\u5212\u3001\u5355\u6b21/\u6279\u91cf\u8ba1\u7b97\u6216\u8ba1\u7b97\u76d1\u63a7\u3002\u5f53\u524d\u6570\u636e\u4e0e\u8fd0\u884c\u72b6\u6001\u5747\u4e3a Mock \u754c\u9762\u793a\u4f8b\uff0c\u4e0d\u542f\u52a8\u771f\u5b9e\u6c42\u89e3\u5668\u3002"));
-    qobject_cast<QVBoxLayout *>(calculationOverviewPage_->layout())->addStretch();
+    auto *calculationOverviewLayout = qobject_cast<QVBoxLayout *>(calculationOverviewPage_->layout());
+    auto *outputModeGroup = new QGroupBox(uiText(u"\u8fd0\u884c\u8f93\u51fa\u65b9\u5f0f"), calculationOverviewPage_);
+    outputModeGroup->setObjectName(QStringLiteral("solverOutputModeGroup"));
+    auto *outputModeLayout = new QFormLayout(outputModeGroup);
+    auto *outputMode = new QComboBox(outputModeGroup);
+    outputMode->setObjectName(QStringLiteral("solverOutputModeCombo"));
+    outputMode->addItem(uiText(u"\u7a97\u53e3\u5185\u8f93\u51fa"), QStringLiteral("embedded"));
+    outputMode->addItem(uiText(u"\u72ec\u7acb\u63a7\u5236\u53f0"), QStringLiteral("console"));
+    auto *outputModeDescription = new QLabel(
+        uiText(u"Mock \u914d\u7f6e\uff1a\u6c42\u89e3\u5668\u8f93\u51fa\u5c06\u5728\u8ba1\u7b97\u76d1\u63a7\u9875\u7684\u5f53\u524d\u4efb\u52a1\u65e5\u5fd7\u4e2d\u663e\u793a\u3002"), outputModeGroup);
+    outputModeDescription->setObjectName(QStringLiteral("solverOutputModeDescription"));
+    outputModeDescription->setWordWrap(true);
+    outputModeLayout->addRow(uiText(u"\u8f93\u51fa\u4f4d\u7f6e"), outputMode);
+    outputModeLayout->addRow(QString(), outputModeDescription);
+    connect(outputMode, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
+            [outputMode, outputModeDescription](int) {
+        outputModeDescription->setText(outputMode->currentData().toString() == QStringLiteral("embedded")
+            ? uiText(u"Mock \u914d\u7f6e\uff1a\u6c42\u89e3\u5668\u8f93\u51fa\u5c06\u5728\u8ba1\u7b97\u76d1\u63a7\u9875\u7684\u5f53\u524d\u4efb\u52a1\u65e5\u5fd7\u4e2d\u663e\u793a\u3002")
+            : uiText(u"Mock \u914d\u7f6e\uff1a\u4fdd\u7559\u72ec\u7acb\u63a7\u5236\u53f0\u9009\u62e9\u72b6\u6001\uff0c\u672c\u671f\u4e0d\u521b\u5efa\u63a7\u5236\u53f0\u8fdb\u7a0b\u3002"));
+    });
+    calculationOverviewLayout->addWidget(outputModeGroup);
+    calculationOverviewLayout->addStretch();
 
     stateListPage_ = createWorkspacePage(QStringLiteral("stateListPage"), uiText(u"\u5de5\u51b5\u7ba1\u7406"),
         uiText(u"\u5de5\u51b5\u4e0e\u6279\u5904\u7406\u8ba1\u5212\u5206\u5f00\u7ba1\u7406\u3002\u4ee5\u4e0b\u5185\u5bb9\u4ec5\u7528\u4e8e\u754c\u9762\u9a8c\u8bc1\uff0c\u672a\u4ece\u5de5\u4f5c\u533a\u670d\u52a1\u52a0\u8f7d\u3002"));
@@ -763,7 +791,10 @@ void MainWindow::createWorkspace()
     monitorForm->addRow(uiText(u"\u8ba1\u7b97\u8fdb\u5ea6"), progress_);
     monitorLayout->addWidget(monitor);
     taskMonitorLayout->addWidget(monitorSlot);
-    auto *curveFrame = new QFrame(taskMonitorPage_);
+    auto *monitorContentSplitter = new QSplitter(Qt::Vertical, taskMonitorPage_);
+    monitorContentSplitter->setObjectName(QStringLiteral("taskMonitorContentSplitter"));
+    monitorContentSplitter->setChildrenCollapsible(false);
+    auto *curveFrame = new QFrame(monitorContentSplitter);
     curveFrame->setObjectName(QStringLiteral("convergenceCurvePanel"));
     curveFrame->setFrameShape(QFrame::StyledPanel);
     curveFrame->setMinimumHeight(150);
@@ -773,11 +804,94 @@ void MainWindow::createWorkspace()
     curveTitleFont.setBold(true);
     curveTitle->setFont(curveTitleFont);
     curveLayout->addWidget(curveTitle);
-    curveLayout->addWidget(emptyState(uiText(u"Mock \u66f2\u7ebf\u533a\u57df\n\u7b49\u5f85\u6b8b\u5dee\u91c7\u6837\u6570\u636e\u4e0e\u66f2\u7ebf\u7ec4\u4ef6\u63a5\u5165"), curveFrame), 1);
-    taskMonitorLayout->addWidget(curveFrame, 1);
-    auto *resourceSummary = new QLabel(uiText(u"CPU 76%    \u5185\u5b58 18.3 GB    MPI 32    \u8ba1\u7b97\u65f6\u95f4 00:12:35    \uff08Mock\uff09"), taskMonitorPage_);
-    resourceSummary->setObjectName(QStringLiteral("taskResourceSummary"));
-    taskMonitorLayout->addWidget(resourceSummary);
+    taskCurveState_ = emptyState(uiText(u"Task_001 \u00b7 Mock \u66f2\u7ebf\u533a\u57df\n\u7b49\u5f85\u6b8b\u5dee\u91c7\u6837\u6570\u636e\u4e0e\u66f2\u7ebf\u7ec4\u4ef6\u63a5\u5165"), curveFrame);
+    taskCurveState_->setObjectName(QStringLiteral("taskCurveState"));
+    curveLayout->addWidget(taskCurveState_, 1);
+
+    auto *taskLogPanel = new QFrame(monitorContentSplitter);
+    taskLogPanel->setObjectName(QStringLiteral("taskRuntimeLogPanel"));
+    taskLogPanel->setFrameShape(QFrame::StyledPanel);
+    taskLogPanel->setMinimumHeight(130);
+    auto *taskLogLayout = new QVBoxLayout(taskLogPanel);
+    taskLogLayout->setContentsMargins(8, 6, 8, 8);
+    auto *taskLogToolbar = new QHBoxLayout;
+    auto *taskLogTitle = new QLabel(uiText(u"\u5f53\u524d\u4efb\u52a1\u65e5\u5fd7"), taskLogPanel);
+    QFont taskLogTitleFont = taskLogTitle->font();
+    taskLogTitleFont.setBold(true);
+    taskLogTitle->setFont(taskLogTitleFont);
+    taskLogToolbar->addWidget(taskLogTitle);
+    taskLogStreamFilter_ = new QComboBox(taskLogPanel);
+    taskLogStreamFilter_->setObjectName(QStringLiteral("taskLogStreamFilter"));
+    taskLogStreamFilter_->addItem(uiText(u"\u5168\u90e8\u8f93\u51fa"), QStringLiteral("all"));
+    taskLogStreamFilter_->addItem(QStringLiteral("stdout"), QStringLiteral("stdout"));
+    taskLogStreamFilter_->addItem(QStringLiteral("stderr"), QStringLiteral("stderr"));
+    taskLogToolbar->addWidget(taskLogStreamFilter_);
+    taskLogAutoScroll_ = new QCheckBox(uiText(u"\u81ea\u52a8\u6eda\u52a8"), taskLogPanel);
+    taskLogAutoScroll_->setObjectName(QStringLiteral("taskLogAutoScroll"));
+    taskLogAutoScroll_->setChecked(true);
+    taskLogToolbar->addWidget(taskLogAutoScroll_);
+    auto *appendTaskLog = new QPushButton(uiText(u"\u8ffd\u52a0\u6f14\u793a"), taskLogPanel);
+    appendTaskLog->setObjectName(QStringLiteral("appendTaskLogMockButton"));
+    appendTaskLog->setToolTip(uiText(u"Mock\uff1a\u8ffd\u52a0\u4e00\u884c stdout\uff0c\u4e0d\u63a5\u5165\u771f\u5b9e\u6c42\u89e3\u5668"));
+    taskLogToolbar->addWidget(appendTaskLog);
+    auto *updateProgress = new QPushButton(uiText(u"\u66f4\u65b0\u8fdb\u5ea6"), taskLogPanel);
+    updateProgress->setObjectName(QStringLiteral("updateTaskProgressMockButton"));
+    updateProgress->setToolTip(uiText(u"Mock\uff1a\u66ff\u6362\u5f53\u524d\u8fdb\u5ea6\u884c\uff0c\u6f14\u793a\u4e0d\u6362\u884c\u8f93\u51fa"));
+    taskLogToolbar->addWidget(updateProgress);
+    auto *clearTaskLog = new QPushButton(uiText(u"\u6e05\u7a7a\u663e\u793a"), taskLogPanel);
+    clearTaskLog->setObjectName(QStringLiteral("clearTaskLogButton"));
+    taskLogToolbar->addWidget(clearTaskLog);
+    taskLogToolbar->addStretch();
+    taskLogLayout->addLayout(taskLogToolbar);
+    taskLogView_ = new QPlainTextEdit(taskLogPanel);
+    taskLogView_->setObjectName(QStringLiteral("taskRuntimeLogView"));
+    taskLogView_->setReadOnly(true);
+    taskLogView_->setLineWrapMode(QPlainTextEdit::NoWrap);
+    taskLogView_->setFont(QFontDatabase::systemFont(QFontDatabase::FixedFont));
+    taskLogView_->setPlaceholderText(uiText(u"\u5f53\u524d\u4efb\u52a1\u6682\u65e0\u8fd0\u884c\u65e5\u5fd7\uff08Mock\uff09"));
+    taskLogLayout->addWidget(taskLogView_, 1);
+    monitorContentSplitter->addWidget(curveFrame);
+    monitorContentSplitter->addWidget(taskLogPanel);
+    monitorContentSplitter->setStretchFactor(0, 3);
+    monitorContentSplitter->setStretchFactor(1, 2);
+    monitorContentSplitter->setSizes({300, 170});
+    taskMonitorLayout->addWidget(monitorContentSplitter, 1);
+    taskResourceSummary_ = new QLabel(uiText(u"CPU 76%    \u5185\u5b58 18.3 GB    MPI 32    \u8ba1\u7b97\u65f6\u95f4 00:12:35    \uff08Mock\uff09"), taskMonitorPage_);
+    taskResourceSummary_->setObjectName(QStringLiteral("taskResourceSummary"));
+    taskMonitorLayout->addWidget(taskResourceSummary_);
+
+    taskLogEntries_.insert(QStringLiteral("Run_001"), {
+        {QStringLiteral("stdout"), QStringLiteral("[12:00:01] Solver started")},
+        {QStringLiteral("stdout"), QStringLiteral("[12:00:02] Iteration 100: Residual = 1.0e-2")},
+        {QStringLiteral("stderr"), QStringLiteral("[12:00:03] Warning: convergence is slower than expected")},
+        {QStringLiteral("stdout"), QStringLiteral("Progress: 12% (same-line update mock)")}});
+    taskLogEntries_.insert(QStringLiteral("Task_001"), {
+        {QStringLiteral("stdout"), QStringLiteral("[12:10:01] Solver started for Task_001")},
+        {QStringLiteral("stdout"), QStringLiteral("[12:10:02] Iteration 1: Residual = 0.1")},
+        {QStringLiteral("stdout"), QStringLiteral("[12:10:03] Iteration 2: Residual = 0.01")},
+        {QStringLiteral("stderr"), QStringLiteral("[12:10:04] Warning: convergence issue")},
+        {QStringLiteral("stdout"), QStringLiteral("Progress: 100% (same-line update mock)")}});
+    taskLogEntries_.insert(QStringLiteral("Task_002"), {
+        {QStringLiteral("stdout"), QStringLiteral("[12:20:01] Solver started for Task_002")},
+        {QStringLiteral("stdout"), QStringLiteral("[12:20:02] Iteration 250: Residual = 4.2e-3")},
+        {QStringLiteral("stdout"), QStringLiteral("Progress: 42% (same-line update mock)")}});
+    taskLogEntries_.insert(QStringLiteral("Task_003"), {});
+    connect(taskLogStreamFilter_, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
+            [this] { refreshTaskLog(); });
+    connect(clearTaskLog, &QPushButton::clicked, this, [this] {
+        taskLogEntries_[currentTaskId_].clear();
+        refreshTaskLog();
+    });
+    connect(appendTaskLog, &QPushButton::clicked, this, [this] {
+        const int iteration = taskLogEntries_.value(currentTaskId_).size() + 1;
+        appendTaskLogMock(QStringLiteral("stdout"),
+            uiText(u"Mock \u8ffd\u52a0\uff1aIteration %1: Residual = 1.0e-%2").arg(iteration).arg(iteration));
+    });
+    connect(updateProgress, &QPushButton::clicked, this, [this] {
+        const int previous = taskLogEntries_.value(currentTaskId_).size() * 10;
+        updateTaskProgressMock(QStringLiteral("Progress: %1% (same-line update mock)").arg(qMin(100, previous + 10)));
+    });
+    showTaskMonitor(currentTaskId_);
 
     taskTree_ = new QTreeWidget(batchMonitorPage_);
     taskTree_->setObjectName(QStringLiteral("taskTree"));
@@ -988,7 +1102,7 @@ void MainWindow::handleNavigationSelection(QTreeWidgetItem *item)
     } else if (page == QStringLiteral("task")) {
         showWorkspacePage(QStringLiteral("task-monitor"));
         setOutputScope(objectId);
-        if (taskMonitorTitle_) taskMonitorTitle_->setText(objectId + uiText(u" \u00b7 \u7efc\u5408\u76d1\u63a7\uff08Mock\uff09"));
+        showTaskMonitor(objectId);
     }
     else if (workspacePages_.contains(page)) showWorkspacePage(page);
     else if (page == QStringLiteral("dataset") || page == QStringLiteral("data-process")) showWorkspacePage(QStringLiteral("data-process"));
@@ -1485,6 +1599,115 @@ void MainWindow::setOutputCollapsed(bool collapsed)
         outputCollapse_->setText(uiText(u"\u6536\u8d77"));
         resizeDocks({outputDock_}, {qMax(120, expandedOutputHeight_)}, Qt::Vertical);
     }
+}
+
+void MainWindow::showTaskMonitor(const QString &taskId)
+{
+    if (taskId.isEmpty() || !taskLogView_) return;
+    if (!currentTaskId_.isEmpty())
+        taskLogScrollPositions_.insert(currentTaskId_, taskLogView_->verticalScrollBar()->value());
+    currentTaskId_ = taskId;
+
+    QString status = uiText(u"\u8fd0\u884c\u4e2d\uff08Mock\uff09");
+    QString details = uiText(u"\u5f53\u524d\u8fed\u4ee3\uff1a1250    \u603b\u8fed\u4ee3\uff1a10000    \u6b8b\u5dee\uff1a1.2e-4\uff08Mock\uff09");
+    int progressValue = 125;
+    QString progressText = uiText(u"12.5%\uff08Mock\uff09");
+    QString resources = uiText(u"CPU 76%    \u5185\u5b58 18.3 GB    MPI 32    \u8ba1\u7b97\u65f6\u95f4 00:12:35    \uff08Mock\uff09");
+    if (taskId == QStringLiteral("Task_001")) {
+        status = uiText(u"\u5df2\u5b8c\u6210\uff08Mock\uff09");
+        details = uiText(u"\u5f53\u524d\u8fed\u4ee3\uff1a10000    \u603b\u8fed\u4ee3\uff1a10000    \u6b8b\u5dee\uff1a8.0e-7\uff08Mock\uff09");
+        progressValue = 1000;
+        progressText = uiText(u"100%\uff08Mock\uff09");
+        resources = uiText(u"CPU 0%    \u5185\u5b58 0 GB    MPI 32    \u8ba1\u7b97\u65f6\u95f4 00:08:21    \uff08Mock\uff09");
+    } else if (taskId == QStringLiteral("Task_002")) {
+        details = uiText(u"\u5f53\u524d\u8fed\u4ee3\uff1a4200    \u603b\u8fed\u4ee3\uff1a10000    \u6b8b\u5dee\uff1a4.2e-3\uff08Mock\uff09");
+        progressValue = 420;
+        progressText = uiText(u"42%\uff08Mock\uff09");
+        resources = uiText(u"CPU 81%    \u5185\u5b58 20.1 GB    MPI 32    \u8ba1\u7b97\u65f6\u95f4 00:04:10    \uff08Mock\uff09");
+    } else if (taskId == QStringLiteral("Task_003")) {
+        status = uiText(u"\u51c6\u5907\u4e2d\uff08Mock\uff09");
+        details = uiText(u"\u6682\u65e0\u8fed\u4ee3\u4e0e\u6b8b\u5dee\u6570\u636e\uff08Mock\uff09");
+        progressValue = 0;
+        progressText = uiText(u"0%\uff08Mock\uff09");
+        resources = uiText(u"CPU --    \u5185\u5b58 --    MPI 32    \u8ba1\u7b97\u65f6\u95f4 --    \uff08Mock\uff09");
+    }
+    taskMonitorTitle_->setText(taskId + uiText(u" \u00b7 \u7efc\u5408\u76d1\u63a7\uff08Mock\uff09"));
+    monitorStatus_->setText(status);
+    monitorDetails_->setText(details);
+    progress_->setValue(progressValue);
+    progress_->setFormat(progressText);
+    taskCurveState_->setText(taskId + uiText(u" \u00b7 Mock \u66f2\u7ebf\u533a\u57df\n\u7b49\u5f85\u771f\u5b9e\u6b8b\u5dee\u6570\u636e\u4e0e\u66f2\u7ebf\u7ec4\u4ef6\u63a5\u5165"));
+    taskResourceSummary_->setText(resources);
+    refreshTaskLog();
+    taskLogView_->verticalScrollBar()->setValue(
+        taskLogScrollPositions_.value(taskId, taskLogView_->verticalScrollBar()->maximum()));
+}
+
+void MainWindow::refreshTaskLog()
+{
+    if (!taskLogView_ || !taskLogStreamFilter_) return;
+    const QString filter = taskLogStreamFilter_->currentData().toString();
+    taskLogView_->clear();
+    QTextCursor cursor(taskLogView_->document());
+    const auto entries = taskLogEntries_.value(currentTaskId_);
+    for (const auto &entry : entries) {
+        if (filter != QStringLiteral("all") && filter != entry.first) continue;
+        QTextCharFormat format;
+        if (entry.first == QStringLiteral("stderr")) format.setForeground(QColor(196, 83, 0));
+        else format.setForeground(taskLogView_->palette().color(QPalette::Text));
+        cursor.movePosition(QTextCursor::End);
+        cursor.insertText(QStringLiteral("[%1] %2\n").arg(entry.first, entry.second), format);
+    }
+    if (taskLogAutoScroll_->isChecked())
+        taskLogView_->verticalScrollBar()->setValue(taskLogView_->verticalScrollBar()->maximum());
+}
+
+void MainWindow::appendTaskLogMock(const QString &stream, const QString &message)
+{
+    taskLogEntries_[currentTaskId_].append(qMakePair(stream, message));
+    const QString filter = taskLogStreamFilter_->currentData().toString();
+    if (filter != QStringLiteral("all") && filter != stream) return;
+    auto *scrollBar = taskLogView_->verticalScrollBar();
+    const bool wasAtBottom = scrollBar->value() >= scrollBar->maximum() - 2;
+    QTextCursor cursor(taskLogView_->document());
+    QTextCharFormat format;
+    format.setForeground(stream == QStringLiteral("stderr")
+        ? QColor(196, 83, 0) : taskLogView_->palette().color(QPalette::Text));
+    cursor.movePosition(QTextCursor::End);
+    cursor.insertText(QStringLiteral("[%1] %2\n").arg(stream, message), format);
+    if (taskLogAutoScroll_->isChecked() && wasAtBottom)
+        scrollBar->setValue(scrollBar->maximum());
+}
+
+void MainWindow::updateTaskProgressMock(const QString &message)
+{
+    auto &entries = taskLogEntries_[currentTaskId_];
+    int progressIndex = -1;
+    for (int index = entries.size() - 1; index >= 0; --index) {
+        if (entries[index].second.startsWith(QStringLiteral("Progress:"))) {
+            progressIndex = index;
+            break;
+        }
+    }
+    if (progressIndex < 0) {
+        appendTaskLogMock(QStringLiteral("stdout"), message);
+        return;
+    }
+    entries[progressIndex].second = message;
+    const QString filter = taskLogStreamFilter_->currentData().toString();
+    if (filter != QStringLiteral("all") && filter != QStringLiteral("stdout")) return;
+    QTextCursor cursor(taskLogView_->document());
+    cursor.movePosition(QTextCursor::End);
+    cursor.movePosition(QTextCursor::PreviousBlock);
+    const QString progressPrefix = QStringLiteral("[stdout] Progress:");
+    if (!cursor.block().text().startsWith(progressPrefix)) {
+        refreshTaskLog();
+        return;
+    }
+    cursor.select(QTextCursor::BlockUnderCursor);
+    QTextCharFormat format;
+    format.setForeground(taskLogView_->palette().color(QPalette::Text));
+    cursor.insertText(QStringLiteral("[stdout] %1").arg(message), format);
 }
 
 void MainWindow::showOutput(int index)

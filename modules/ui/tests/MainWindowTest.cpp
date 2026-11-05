@@ -28,6 +28,7 @@
 #include <QTabWidget>
 #include <QTreeWidget>
 #include <QTreeWidgetItemIterator>
+#include <QTextDocument>
 #include <QTextStream>
 
 class Workflow final : public aerosim::IWorkflowService {
@@ -187,6 +188,14 @@ int main(int argc, char **argv)
                && parameterNode->isExpanded()
                && workspace->currentWidget()->objectName() == "calculationOverviewPage",
                "Calculation Ribbon did not locate its tree node and overview")) return 55;
+    auto *solverOutputMode = window.findChild<QComboBox *>("solverOutputModeCombo");
+    auto *solverOutputDescription = window.findChild<QLabel *>("solverOutputModeDescription");
+    if (!check(solverOutputMode && solverOutputMode->count() == 2
+               && solverOutputMode->currentData().toString() == "embedded",
+               "Calculation preparation is missing its default embedded output mode")) return 71;
+    solverOutputMode->setCurrentIndex(1);
+    if (!check(solverOutputDescription->text().contains(text(u"\u72ec\u7acb\u63a7\u5236\u53f0")),
+               "Solver output mode did not retain its mock console configuration")) return 72;
     auto *rememberedMonitorItem = calculationNode->child(1)->child(0)->child(0);
     projectTree->setCurrentItem(rememberedMonitorItem);
     window.ribbonBar()->raiseCategory(window.findChild<SARibbonCategory *>("intelligentDataCategory"));
@@ -310,6 +319,54 @@ int main(int argc, char **argv)
                && window.findChild<QLabel *>("taskResourceSummary")
                && window.findChild<QLabel *>("outputTitle")->text().contains("Task_001"),
                "Task selection did not open the integrated monitor and scoped output")) return 49;
+    auto *taskLogSplitter = window.findChild<QSplitter *>("taskMonitorContentSplitter");
+    auto *taskLogView = window.findChild<QPlainTextEdit *>("taskRuntimeLogView");
+    auto *taskLogFilter = window.findChild<QComboBox *>("taskLogStreamFilter");
+    auto *appendTaskLog = window.findChild<QPushButton *>("appendTaskLogMockButton");
+    auto *updateTaskProgress = window.findChild<QPushButton *>("updateTaskProgressMockButton");
+    if (!check(taskLogSplitter && taskLogSplitter->count() == 2
+               && taskLogSplitter->widget(0)->objectName() == "convergenceCurvePanel"
+               && taskLogSplitter->widget(1)->objectName() == "taskRuntimeLogPanel"
+               && taskLogView && taskLogView->isReadOnly()
+               && taskLogView->lineWrapMode() == QPlainTextEdit::NoWrap
+               && taskLogView->toPlainText().contains("Task_001")
+               && taskLogFilter && taskLogFilter->count() == 3,
+               "Task monitor must place a selectable fixed-font runtime log below its curve")) return 73;
+    taskLogFilter->setCurrentIndex(taskLogFilter->findData("stderr"));
+    app.processEvents();
+    if (!check(taskLogView->toPlainText().contains("Warning")
+               && !taskLogView->toPlainText().contains("Solver started"),
+               "stderr filter changed or mixed the task log source data")) return 74;
+    taskLogFilter->setCurrentIndex(taskLogFilter->findData("all"));
+    app.processEvents();
+    const int beforeAppendBlocks = taskLogView->document()->blockCount();
+    appendTaskLog->click();
+    app.processEvents();
+    if (!check(taskLogView->document()->blockCount() == beforeAppendBlocks + 1
+               && taskLogView->toPlainText().contains(text(u"Mock \u8ffd\u52a0")),
+               "Line-oriented mock output was not appended incrementally")) return 75;
+    const int beforeProgressBlocks = taskLogView->document()->blockCount();
+    updateTaskProgress->click();
+    app.processEvents();
+    if (!check(taskLogView->document()->blockCount() == beforeProgressBlocks
+               && taskLogView->toPlainText().contains("same-line update mock"),
+               "Progress mock did not update the existing line in place")) return 76;
+    projectTree->setCurrentItem(batchRunItem->child(1));
+    app.processEvents();
+    if (!check(window.findChild<QLabel *>("taskMonitorTitle")->text().contains("Task_002")
+               && taskLogView->toPlainText().contains("Task_002")
+               && !taskLogView->toPlainText().contains("Task_001"),
+               "Switching batch tasks left the previous task log visible")) return 77;
+    projectTree->setCurrentItem(batchRunItem->child(2));
+    app.processEvents();
+    if (!check(window.findChild<QLabel *>("taskMonitorTitle")->text().contains("Task_003")
+               && taskLogView->toPlainText().isEmpty()
+               && !taskLogView->placeholderText().isEmpty(),
+               "Task without logs did not show the task-specific empty state")) return 78;
+    projectTree->setCurrentItem(batchTaskItem);
+    app.processEvents();
+    if (!check(taskLogView->toPlainText().contains(text(u"Mock \u8ffd\u52a0")),
+               "Returning to a task did not preserve its mock log state")) return 79;
     for (auto *action : window.findChildren<QAction *>()) {
         if (action->property("ribbonGroup").isValid()
             && !check(!action->icon().pixmap(32, 32).isNull(), "Missing embedded Ribbon icon")) return 20;
