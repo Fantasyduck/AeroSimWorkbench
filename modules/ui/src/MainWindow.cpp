@@ -155,6 +155,9 @@ MainWindow::MainWindow(QWidget *parent) : SARibbonMainWindow(initializeRibbonRes
         applyWindowTheme(settings.value(QStringLiteral("theme"), QStringLiteral("office-blue")).toString());
     });
     restoreLayout();
+    // Apply the integrated mesh page's compact dock arrangement only after
+    // all docks have been created and positioned.
+    showWorkspacePage(QStringLiteral("viewport"));
     appendMessage(uiText(u"\u4e3b\u754c\u9762\u5df2\u5c31\u7eea\u3002\u5de5\u4f5c\u533a\u6811\u4e0e\u53c2\u6570\u4e3a\u754c\u9762\u793a\u4f8b\uff1b\u5c1a\u672a\u63a5\u5165\u5de5\u4f5c\u533a\u3001\u914d\u7f6e\u3001VTK \u548c\u771f\u5b9e\u6c42\u89e3\u670d\u52a1\u3002"));
 }
 
@@ -213,7 +216,14 @@ void MainWindow::createRibbon()
             } else if (route.startsWith("dock:")) {
                 auto *dock = route == "dock:project" ? projectDock_
                     : route == "dock:property" ? propertyDock_ : outputDock_;
-                connect(action, &QAction::triggered, dock, &QWidget::show);
+                connect(action, &QAction::triggered, this, [this, dock] {
+                    if (dock == propertyDock_ && meshWorkspaceActive_) {
+                        statusBar()->showMessage(
+                            uiText(u"\u7f51\u683c\u663e\u793a\u5c5e\u6027\u5df2\u6574\u5408\u5230\u5f53\u524d\u7f51\u683c\u7ba1\u7406\u9875\u9762"), 4000);
+                        return;
+                    }
+                    dock->show();
+                });
             }
         }
         return panel;
@@ -930,11 +940,49 @@ void MainWindow::handleNavigationSelection(QTreeWidgetItem *item)
 
 void MainWindow::showWorkspacePage(const QString &pageId)
 {
-    if (auto *target = workspacePages_.value(pageId, nullptr)) workspaceStack_->setCurrentWidget(target);
+    if (auto *target = workspacePages_.value(pageId, nullptr)) {
+        workspaceStack_->setCurrentWidget(target);
+        setMeshWorkspaceActive(target == viewportPage_);
+    }
+}
+
+void MainWindow::setMeshWorkspaceActive(bool active)
+{
+    if (meshWorkspaceActive_ == active) {
+        // selectPage() updates the shared property editor before routing the
+        // central page, so repeated mesh navigation must still suppress it.
+        if (active && propertyDock_) {
+            propertyDock_->hide();
+            resizeDocks({projectDock_}, {260}, Qt::Horizontal);
+        }
+        return;
+    }
+    if (active) {
+        propertyDockVisibleBeforeMesh_ = propertyDock_ && propertyDock_->isVisible();
+        meshWorkspaceActive_ = true;
+        if (propertyDock_) propertyDock_->hide();
+        resizeDocks({projectDock_}, {260}, Qt::Horizontal);
+        QTimer::singleShot(0, this, [this] {
+            if (meshWorkspaceActive_) resizeDocks({projectDock_}, {260}, Qt::Horizontal);
+        });
+        // Collapse the global output once for the initial mesh layout. Later
+        // navigation must preserve the user's explicit expand/collapse choice.
+        if (!meshOutputInitialCollapseApplied_) {
+            setOutputCollapsed(true);
+            meshOutputInitialCollapseApplied_ = true;
+        }
+    } else {
+        meshWorkspaceActive_ = false;
+        if (propertyDock_ && propertyDockVisibleBeforeMesh_) {
+            propertyDock_->show();
+            resizeDocks({projectDock_, propertyDock_}, {250, 330}, Qt::Horizontal);
+        }
+    }
 }
 
 void MainWindow::showParameterDialog(const QString &pageId, const QString &title)
 {
+    setMeshWorkspaceActive(false);
     const QString objectName = QStringLiteral("parameterDialog_") + pageId;
     if (auto *existing = findChild<QDialog *>(objectName)) {
         existing->show();
@@ -1112,7 +1160,8 @@ void MainWindow::selectPage(const QString &pageId)
         note->setWordWrap(true);
         propertyForm_->addRow(note);
     }
-    propertyDock_->show();
+    if (meshWorkspaceActive_) propertyDock_->hide();
+    else propertyDock_->show();
 }
 
 void MainWindow::restoreLayout()
@@ -1131,6 +1180,11 @@ void MainWindow::restoreLayout()
     resizeDocks({projectDock_, propertyDock_}, {250, 330}, Qt::Horizontal);
     if (outputCollapsed_) setOutputCollapsed(false);
     resizeDocks({outputDock_}, {140}, Qt::Vertical);
+    if (meshWorkspaceActive_) {
+        propertyDock_->hide();
+        resizeDocks({projectDock_}, {260}, Qt::Horizontal);
+        setOutputCollapsed(true);
+    }
 }
 
 bool MainWindow::insertWidget(WidgetSlot slot, QWidget *widget)

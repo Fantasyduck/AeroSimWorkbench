@@ -345,6 +345,7 @@ MeshManagementPage::MeshManagementPage(QWidget *viewportHost, QWidget *parent)
     updateCount();
     appendHistory(uiText(u"\u521d\u59cb\u5316 3 \u4e2a Mock \u7f51\u683c\u5bf9\u8c61"));
     meshList_->setCurrentItem(meshList_->topLevelItem(0));
+    setHistoryCollapsed(true);
 }
 
 void MeshManagementPage::addMesh()

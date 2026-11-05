@@ -111,6 +111,10 @@ int main(int argc, char **argv)
                && addMesh && removeMesh && scaleEditor && historyTabs && history && historyCollapse
                && window.findChild<QSplitter *>("meshWorkspaceMainSplitter")
                && window.findChild<QWidget *>("viewportSlot")
+               && window.findChild<QDockWidget *>("propertyDock")->isHidden()
+               && window.findChild<QWidget *>("outputBody")->isHidden()
+               && historyTabs->isHidden()
+               && historyCollapse->text() == text(u"\u5c55\u5f00")
                && !window.findChild<QPlainTextEdit *>("meshScriptPlaceholder")->isEnabled(),
                "Mesh management workspace is incomplete")) return 57;
     meshList->setCurrentItem(meshList->topLevelItem(1));
@@ -132,11 +136,11 @@ int main(int argc, char **argv)
                "Removing a mock mesh did not update list availability")) return 60;
     historyCollapse->click();
     app.processEvents();
-    if (!check(historyTabs->isHidden() && historyCollapse->text() == text(u"\u5c55\u5f00"),
-               "Mesh operation history did not collapse")) return 61;
+    if (!check(!historyTabs->isHidden() && historyCollapse->text() == text(u"\u6536\u8d77"),
+               "Mesh operation history did not expand")) return 61;
     historyCollapse->click();
     app.processEvents();
-    if (!check(!historyTabs->isHidden(), "Mesh operation history did not expand")) return 62;
+    if (!check(historyTabs->isHidden(), "Mesh operation history did not collapse")) return 62;
     if (!check(window.findChild<QTreeWidget *>("workflowTree")->isHidden(),
                "Workflow tree must not occupy the module navigation")) return 33;
     projectTree->setCurrentItem(preprocessNode->child(0)->child(2));
@@ -199,6 +203,12 @@ int main(int argc, char **argv)
                && window.findChild<QCheckBox *>("logAutoScroll")->isChecked()
                && !window.findChild<QPushButton *>("exportOutputButton")->isEnabled(),
                "Bottom area must be a single structured Output panel")) return 44;
+    auto *collapseOutput = window.findChild<QPushButton *>("outputCollapseButton");
+    if (!check(window.findChild<QWidget *>("outputBody")->isHidden()
+               && collapseOutput->text() == text(u"\u5c55\u5f00"),
+               "Mesh workspace must initially use compact global output")) return 64;
+    collapseOutput->click();
+    app.processEvents();
     window.findChild<QPushButton *>("outputScopeReset")->click();
     levelFilter->setCurrentIndex(levelFilter->findData("WARN"));
     moduleFilter->setCurrentIndex(moduleFilter->findData("Validation"));
@@ -210,7 +220,6 @@ int main(int argc, char **argv)
     levelFilter->setCurrentIndex(levelFilter->findData("ALL"));
     moduleFilter->setCurrentIndex(moduleFilter->findData("ALL"));
     logSearch->clear();
-    auto *collapseOutput = window.findChild<QPushButton *>("outputCollapseButton");
     collapseOutput->click();
     app.processEvents();
     if (!check(window.findChild<QWidget *>("outputBody")->isHidden()
@@ -271,9 +280,16 @@ int main(int argc, char **argv)
     app.processEvents();
     if (!check(workspace->currentWidget()->objectName() == "mesh-transformPage",
                "Mesh transform node did not open its placeholder page")) return 43;
+    if (!check(!propertyDock->isHidden(),
+               "Non-mesh workspace did not restore the shared property panel")) return 65;
     projectTree->setCurrentItem(preprocessNode->child(0));
     app.processEvents();
-    if (!check(workspace->currentWidget() == meshPage && meshList->topLevelItemCount() == 9,
+    if (!check(workspace->currentWidget() == meshPage && meshList->topLevelItemCount() == 9
+               && propertyDock->isHidden()
+               && !window.findChild<QWidget *>("outputBody")->isHidden()
+               && projectDock->width() <= 320
+               && window.findChild<QWidget *>("meshViewerPanel")->width()
+                    > window.findChild<QWidget *>("meshObjectPanel")->width(),
                "Mesh management group did not restore its persistent workspace")) return 63;
     app.processEvents();
     for (const QString &id : {QStringLiteral("office-blue"), QStringLiteral("office-light"),

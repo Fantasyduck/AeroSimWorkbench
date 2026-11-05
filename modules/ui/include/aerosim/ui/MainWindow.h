@@ -51,6 +51,7 @@ private:
     void handleNavigationSelection(QTreeWidgetItem *item);
     void showParameterDialog(const QString &pageId, const QString &title);
     void showWorkspacePage(const QString &pageId);
+    void setMeshWorkspaceActive(bool active);
     void selectNavigationNode(QTreeWidget *tree, const QString &objectId);
     void restoreLayout();
     void submitRun();
@@ -112,6 +113,9 @@ private:
     bool outputCollapsed_ = false;
     bool projectEditingEnabled_ = false;
     bool syncingRibbonTree_ = false;
+    bool meshWorkspaceActive_ = false;
+    bool propertyDockVisibleBeforeMesh_ = true;
+    bool meshOutputInitialCollapseApplied_ = false;
     QHash<QString, QVariantMap> drafts_;
 };
 
