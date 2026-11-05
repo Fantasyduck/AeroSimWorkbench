@@ -20,6 +20,7 @@ find_package(Qt5 5.12.12 EXACT REQUIRED COMPONENTS Svg)
 add_library(aerosim_ui STATIC
     resources/PostProcessIcons.qrc
     src/MainWindow.cpp include/aerosim/ui/MainWindow.h resources/RibbonIcons.qrc
+    src/MeshManagementPage.cpp include/aerosim/ui/MeshManagementPage.h
     src/StartupLandingPage.cpp include/aerosim/ui/StartupLandingPage.h
     src/postprocess/PostProcessWorkbenchWindow.cpp
     include/aerosim/ui/postprocess/PostProcessWorkbenchWindow.h)

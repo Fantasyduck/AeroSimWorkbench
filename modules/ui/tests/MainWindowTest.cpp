@@ -13,11 +13,15 @@
 #include <QComboBox>
 #include <QLabel>
 #include <QLineEdit>
+#include <QListWidget>
 #include <QMenu>
 #include <QDockWidget>
 #include <QDialog>
 #include <QDoubleSpinBox>
+#include <QPlainTextEdit>
 #include <QPushButton>
+#include <QSlider>
+#include <QSplitter>
 #include <QStackedWidget>
 #include <QTableWidget>
 #include <QTabWidget>
@@ -93,6 +97,46 @@ int main(int argc, char **argv)
                && calculationNode->childCount() == 2
                && intelligentDataNode->childCount() == 0 && postprocessNode->childCount() == 0,
                "Unified tree module hierarchy is incorrect")) return 54;
+    auto *meshPage = window.findChild<QWidget *>("viewportPage");
+    auto *meshList = window.findChild<QTreeWidget *>("meshList");
+    auto *meshCount = window.findChild<QLabel *>("meshObjectCount");
+    auto *addMesh = window.findChild<QPushButton *>("addMeshButton");
+    auto *removeMesh = window.findChild<QPushButton *>("removeMeshButton");
+    auto *scaleEditor = window.findChild<QDoubleSpinBox *>("meshScaleEditor");
+    auto *historyTabs = window.findChild<QTabWidget *>("meshHistoryTabs");
+    auto *history = window.findChild<QListWidget *>("meshOperationHistory");
+    auto *historyCollapse = window.findChild<QPushButton *>("meshHistoryCollapseButton");
+    if (!check(meshPage && meshList && meshList->topLevelItemCount() == 3
+               && meshCount && meshCount->text().contains("3 / 10")
+               && addMesh && removeMesh && scaleEditor && historyTabs && history && historyCollapse
+               && window.findChild<QSplitter *>("meshWorkspaceMainSplitter")
+               && window.findChild<QWidget *>("viewportSlot")
+               && !window.findChild<QPlainTextEdit *>("meshScriptPlaceholder")->isEnabled(),
+               "Mesh management workspace is incomplete")) return 57;
+    meshList->setCurrentItem(meshList->topLevelItem(1));
+    scaleEditor->setValue(2.5);
+    meshList->topLevelItem(1)->setCheckState(0, Qt::Unchecked);
+    meshList->setCurrentItem(meshList->topLevelItem(0));
+    meshList->setCurrentItem(meshList->topLevelItem(1));
+    app.processEvents();
+    if (!check(scaleEditor->value() == 2.5
+               && !window.findChild<QCheckBox *>("meshVisibleEditor")->isChecked()
+               && history->count() >= 3,
+               "Per-mesh mock display state was not retained")) return 58;
+    for (int i = meshList->topLevelItemCount(); i < 10; ++i) addMesh->click();
+    if (!check(meshList->topLevelItemCount() == 10 && !addMesh->isEnabled()
+               && meshCount->text().contains("10 / 10"),
+               "Mesh management did not enforce its ten-object UI limit")) return 59;
+    removeMesh->click();
+    if (!check(meshList->topLevelItemCount() == 9 && addMesh->isEnabled(),
+               "Removing a mock mesh did not update list availability")) return 60;
+    historyCollapse->click();
+    app.processEvents();
+    if (!check(historyTabs->isHidden() && historyCollapse->text() == text(u"\u5c55\u5f00"),
+               "Mesh operation history did not collapse")) return 61;
+    historyCollapse->click();
+    app.processEvents();
+    if (!check(!historyTabs->isHidden(), "Mesh operation history did not expand")) return 62;
     if (!check(window.findChild<QTreeWidget *>("workflowTree")->isHidden(),
                "Workflow tree must not occupy the module navigation")) return 33;
     projectTree->setCurrentItem(preprocessNode->child(0)->child(2));
@@ -227,6 +271,10 @@ int main(int argc, char **argv)
     app.processEvents();
     if (!check(workspace->currentWidget()->objectName() == "mesh-transformPage",
                "Mesh transform node did not open its placeholder page")) return 43;
+    projectTree->setCurrentItem(preprocessNode->child(0));
+    app.processEvents();
+    if (!check(workspace->currentWidget() == meshPage && meshList->topLevelItemCount() == 9,
+               "Mesh management group did not restore its persistent workspace")) return 63;
     app.processEvents();
     for (const QString &id : {QStringLiteral("office-blue"), QStringLiteral("office-light"),
                               QStringLiteral("dark"), QStringLiteral("dark-gray")}) {

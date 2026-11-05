@@ -1,4 +1,5 @@
 #include "aerosim/ui/MainWindow.h"
+#include "aerosim/ui/MeshManagementPage.h"
 
 #include <SARibbonBar.h>
 #include <SARibbonCategory.h>
@@ -441,13 +442,8 @@ void MainWindow::createWorkspace()
 {
     workspaceStack_ = new QStackedWidget(this);
     workspaceStack_->setObjectName(QStringLiteral("centralWorkspace"));
-    viewportPage_ = new QWidget(workspaceStack_);
-    viewportPage_->setObjectName(QStringLiteral("viewportPage"));
-    auto *viewportLayout = new QVBoxLayout(viewportPage_);
-    viewportLayout->setContentsMargins(0, 0, 0, 0);
     auto *viewport = createSlot(WidgetSlot::Viewport, uiText(u"\u4e09\u7ef4\u5de5\u4f5c\u533a\n\nVTK 8.2 \u89c6\u53e3\u63a5\u5165\u4f4d\u7f6e\n\u5bfc\u5165\u4e0e\u6e32\u67d3\u6a21\u5757\u5c1a\u672a\u63a5\u5165"));
-    viewport->setObjectName(QStringLiteral("viewportSlot"));
-    viewportLayout->addWidget(viewport, 1);
+    viewportPage_ = new MeshManagementPage(viewport, workspaceStack_);
     workspaceStack_->addWidget(viewportPage_);
 
     const auto createWorkspacePage = [this](const QString &objectName, const QString &title,
@@ -570,7 +566,7 @@ void MainWindow::createWorkspace()
     auto *root = new QTreeWidgetItem(projectTree_, {uiText(u"\u5de5\u4f5c\u533a Workspace\uff08\u672a\u6253\u5f00\uff09")});
     root->setData(0, NodeTypeRole, QStringLiteral("workspace-root"));
     auto *preprocessModule = addNavigationItem(root, uiText(u"\u524d\u5904\u7406"), {}, QStringLiteral("module-preprocess"), QStringLiteral("module"));
-    auto *mesh = addNavigationItem(preprocessModule, uiText(u"\u7f51\u683c\u7ba1\u7406"), {}, QStringLiteral("mesh-management"), QStringLiteral("group"));
+    auto *mesh = addNavigationItem(preprocessModule, uiText(u"\u7f51\u683c\u7ba1\u7406"), QStringLiteral("viewport"), QStringLiteral("mesh-management"), QStringLiteral("group"));
     addNavigationItem(mesh, uiText(u"\u7f51\u683c\u6587\u4ef6"), QStringLiteral("viewport"), QStringLiteral("mesh-file"), QStringLiteral("feature"));
     addNavigationItem(mesh, uiText(u"\u7f51\u683c\u53d8\u6362"), QStringLiteral("mesh-transform"), QStringLiteral("mesh-transform"), QStringLiteral("feature"));
     addNavigationItem(mesh, uiText(u"\u7f51\u683c\u8fb9\u754c"), QStringLiteral("mesh-boundary"), QStringLiteral("mesh-boundary"), QStringLiteral("feature"));
