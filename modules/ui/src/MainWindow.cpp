@@ -474,6 +474,25 @@ void MainWindow::createWorkspace()
         layout->addWidget(note);
         return page;
     };
+    parameterWorkspacePage_ = createWorkspacePage(
+        QStringLiteral("parameterWorkspacePage"), uiText(u"\u53c2\u6570\u8bbe\u7f6e"),
+        uiText(u"\u4ece\u5de6\u4fa7\u7edf\u4e00\u5de5\u4f5c\u533a\u6811\u9009\u62e9\u63a7\u5236\u65b9\u7a0b\u3001\u8fb9\u754c\u6761\u4ef6\u3001\u7f51\u683c\u8fd0\u52a8\u3001\u6c42\u89e3\u65b9\u6cd5\u3001\u53c2\u8003\u91cf\u3001\u8f93\u51fa\u63a7\u5236\u6216\u521d\u59cb\u5316\u3002\u5f53\u524d\u4ec5\u63d0\u4f9b\u524d\u7aef Mock \u8349\u7a3f\u4e0e\u5df2\u6709\u914d\u7f6e\u5f39\u7a97\uff0c\u4e0d\u6267\u884c\u4e1a\u52a1\u6821\u9a8c\u6216\u6301\u4e45\u5316\u3002"));
+    parameterWorkspaceTitle_ = parameterWorkspacePage_->findChild<QLabel *>(
+        QStringLiteral("workspacePageTitle"), Qt::FindDirectChildrenOnly);
+    if (parameterWorkspaceTitle_) parameterWorkspaceTitle_->setObjectName(QStringLiteral("parameterWorkspaceTitle"));
+    auto *parameterCategories = new QLabel(
+        uiText(u"\u53ef\u7528\u7c7b\u522b\n\n\u2022 \u63a7\u5236\u65b9\u7a0b    \u2022 \u8fb9\u754c\u6761\u4ef6    \u2022 \u7f51\u683c\u8fd0\u52a8\n\u2022 \u6c42\u89e3\u65b9\u6cd5    \u2022 \u53c2\u8003\u91cf        \u2022 \u8f93\u51fa\u63a7\u5236    \u2022 \u521d\u59cb\u5316"),
+        parameterWorkspacePage_);
+    parameterCategories->setObjectName(QStringLiteral("parameterCategorySummary"));
+    parameterCategories->setWordWrap(true);
+    qobject_cast<QVBoxLayout *>(parameterWorkspacePage_->layout())->addWidget(parameterCategories);
+    qobject_cast<QVBoxLayout *>(parameterWorkspacePage_->layout())->addStretch();
+
+    calculationOverviewPage_ = createWorkspacePage(
+        QStringLiteral("calculationOverviewPage"), uiText(u"\u8ba1\u7b97"),
+        uiText(u"\u8ba1\u7b97\u6a21\u5757\u524d\u7aef\u5165\u53e3\u3002\u53ef\u5728\u5de6\u4fa7\u9009\u62e9\u5de5\u51b5\u7ba1\u7406\u3001\u6279\u5904\u7406\u8ba1\u5212\u3001\u5355\u6b21/\u6279\u91cf\u8ba1\u7b97\u6216\u8ba1\u7b97\u76d1\u63a7\u3002\u5f53\u524d\u6570\u636e\u4e0e\u8fd0\u884c\u72b6\u6001\u5747\u4e3a Mock \u754c\u9762\u793a\u4f8b\uff0c\u4e0d\u542f\u52a8\u771f\u5b9e\u6c42\u89e3\u5668\u3002"));
+    qobject_cast<QVBoxLayout *>(calculationOverviewPage_->layout())->addStretch();
+
     stateListPage_ = createWorkspacePage(QStringLiteral("stateListPage"), uiText(u"\u5de5\u51b5\u7ba1\u7406"),
         uiText(u"\u5de5\u51b5\u4e0e\u6279\u5904\u7406\u8ba1\u5212\u5206\u5f00\u7ba1\u7406\u3002\u4ee5\u4e0b\u5185\u5bb9\u4ec5\u7528\u4e8e\u754c\u9762\u9a8c\u8bc1\uff0c\u672a\u4ece\u5de5\u4f5c\u533a\u670d\u52a1\u52a0\u8f7d\u3002"));
     auto *stateLayout = qobject_cast<QVBoxLayout *>(stateListPage_->layout());
@@ -536,17 +555,26 @@ void MainWindow::createWorkspace()
     batchMonitorLayout->addStretch();
     taskMonitorPage_ = createWorkspacePage(QStringLiteral("taskMonitorPage"), uiText(u"\u5355\u4efb\u52a1\u76d1\u63a7"),
         uiText(u"\u7efc\u5408\u663e\u793a\u4efb\u52a1\u8fdb\u5ea6\u3001\u6536\u655b\u8d8b\u52bf\u548c\u8d44\u6e90\u4fe1\u606f\u3002\u672a\u63a5\u5165\u771f\u5b9e\u6570\u636e\u7684\u5b57\u6bb5\u5747\u6807\u8bb0\u4e3a Mock\u3002"));
-    dataProcessPage_ = createWorkspacePage(QStringLiteral("dataProcessPage"), uiText(u"\u6570\u636e\u5904\u7406\u5de5\u4f5c\u533a"),
-        uiText(u"\u591a\u5de5\u51b5\u6570\u636e\u3001\u516d\u5206\u91cf\u6570\u636e\u4e0e\u5206\u6790\u4efb\u52a1\u7684\u754c\u9762\u5165\u53e3\u3002\u672c\u9636\u6bb5\u4e0d\u6267\u884c\u8235\u6548\u6216\u6c14\u52a8\u529b\u5206\u6790\u7b97\u6cd5\u3002"));
+    dataProcessPage_ = createWorkspacePage(QStringLiteral("intelligentDataPage"), uiText(u"\u667a\u80fd\u6570\u636e\u5904\u7406"),
+        uiText(u"\u8be5\u6a21\u5757\u529f\u80fd\u5f85\u63a5\u5165\u3002\u672c\u9875\u4ec5\u7528\u4e8e\u660e\u786e Ribbon \u4e0e\u4e2d\u592e\u5de5\u4f5c\u533a\u7684\u5bfc\u822a\u8fb9\u754c\uff0c\u4e0d\u6267\u884c\u6570\u636e\u5206\u6790\u3001AI \u6216\u516c\u5f0f\u8ba1\u7b97\u3002"));
     qobject_cast<QVBoxLayout *>(dataProcessPage_->layout())->addStretch();
-    for (auto *page : {stateListPage_, batchPlanPage_, batchMonitorPage_, taskMonitorPage_, dataProcessPage_})
+    postprocessOverviewPage_ = createWorkspacePage(
+        QStringLiteral("postprocessOverviewPage"), uiText(u"\u540e\u5904\u7406\u5206\u6790"),
+        uiText(u"\u8be5\u6a21\u5757\u529f\u80fd\u5f85\u63a5\u5165\u3002\u5df2\u6709\u540e\u5904\u7406\u5de5\u4f5c\u53f0\u4e0e\u76f8\u5173\u4ee3\u7801\u4fdd\u6301\u4e0d\u53d8\uff0c\u672c\u9875\u4e0d\u521b\u5efa\u7b2c\u4e8c\u4e2a VTK \u89c6\u53e3\u6216\u6267\u884c\u540e\u5904\u7406\u7b97\u6cd5\u3002"));
+    qobject_cast<QVBoxLayout *>(postprocessOverviewPage_->layout())->addStretch();
+    for (auto *page : {parameterWorkspacePage_, calculationOverviewPage_, stateListPage_, batchPlanPage_,
+                       batchMonitorPage_, taskMonitorPage_, dataProcessPage_, postprocessOverviewPage_})
         workspaceStack_->addWidget(page);
     workspacePages_.insert(QStringLiteral("viewport"), viewportPage_);
+    workspacePages_.insert(QStringLiteral("parameters"), parameterWorkspacePage_);
+    workspacePages_.insert(QStringLiteral("calculation-overview"), calculationOverviewPage_);
     workspacePages_.insert(QStringLiteral("states"), stateListPage_);
     workspacePages_.insert(QStringLiteral("batch-plan"), batchPlanPage_);
     workspacePages_.insert(QStringLiteral("batch-monitor"), batchMonitorPage_);
     workspacePages_.insert(QStringLiteral("task-monitor"), taskMonitorPage_);
     workspacePages_.insert(QStringLiteral("data-process"), dataProcessPage_);
+    workspacePages_.insert(QStringLiteral("intelligent-data"), dataProcessPage_);
+    workspacePages_.insert(QStringLiteral("postprocess-overview"), postprocessOverviewPage_);
     const struct PlaceholderPage { const char *id; const char16_t *title; const char16_t *description; } placeholderPages[] = {
         {"mesh-transform", u"\u7f51\u683c\u53d8\u6362", u"\u914d\u7f6e\u7f51\u683c\u5e73\u79fb\u3001\u65cb\u8f6c\u4e0e\u7f29\u653e\u3002\u5f53\u524d\u4ec5\u4fdd\u7559 UI \u5165\u53e3\uff0c\u4e0d\u6267\u884c\u7f51\u683c\u64cd\u4f5c\u3002"},
         {"mesh-boundary", u"\u7f51\u683c\u8fb9\u754c", u"\u5c55\u793a\u7f51\u683c\u8fb9\u754c\u4fe1\u606f\u4e0e\u540e\u7eed\u8bbe\u7f6e\u5165\u53e3\u3002\u5c1a\u672a\u63a5\u5165\u771f\u5b9e\u7f51\u683c\u6570\u636e\u3002"},
@@ -565,6 +593,30 @@ void MainWindow::createWorkspace()
         workspaceStack_->addWidget(page);
         workspacePages_.insert(QString::fromLatin1(definition.id), page);
     }
+    const QString preprocessModuleId = QStringLiteral("module-preprocess");
+    const QString parameterModuleId = QStringLiteral("module-parameters");
+    const QString calculationModuleId = QStringLiteral("module-calculation");
+    const QString intelligentModuleId = QStringLiteral("module-intelligent-data");
+    const QString postprocessModuleId = QStringLiteral("module-postprocess-analysis");
+    for (const QString &pageId : {QStringLiteral("viewport"), QStringLiteral("mesh-transform"),
+                                  QStringLiteral("mesh-boundary"), QStringLiteral("mesh-info"),
+                                  QStringLiteral("trajectory-file"), QStringLiteral("trajectory-data"),
+                                  QStringLiteral("state-extraction")})
+        workspacePageModules_.insert(pageId, preprocessModuleId);
+    workspacePageModules_.insert(QStringLiteral("parameters"), parameterModuleId);
+    for (const QString &pageId : {QStringLiteral("calculation-overview"), QStringLiteral("states"),
+                                  QStringLiteral("batch-plan"), QStringLiteral("batch-monitor"),
+                                  QStringLiteral("task-monitor"), QStringLiteral("single-calculation"),
+                                  QStringLiteral("batch-calculation")})
+        workspacePageModules_.insert(pageId, calculationModuleId);
+    workspacePageModules_.insert(QStringLiteral("data-process"), intelligentModuleId);
+    workspacePageModules_.insert(QStringLiteral("intelligent-data"), intelligentModuleId);
+    workspacePageModules_.insert(QStringLiteral("postprocess-overview"), postprocessModuleId);
+    moduleLastPages_.insert(preprocessModuleId, QStringLiteral("viewport"));
+    moduleLastPages_.insert(parameterModuleId, QStringLiteral("parameters"));
+    moduleLastPages_.insert(calculationModuleId, QStringLiteral("calculation-overview"));
+    moduleLastPages_.insert(intelligentModuleId, QStringLiteral("intelligent-data"));
+    moduleLastPages_.insert(postprocessModuleId, QStringLiteral("postprocess-overview"));
     setCentralWidget(workspaceStack_);
 
     projectDock_ = new QDockWidget(uiText(u"\u5de5\u4f5c\u533a\u6811"), this);
@@ -598,7 +650,7 @@ void MainWindow::createWorkspace()
             QStringLiteral("parameter-dialog"), QString::fromLatin1(definition.id), QStringLiteral("parameter-page"));
     }
     auto *calculationModule = addNavigationItem(root, uiText(u"\u8ba1\u7b97"), {}, QStringLiteral("module-calculation"), QStringLiteral("module"));
-    auto *startCalculation = addNavigationItem(calculationModule, uiText(u"\u5f00\u59cb\u8ba1\u7b97"), {}, QStringLiteral("start-calculation"), QStringLiteral("group"));
+    auto *startCalculation = addNavigationItem(calculationModule, uiText(u"\u5f00\u59cb\u8ba1\u7b97"), QStringLiteral("calculation-overview"), QStringLiteral("start-calculation"), QStringLiteral("group"));
     auto *states = addNavigationItem(startCalculation, uiText(u"\u5de5\u51b5\u7ba1\u7406"), QStringLiteral("state-manager"), QStringLiteral("states"), QStringLiteral("state-manager"));
     for (int i = 1; i <= 2; ++i) {
         const QString id = QStringLiteral("State_%1").arg(i, 3, 10, QLatin1Char('0'));
@@ -611,7 +663,7 @@ void MainWindow::createWorkspace()
     }
     addNavigationItem(startCalculation, uiText(u"\u5355\u6b21\u8ba1\u7b97"), QStringLiteral("single-calculation"), QStringLiteral("single-calculation"), QStringLiteral("feature"));
     addNavigationItem(startCalculation, uiText(u"\u6279\u91cf\u8ba1\u7b97"), QStringLiteral("batch-calculation"), QStringLiteral("batch-calculation"), QStringLiteral("feature"));
-    auto *calculationMonitor = addNavigationItem(calculationModule, uiText(u"\u8ba1\u7b97\u76d1\u63a7"), {}, QStringLiteral("calculation-monitor"), QStringLiteral("group"));
+    auto *calculationMonitor = addNavigationItem(calculationModule, uiText(u"\u8ba1\u7b97\u76d1\u63a7"), QStringLiteral("task-monitor"), QStringLiteral("calculation-monitor"), QStringLiteral("group"));
     auto *singleRuns = addNavigationItem(calculationMonitor, uiText(u"\u5355\u6b21\u8ba1\u7b97\u4efb\u52a1"), {}, QStringLiteral("single-runs"), QStringLiteral("group"));
     auto *run = addNavigationItem(singleRuns, uiText(u"Run_001\uff08Mock \u793a\u4f8b\uff09"), QStringLiteral("task"), QStringLiteral("Run_001"), QStringLiteral("task"));
     setTaskItemStatus(run, TaskStatus::Running);
@@ -634,13 +686,6 @@ void MainWindow::createWorkspace()
     startCalculation->setExpanded(true);
     calculationMonitor->setExpanded(true);
     connect(projectTree_, &QTreeWidget::currentItemChanged, this, [this](QTreeWidgetItem *item) { handleNavigationSelection(item); });
-    connect(projectTree_, &QTreeWidget::itemClicked, this, [this](QTreeWidgetItem *item) {
-        if (!item) return;
-        const QString nodeType = item->data(0, NodeTypeRole).toString();
-        if ((nodeType == QStringLiteral("module") || nodeType == QStringLiteral("group")) && item->childCount() > 0)
-            item->setExpanded(!item->isExpanded());
-        handleNavigationSelection(item);
-    });
     projectDock_->setWidget(projectTree_);
 
     // Workflow data remains available to run gating and services, but no longer
@@ -881,8 +926,7 @@ void MainWindow::switchNavigationForCategory(int index)
     syncingRibbonTree_ = true;
     selectNavigationNode(projectTree_, moduleId);
     syncingRibbonTree_ = false;
-    // Ribbon switching only locates the unified tree; the active page and
-    // property editor remain unchanged.
+    showModuleWorkspace(moduleId);
 }
 
 void MainWindow::handleNavigationSelection(QTreeWidgetItem *item)
@@ -908,8 +952,16 @@ void MainWindow::handleNavigationSelection(QTreeWidgetItem *item)
         }
     }
     const QString page = item->data(0, PageRole).toString();
-    if (page.isEmpty()) return;
     const QString objectId = item->data(0, ObjectIdRole).toString();
+    if (page.isEmpty()) {
+        if (!syncingRibbonTree_) {
+            auto *module = item;
+            while (module && module->data(0, NodeTypeRole).toString() != QStringLiteral("module"))
+                module = module->parent();
+            if (module) showModuleWorkspace(module->data(0, ObjectIdRole).toString());
+        }
+        return;
+    }
     if (page == QStringLiteral("parameter-dialog")) {
         selectPage(page + QLatin1Char('|') + objectId);
         showParameterDialog(objectId, item->text(0));
@@ -942,8 +994,18 @@ void MainWindow::showWorkspacePage(const QString &pageId)
 {
     if (auto *target = workspacePages_.value(pageId, nullptr)) {
         workspaceStack_->setCurrentWidget(target);
+        const QString moduleId = workspacePageModules_.value(pageId);
+        if (!moduleId.isEmpty()) moduleLastPages_.insert(moduleId, pageId);
         setMeshWorkspaceActive(target == viewportPage_);
     }
+}
+
+void MainWindow::showModuleWorkspace(const QString &moduleId)
+{
+    const QString pageId = moduleLastPages_.value(moduleId);
+    if (pageId.isEmpty() || !workspacePages_.contains(pageId)) return;
+    selectPage(pageId);
+    showWorkspacePage(pageId);
 }
 
 void MainWindow::setMeshWorkspaceActive(bool active)
@@ -982,7 +1044,10 @@ void MainWindow::setMeshWorkspaceActive(bool active)
 
 void MainWindow::showParameterDialog(const QString &pageId, const QString &title)
 {
-    setMeshWorkspaceActive(false);
+    selectPage(QStringLiteral("parameter-dialog|") + pageId);
+    if (parameterWorkspaceTitle_)
+        parameterWorkspaceTitle_->setText(title + uiText(u" \u00b7 \u53c2\u6570\u8bbe\u7f6e\uff08Mock\uff09"));
+    showWorkspacePage(QStringLiteral("parameters"));
     const QString objectName = QStringLiteral("parameterDialog_") + pageId;
     if (auto *existing = findChild<QDialog *>(objectName)) {
         existing->show();
@@ -1092,6 +1157,8 @@ void MainWindow::selectPage(const QString &pageId)
         {"dataset", uiText(u"\u6570\u636e\u96c6\u4fe1\u606f")}, {"data-process", uiText(u"\u6570\u636e\u5904\u7406")},
         {"monitor-log", uiText(u"\u8ba1\u7b97\u65e5\u5fd7")}, {"monitor-residual", uiText(u"\u6536\u655b\u66f2\u7ebf")},
         {"monitor-errors", uiText(u"\u9519\u8bef\u4fe1\u606f")}, {"results", uiText(u"\u7ed3\u679c\u4e0e\u540e\u5904\u7406")},
+        {"parameters", uiText(u"\u53c2\u6570\u8bbe\u7f6e")}, {"calculation-overview", uiText(u"\u8ba1\u7b97")},
+        {"intelligent-data", uiText(u"\u667a\u80fd\u6570\u636e\u5904\u7406")}, {"postprocess-overview", uiText(u"\u540e\u5904\u7406\u5206\u6790")},
         {"viewport", uiText(u"\u7f51\u683c\u6587\u4ef6")}, {"mesh-transform", uiText(u"\u7f51\u683c\u53d8\u6362")},
         {"mesh-boundary", uiText(u"\u7f51\u683c\u8fb9\u754c")}, {"mesh-info", uiText(u"\u7f51\u683c\u4fe1\u606f")},
         {"trajectory-file", uiText(u"\u5f39\u9053\u6587\u4ef6")}, {"trajectory-data", uiText(u"\u5f39\u9053\u6570\u636e")},

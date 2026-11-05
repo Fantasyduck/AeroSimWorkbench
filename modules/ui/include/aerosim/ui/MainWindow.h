@@ -51,6 +51,7 @@ private:
     void handleNavigationSelection(QTreeWidgetItem *item);
     void showParameterDialog(const QString &pageId, const QString &title);
     void showWorkspacePage(const QString &pageId);
+    void showModuleWorkspace(const QString &moduleId);
     void setMeshWorkspaceActive(bool active);
     void selectNavigationNode(QTreeWidget *tree, const QString &objectId);
     void restoreLayout();
@@ -78,12 +79,17 @@ private:
     QTreeWidget *taskTree_ = nullptr;
     QStackedWidget *workspaceStack_ = nullptr;
     QWidget *viewportPage_ = nullptr;
+    QWidget *parameterWorkspacePage_ = nullptr;
+    QWidget *calculationOverviewPage_ = nullptr;
     QWidget *stateListPage_ = nullptr;
     QWidget *batchPlanPage_ = nullptr;
     QWidget *batchMonitorPage_ = nullptr;
     QWidget *taskMonitorPage_ = nullptr;
     QWidget *dataProcessPage_ = nullptr;
+    QWidget *postprocessOverviewPage_ = nullptr;
     QHash<QString, QWidget *> workspacePages_;
+    QHash<QString, QString> workspacePageModules_;
+    QHash<QString, QString> moduleLastPages_;
     QTableWidget *stateTable_ = nullptr;
     QTableWidget *batchPlanTable_ = nullptr;
     QTableWidget *outputLogTable_ = nullptr;
@@ -92,6 +98,7 @@ private:
     QDockWidget *outputDock_ = nullptr;
     QFormLayout *propertyForm_ = nullptr;
     QLabel *propertyTitle_ = nullptr;
+    QLabel *parameterWorkspaceTitle_ = nullptr;
     QLabel *suggestion_ = nullptr;
     QLabel *monitorStatus_ = nullptr;
     QLabel *monitorDetails_ = nullptr;

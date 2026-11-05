@@ -147,18 +147,25 @@ int main(int argc, char **argv)
     projectTree->setCurrentItem(preprocessNode->child(0)->child(1));
     app.processEvents();
     auto *retainedPage = workspace->currentWidget();
+    if (!check(retainedPage->objectName() == "mesh-transformPage",
+               "Preprocess node did not establish its module page state")) return 66;
     parameterNode->setExpanded(false);
     window.ribbonBar()->raiseCategory(window.findChild<SARibbonCategory *>("parametersCategory"));
     app.processEvents();
     if (!check(projectTree->currentItem() == parameterNode && parameterNode->isExpanded()
-               && workspace->currentWidget() == retainedPage,
-               "Ribbon must locate the module without replacing the main display")) return 34;
+               && workspace->currentWidget()->objectName() == "parameterWorkspacePage"
+               && workspace->currentWidget() != retainedPage
+               && !workspace->currentWidget()->findChild<QWidget *>("viewportSlot"),
+               "Parameter Ribbon did not switch the central module page")) return 34;
     if (!check(parameterNode->childCount() == 7 && parameterNode->child(0)->childCount() == 0,
                "Parameter tree must contain seven leaf pages")) return 41;
     projectTree->setCurrentItem(parameterNode->child(0));
     app.processEvents();
     auto *parameterDialog = window.findChild<QDialog *>("parameterDialog_control-equations");
     if (!check(parameterDialog && parameterDialog->isVisible()
+               && workspace->currentWidget()->objectName() == "parameterWorkspacePage"
+               && window.findChild<QLabel *>("parameterWorkspaceTitle")->text().contains(
+                    text(u"\u63a7\u5236\u65b9\u7a0b"))
                && window.ribbonBar()->currentIndex() == window.ribbonBar()->categoryIndex(
                    window.findChild<SARibbonCategory *>("parametersCategory")),
                "Parameter node did not open its dialog or reverse-sync Ribbon")) return 52;
@@ -166,22 +173,43 @@ int main(int argc, char **argv)
     window.ribbonBar()->raiseCategory(window.findChild<SARibbonCategory *>("calculationCategory"));
     app.processEvents();
     if (!check(projectTree->currentItem() == calculationNode && calculationNode->isExpanded()
-               && parameterNode->isExpanded(), "Ribbon location collapsed another module")) return 55;
+               && parameterNode->isExpanded()
+               && workspace->currentWidget()->objectName() == "calculationOverviewPage",
+               "Calculation Ribbon did not locate its tree node and overview")) return 55;
     auto *rememberedMonitorItem = calculationNode->child(1)->child(0)->child(0);
     projectTree->setCurrentItem(rememberedMonitorItem);
     window.ribbonBar()->raiseCategory(window.findChild<SARibbonCategory *>("intelligentDataCategory"));
     app.processEvents();
     if (!check(projectTree->currentItem() == intelligentDataNode
-               && workspace->currentWidget()->objectName() == "taskMonitorPage",
-               "Reserved data entry must not replace the current page")) return 53;
+               && workspace->currentWidget()->objectName() == "intelligentDataPage",
+               "Intelligent data Ribbon did not show its reserved page")) return 53;
+    window.ribbonBar()->raiseCategory(window.findChild<SARibbonCategory *>("calculationCategory"));
+    app.processEvents();
+    if (!check(workspace->currentWidget()->objectName() == "taskMonitorPage",
+               "Calculation module did not restore its last monitor page")) return 67;
     window.ribbonBar()->raiseCategory(window.findChild<SARibbonCategory *>("postprocessAnalysisCategory"));
     app.processEvents();
-    if (!check(projectTree->currentItem() == postprocessNode, "Postprocess Ribbon did not locate its node")) return 36;
+    if (!check(projectTree->currentItem() == postprocessNode
+               && workspace->currentWidget()->objectName() == "postprocessOverviewPage",
+               "Postprocess Ribbon did not locate its node and reserved page")) return 36;
     window.ribbonBar()->raiseCategory(preprocess);
     app.processEvents();
     if (!check(projectTree->currentItem() == preprocessNode
-               && workspace->currentWidget()->objectName() == "taskMonitorPage",
-               "Preprocess Ribbon tab must retain the persistent main display")) return 51;
+               && workspace->currentWidget() == retainedPage
+               && workspace->currentWidget()->objectName() == "mesh-transformPage",
+               "Preprocess Ribbon did not restore its last page")) return 51;
+    for (int cycle = 0; cycle < 3; ++cycle) {
+        for (auto *category : categories) {
+            window.ribbonBar()->raiseCategory(category);
+            app.processEvents();
+        }
+    }
+    window.ribbonBar()->raiseCategory(preprocess);
+    app.processEvents();
+    if (!check(workspace->currentWidget() == retainedPage
+               && window.findChildren<QWidget *>("viewportSlot").size() == 1
+               && meshList->topLevelItemCount() == 9,
+               "Repeated module switching recreated state or the VTK host")) return 68;
     window.show();
     app.processEvents();
     auto *projectDock = window.findChild<QDockWidget *>("projectDock");
