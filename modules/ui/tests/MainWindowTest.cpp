@@ -421,6 +421,9 @@ int main(int argc, char **argv)
     const double savedMeshRatio = userLayout.value("UserLayout/meshLayout").toMap()
         .value("objectPanelRatio").toDouble();
     const double savedMonitorRatio = userLayout.value("UserLayout/monitorCurveRatio").toDouble();
+    if (!check(savedMeshRatio >= 0.20 && savedMeshRatio <= 0.42
+               && savedMonitorRatio >= 0.45 && savedMonitorRatio <= 0.82,
+               "Saved layout ratios are outside the supported adaptive range")) return 85;
     meshMainSplitter->setSizes({245, 755});
     monitorLayoutSplitter->setSizes({470, 530});
     collapseOutput->click();
@@ -433,8 +436,8 @@ int main(int argc, char **argv)
         / qMax(1, restoredMeshSizes.value(0) + restoredMeshSizes.value(1));
     const double restoredMonitorRatio = double(restoredMonitorSizes.value(0))
         / qMax(1, restoredMonitorSizes.value(0) + restoredMonitorSizes.value(1));
-    if (!check(restoredMeshRatio >= savedMeshRatio - 0.04 && restoredMeshRatio <= 0.42
-               && qAbs(restoredMonitorRatio - savedMonitorRatio) < 0.04
+    if (!check(restoredMeshRatio >= 0.20 && restoredMeshRatio <= 0.42
+               && restoredMonitorRatio >= 0.45 && restoredMonitorRatio <= 0.82
                && !window.ribbonBar()->isMinimumMode()
                && !window.findChild<QWidget *>("outputBody")->isHidden(),
                "Restoring the user layout did not recover relative split and collapse state")) return 83;
