@@ -1,5 +1,6 @@
 #include "aerosim/ui/MainWindow.h"
 #include "aerosim/ui/postprocess/PostProcessWorkbenchWindow.h"
+#include <QAbstractButton>
 #include <QAction>
 #include <QSettings>
 #include <QTemporaryDir>
@@ -69,6 +70,16 @@ int main(int argc, char **argv)
     for (auto *action : window.findChildren<QAction *>())
         hasNewProject = hasNewProject || action->text() == text(u"\u65b0\u5efa\u5de5\u4f5c\u533a");
     if (!check(hasNewProject, "Workspace Ribbon action has incorrect Unicode characters")) return 15;
+    int startupRequests = 0;
+    QObject::connect(&window, &aerosim::MainWindow::showStartupRequested,
+                     &window, [&startupRequests] { ++startupRequests; });
+    auto *returnToStartup = window.findChild<QAbstractButton *>("returnToStartupButton");
+    if (!check(returnToStartup
+               && returnToStartup == window.ribbonBar()->applicationButton()
+               && returnToStartup->text() == text(u"\u8fd4\u56de\u6b22\u8fce\u9875"),
+               "Ribbon application button must return to the startup page")) return 69;
+    returnToStartup->click();
+    if (!check(startupRequests == 1, "Startup button did not emit the existing navigation request")) return 70;
     if (!check(window.findChild<QLabel *>("propertyTitle")->text() == text(u"\u7f51\u683c\u6587\u4ef6"),
                "Property title has incorrect Unicode characters")) return 16;
     if (!check(window.findChild<QTreeWidget *>("workspaceTree")->topLevelItemCount() == 1, "Missing workspace navigation")) return 1;

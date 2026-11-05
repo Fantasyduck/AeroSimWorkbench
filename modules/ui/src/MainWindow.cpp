@@ -4,6 +4,7 @@
 #include <SARibbonBar.h>
 #include <SARibbonCategory.h>
 #include <SARibbonPanel.h>
+#include <QAbstractButton>
 #include <QAction>
 #include <QActionGroup>
 #include <QApplication>
@@ -164,6 +165,13 @@ MainWindow::MainWindow(QWidget *parent) : SARibbonMainWindow(initializeRibbonRes
 void MainWindow::createRibbon()
 {
     ribbonBar()->setRibbonStyle(SARibbonBar::RibbonStyleLooseThreeRow);
+    if (auto *startupButton = ribbonBar()->applicationButton()) {
+        startupButton->setObjectName(QStringLiteral("returnToStartupButton"));
+        startupButton->setText(uiText(u"\u8fd4\u56de\u6b22\u8fce\u9875"));
+        startupButton->setIcon(QIcon(QStringLiteral(":/aerosim/ribbon/help.svg")));
+        startupButton->setToolTip(uiText(u"\u9690\u85cf\u5f53\u524d\u5de5\u4f5c\u53f0\u5e76\u8fd4\u56de\u542f\u52a8\u6b22\u8fce\u9875"));
+        connect(startupButton, &QAbstractButton::clicked, this, &MainWindow::showStartupRequested);
+    }
     struct Item { const char *id; QString label; bool large; const char *route; };
     auto addGroup = [this](SARibbonCategory *page, const char *id, const QString &title,
                           std::initializer_list<Item> items) {
