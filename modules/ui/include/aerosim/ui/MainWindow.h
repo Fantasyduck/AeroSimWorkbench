@@ -16,6 +16,7 @@ class QLineEdit;
 class QProgressBar;
 class QPlainTextEdit;
 class QPushButton;
+class QSplitter;
 class QStackedWidget;
 class QTableWidget;
 class QTreeWidget;
@@ -57,6 +58,9 @@ private:
     void setMeshWorkspaceActive(bool active);
     void selectNavigationNode(QTreeWidget *tree, const QString &objectId);
     void restoreLayout();
+    void saveUserLayout();
+    void restoreUserLayout();
+    void constrainToAvailableScreen();
     void submitRun();
     void appendMessage(const QString &message);
     void appendLog(const QString &level, const QString &source, const QString &message,
@@ -80,6 +84,7 @@ private:
     bool hasRunContext_ = false;
     WorkflowView workflowView_;
     QAction *runAction_ = nullptr;
+    QAction *restoreUserLayoutAction_ = nullptr;
     QTreeWidget *projectTree_ = nullptr;
     QTreeWidget *workflowTree_ = nullptr;
     QTreeWidget *taskTree_ = nullptr;
@@ -114,6 +119,7 @@ private:
     QLabel *outputTitle_ = nullptr;
     QLabel *status_ = nullptr;
     QProgressBar *progress_ = nullptr;
+    QSplitter *taskMonitorContentSplitter_ = nullptr;
     QPushButton *draftReset_ = nullptr;
     QPushButton *outputScopeReset_ = nullptr;
     QPushButton *outputCollapse_ = nullptr;

@@ -87,11 +87,11 @@ int main(int argc, char **argv)
     const auto categories = window.ribbonBar()->categoryPages();
     const QStringList expectedCategories = {QStringLiteral("preprocessCategory"), QStringLiteral("parametersCategory"),
         QStringLiteral("calculationCategory"), QStringLiteral("intelligentDataCategory"),
-        QStringLiteral("postprocessAnalysisCategory")};
+        QStringLiteral("postprocessAnalysisCategory"), QStringLiteral("helpCategory")};
     bool categoriesMatch = categories.size() == expectedCategories.size();
     for (int index = 0; categoriesMatch && index < categories.size(); ++index)
         categoriesMatch = categories[index]->objectName() == expectedCategories[index];
-    if (!check(categoriesMatch, "Expected the five specified functional Ribbon tabs")) return 17;
+    if (!check(categoriesMatch, "Expected five functional Ribbon tabs followed by Help")) return 17;
     auto *preprocess = categories[0];
     auto *workspace = window.findChild<QStackedWidget *>("centralWorkspace");
     auto *projectTree = window.findChild<QTreeWidget *>("workspaceTree");
@@ -109,6 +109,16 @@ int main(int argc, char **argv)
                && calculationNode->childCount() == 2
                && intelligentDataNode->childCount() == 0 && postprocessNode->childCount() == 0,
                "Unified tree module hierarchy is incorrect")) return 54;
+    auto *helpCategory = categories[5];
+    auto *pageBeforeHelp = workspace->currentWidget();
+    auto *treeItemBeforeHelp = projectTree->currentItem();
+    window.ribbonBar()->raiseCategory(helpCategory);
+    app.processEvents();
+    if (!check(workspace->currentWidget() == pageBeforeHelp
+               && projectTree->currentItem() == treeItemBeforeHelp
+               && root->childCount() == 5,
+               "Help Ribbon must not alter the business workspace or unified tree")) return 80;
+    window.ribbonBar()->raiseCategory(preprocess);
     auto *meshPage = window.findChild<QWidget *>("viewportPage");
     auto *meshList = window.findChild<QTreeWidget *>("meshList");
     auto *meshCount = window.findChild<QLabel *>("meshObjectCount");
@@ -285,8 +295,12 @@ int main(int argc, char **argv)
                && window.findChild<QAction *>("showStartupAction")->isEnabled(),
                "Workbench must expose a return-to-startup entry")) return 56;
     auto *postprocessCategory = window.findChild<SARibbonCategory *>("postprocessAnalysisCategory");
-    if (!check(postprocessCategory && postprocessCategory->panelByObjectName("toolsGroup"),
-               "Existing UI tools must remain reachable")) return 19;
+    auto *helpRibbonCategory = window.findChild<SARibbonCategory *>("helpCategory");
+    if (!check(postprocessCategory && !postprocessCategory->panelByObjectName("toolsGroup")
+               && helpRibbonCategory && helpRibbonCategory->panelByObjectName("appearanceGroup")
+               && helpRibbonCategory->panelByObjectName("layoutToolsGroup")
+               && helpRibbonCategory->panelByObjectName("helpInfoGroup"),
+               "Global appearance, layout and help tools must be centralized under Help")) return 19;
     auto *newProjectMenu = window.findChild<QMenu *>("newProjectMenu");
     auto *displayModeMenu = window.findChild<QMenu *>("displayModeMenu");
     if (!check(newProjectMenu && newProjectMenu->actions().size() == 3
@@ -388,6 +402,51 @@ int main(int argc, char **argv)
                     > window.findChild<QWidget *>("meshObjectPanel")->width(),
                "Mesh management group did not restore its persistent workspace")) return 63;
     app.processEvents();
+    auto *saveUserLayout = window.findChild<QAction *>("saveUserLayoutAction");
+    auto *restoreUserLayout = window.findChild<QAction *>("restoreUserLayoutAction");
+    auto *restoreDefaultLayout = window.findChild<QAction *>("layoutAction");
+    auto *meshMainSplitter = window.findChild<QSplitter *>("meshWorkspaceMainSplitter");
+    auto *monitorLayoutSplitter = window.findChild<QSplitter *>("taskMonitorContentSplitter");
+    if (!check(saveUserLayout && restoreUserLayout
+               && restoreDefaultLayout && meshMainSplitter && monitorLayoutSplitter,
+               "Help layout actions or adjustable page splitters are missing")) return 81;
+    meshMainSplitter->setSizes({390, 610});
+    monitorLayoutSplitter->setSizes({720, 280});
+    saveUserLayout->trigger();
+    app.processEvents();
+    QSettings userLayout(QStringLiteral("AeroSimWorkbench"), QStringLiteral("UiLayout"));
+    if (!check(restoreUserLayout->isEnabled()
+               && userLayout.value("UserLayout/version").toInt() == 1,
+               "Saving a user layout did not create the single persistent record")) return 82;
+    const double savedMeshRatio = userLayout.value("UserLayout/meshLayout").toMap()
+        .value("objectPanelRatio").toDouble();
+    const double savedMonitorRatio = userLayout.value("UserLayout/monitorCurveRatio").toDouble();
+    meshMainSplitter->setSizes({245, 755});
+    monitorLayoutSplitter->setSizes({470, 530});
+    collapseOutput->click();
+    window.ribbonBar()->setMinimumMode(true);
+    restoreUserLayout->trigger();
+    app.processEvents();
+    const QList<int> restoredMeshSizes = meshMainSplitter->sizes();
+    const QList<int> restoredMonitorSizes = monitorLayoutSplitter->sizes();
+    const double restoredMeshRatio = double(restoredMeshSizes.value(0))
+        / qMax(1, restoredMeshSizes.value(0) + restoredMeshSizes.value(1));
+    const double restoredMonitorRatio = double(restoredMonitorSizes.value(0))
+        / qMax(1, restoredMonitorSizes.value(0) + restoredMonitorSizes.value(1));
+    if (!check(restoredMeshRatio >= savedMeshRatio - 0.04 && restoredMeshRatio <= 0.42
+               && qAbs(restoredMonitorRatio - savedMonitorRatio) < 0.04
+               && !window.ribbonBar()->isMinimumMode()
+               && !window.findChild<QWidget *>("outputBody")->isHidden(),
+               "Restoring the user layout did not recover relative split and collapse state")) return 83;
+    restoreDefaultLayout->trigger();
+    app.processEvents();
+    const QList<int> defaultMeshSizes = meshMainSplitter->sizes();
+    const double defaultMeshRatio = double(defaultMeshSizes.value(0))
+        / qMax(1, defaultMeshSizes.value(0) + defaultMeshSizes.value(1));
+    if (!check(defaultMeshRatio >= (290.0 / 1140.0) - 0.04 && defaultMeshRatio <= 0.42
+               && window.findChild<QWidget *>("outputBody")->isHidden()
+               && userLayout.value("UserLayout/version").toInt() == 1,
+               "Default layout must be safe without deleting the saved user layout")) return 84;
     for (const QString &id : {QStringLiteral("office-blue"), QStringLiteral("office-light"),
                               QStringLiteral("dark"), QStringLiteral("dark-gray")}) {
         auto *action = window.findChild<QAction *>(QStringLiteral("theme-") + id);

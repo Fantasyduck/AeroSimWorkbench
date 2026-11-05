@@ -13,6 +13,7 @@
 #include <QClipboard>
 #include <QColor>
 #include <QMenu>
+#include <QMessageBox>
 #include <QSettings>
 #include <QPalette>
 #include <QComboBox>
@@ -24,6 +25,7 @@
 #include <QFormLayout>
 #include <QFontDatabase>
 #include <QFrame>
+#include <QGuiApplication>
 #include <QGroupBox>
 #include <QHeaderView>
 #include <QHBoxLayout>
@@ -45,6 +47,7 @@
 #include <QResource>
 #include <QScrollArea>
 #include <QScrollBar>
+#include <QScreen>
 #include <QSplitter>
 #include <QTextCharFormat>
 #include <QTextBlock>
@@ -223,8 +226,29 @@ void MainWindow::createRibbon()
                 action->setEnabled(false);
                 action->setToolTip(uiText(u"\u4e00\u6b21\u8ba1\u7b97\u5bf9\u5e94\u4e00\u4e2a\u72b6\u6001\uff1b\u7b49\u5f85\u5de5\u4f5c\u6d41\u63d0\u4f9b\u6709\u6548\u8f93\u5165\u4e0e\u8fd0\u884c\u6743\u9650"));
                 connect(action, &QAction::triggered, this, &MainWindow::submitRun);
-            } else if (route == "layout") {
+            } else if (route == "layout-default") {
                 connect(action, &QAction::triggered, this, &MainWindow::restoreLayout);
+            } else if (route == "layout-save") {
+                action->setObjectName(QStringLiteral("saveUserLayoutAction"));
+                connect(action, &QAction::triggered, this, &MainWindow::saveUserLayout);
+            } else if (route == "layout-restore") {
+                action->setObjectName(QStringLiteral("restoreUserLayoutAction"));
+                QSettings settings(QStringLiteral("AeroSimWorkbench"), QStringLiteral("UiLayout"));
+                action->setEnabled(settings.value(QStringLiteral("UserLayout/version")).toInt() == 1);
+                restoreUserLayoutAction_ = action;
+                connect(action, &QAction::triggered, this, &MainWindow::restoreUserLayout);
+            } else if (route == "help-usage") {
+                action->setObjectName(QStringLiteral("usageHelpAction"));
+                connect(action, &QAction::triggered, this, [this] {
+                    QMessageBox::information(this, uiText(u"\u4f7f\u7528\u5e2e\u52a9"),
+                        uiText(u"\u5e2e\u52a9\u6587\u6863\u5c1a\u672a\u63a5\u5165\u3002\n\n\u53ef\u901a\u8fc7\u9876\u90e8 Ribbon \u4e0e\u5de6\u4fa7\u7edf\u4e00\u5de5\u4f5c\u533a\u6811\u8fdb\u884c\u529f\u80fd\u5bfc\u822a\u3002"));
+                });
+            } else if (route == "about") {
+                action->setObjectName(QStringLiteral("aboutSoftwareAction"));
+                connect(action, &QAction::triggered, this, [this] {
+                    QMessageBox::about(this, uiText(u"\u5173\u4e8e AeroSimWorkbench"),
+                        uiText(u"AeroSimWorkbench\n\u4eff\u771f\u5de5\u4f5c\u53f0 UI \u6846\u67b6\nQt 5.12.12 / SARibbon / C++14\n\n\u5f53\u524d\u4e1a\u52a1\u6570\u636e\u4e0e\u90e8\u5206\u754c\u9762\u4e3a Mock \u6f14\u793a\u3002"));
+                });
             } else if (route == "startup") {
                 action->setObjectName(QStringLiteral("showStartupAction"));
                 connect(action, &QAction::triggered, this, &MainWindow::showStartupRequested);
@@ -335,12 +359,10 @@ void MainWindow::createRibbon()
     post->setObjectName(QStringLiteral("postprocessAnalysisCategory"));
     addGroup(post, "postprocessEntryGroup", uiText(u"\u529f\u80fd\u5165\u53e3"), {
         {"workbench", uiText(u"\u540e\u5904\u7406\u5206\u6790"), true, ""}});
-    addGroup(post, "toolsGroup", uiText(u"\u754c\u9762\u5de5\u5177"), {
-        {"layout", uiText(u"\u6062\u590d\u9ed8\u8ba4\u5e03\u5c40"), true, "layout"},
-        {"navigation", uiText(u"\u5de5\u4f5c\u533a\u6811"), false, "dock:project"},
-        {"property", uiText(u"\u5c5e\u6027\u9762\u677f"), false, "dock:property"},
-        {"output", uiText(u"\u8f93\u51fa\u9762\u677f"), false, "dock:output"}});
-    auto *appearance = post->addPanel(uiText(u"\u5916\u89c2"));
+
+    auto *help = ribbonBar()->addCategoryPage(uiText(u"\u5e2e\u52a9"));
+    help->setObjectName(QStringLiteral("helpCategory"));
+    auto *appearance = help->addPanel(uiText(u"\u5916\u89c2\u8bbe\u7f6e"));
     appearance->setObjectName(QStringLiteral("appearanceGroup"));
     auto *menu = new QMenu(uiText(u"\u5207\u6362\u76ae\u80a4"), this);
     menu->setObjectName(QStringLiteral("themeMenu"));
@@ -363,6 +385,16 @@ void MainWindow::createRibbon()
         });
     }
     appearance->addLargeMenu(menu);
+    addGroup(help, "layoutToolsGroup", uiText(u"\u754c\u9762\u5e03\u5c40"), {
+        {"export-config", uiText(u"\u4fdd\u5b58\u5f53\u524d\u5e03\u5c40"), true, "layout-save"},
+        {"import-config", uiText(u"\u6062\u590d\u4e0a\u6b21\u5e03\u5c40"), true, "layout-restore"},
+        {"layout", uiText(u"\u6062\u590d\u9ed8\u8ba4\u5e03\u5c40"), true, "layout-default"},
+        {"navigation", uiText(u"\u5de5\u4f5c\u533a\u6811"), false, "dock:project"},
+        {"property", uiText(u"\u5c5e\u6027\u9762\u677f"), false, "dock:property"},
+        {"output", uiText(u"\u8f93\u51fa\u9762\u677f"), false, "dock:output"}});
+    addGroup(help, "helpInfoGroup", uiText(u"\u5e2e\u52a9\u4fe1\u606f"), {
+        {"help", uiText(u"\u4f7f\u7528\u5e2e\u52a9"), true, "help-usage"},
+        {"about", uiText(u"\u5173\u4e8e\u8f6f\u4ef6"), true, "about"}});
     connect(ribbonBar(), &SARibbonBar::currentRibbonTabChanged,
             this, &MainWindow::switchNavigationForCategory);
 }
@@ -791,10 +823,10 @@ void MainWindow::createWorkspace()
     monitorForm->addRow(uiText(u"\u8ba1\u7b97\u8fdb\u5ea6"), progress_);
     monitorLayout->addWidget(monitor);
     taskMonitorLayout->addWidget(monitorSlot);
-    auto *monitorContentSplitter = new QSplitter(Qt::Vertical, taskMonitorPage_);
-    monitorContentSplitter->setObjectName(QStringLiteral("taskMonitorContentSplitter"));
-    monitorContentSplitter->setChildrenCollapsible(false);
-    auto *curveFrame = new QFrame(monitorContentSplitter);
+    taskMonitorContentSplitter_ = new QSplitter(Qt::Vertical, taskMonitorPage_);
+    taskMonitorContentSplitter_->setObjectName(QStringLiteral("taskMonitorContentSplitter"));
+    taskMonitorContentSplitter_->setChildrenCollapsible(false);
+    auto *curveFrame = new QFrame(taskMonitorContentSplitter_);
     curveFrame->setObjectName(QStringLiteral("convergenceCurvePanel"));
     curveFrame->setFrameShape(QFrame::StyledPanel);
     curveFrame->setMinimumHeight(150);
@@ -808,7 +840,7 @@ void MainWindow::createWorkspace()
     taskCurveState_->setObjectName(QStringLiteral("taskCurveState"));
     curveLayout->addWidget(taskCurveState_, 1);
 
-    auto *taskLogPanel = new QFrame(monitorContentSplitter);
+    auto *taskLogPanel = new QFrame(taskMonitorContentSplitter_);
     taskLogPanel->setObjectName(QStringLiteral("taskRuntimeLogPanel"));
     taskLogPanel->setFrameShape(QFrame::StyledPanel);
     taskLogPanel->setMinimumHeight(130);
@@ -850,12 +882,12 @@ void MainWindow::createWorkspace()
     taskLogView_->setFont(QFontDatabase::systemFont(QFontDatabase::FixedFont));
     taskLogView_->setPlaceholderText(uiText(u"\u5f53\u524d\u4efb\u52a1\u6682\u65e0\u8fd0\u884c\u65e5\u5fd7\uff08Mock\uff09"));
     taskLogLayout->addWidget(taskLogView_, 1);
-    monitorContentSplitter->addWidget(curveFrame);
-    monitorContentSplitter->addWidget(taskLogPanel);
-    monitorContentSplitter->setStretchFactor(0, 3);
-    monitorContentSplitter->setStretchFactor(1, 2);
-    monitorContentSplitter->setSizes({300, 170});
-    taskMonitorLayout->addWidget(monitorContentSplitter, 1);
+    taskMonitorContentSplitter_->addWidget(curveFrame);
+    taskMonitorContentSplitter_->addWidget(taskLogPanel);
+    taskMonitorContentSplitter_->setStretchFactor(0, 3);
+    taskMonitorContentSplitter_->setStretchFactor(1, 2);
+    taskMonitorContentSplitter_->setSizes({300, 170});
+    taskMonitorLayout->addWidget(taskMonitorContentSplitter_, 1);
     taskResourceSummary_ = new QLabel(uiText(u"CPU 76%    \u5185\u5b58 18.3 GB    MPI 32    \u8ba1\u7b97\u65f6\u95f4 00:12:35    \uff08Mock\uff09"), taskMonitorPage_);
     taskResourceSummary_->setObjectName(QStringLiteral("taskResourceSummary"));
     taskMonitorLayout->addWidget(taskResourceSummary_);
@@ -1369,11 +1401,149 @@ void MainWindow::restoreLayout()
     resizeDocks({projectDock_, propertyDock_}, {250, 330}, Qt::Horizontal);
     if (outputCollapsed_) setOutputCollapsed(false);
     resizeDocks({outputDock_}, {140}, Qt::Vertical);
+    expandedOutputHeight_ = 140;
+    ribbonBar()->setMinimumMode(false);
+    if (auto *meshPage = qobject_cast<MeshManagementPage *>(viewportPage_))
+        meshPage->restoreDefaultLayout();
+    if (taskMonitorContentSplitter_) taskMonitorContentSplitter_->setSizes({300, 170});
     if (meshWorkspaceActive_) {
         propertyDock_->hide();
         resizeDocks({projectDock_}, {260}, Qt::Horizontal);
-        setOutputCollapsed(true);
     }
+    setOutputCollapsed(true);
+    if (status_) statusBar()->showMessage(uiText(u"\u5df2\u6062\u590d\u9ed8\u8ba4\u754c\u9762\u5e03\u5c40\uff1b\u5df2\u4fdd\u5b58\u7684\u7528\u6237\u5e03\u5c40\u672a\u5220\u9664"), 4000);
+}
+
+void MainWindow::saveUserLayout()
+{
+    QSettings settings(QStringLiteral("AeroSimWorkbench"), QStringLiteral("UiLayout"));
+    settings.beginGroup(QStringLiteral("UserLayout"));
+    settings.remove(QString());
+    settings.setValue(QStringLiteral("version"), 1);
+    settings.setValue(QStringLiteral("geometry"), saveGeometry());
+    settings.setValue(QStringLiteral("mainWindowState"), saveState(1));
+    settings.setValue(QStringLiteral("maximized"), isMaximized());
+    settings.setValue(QStringLiteral("ribbonMinimum"), ribbonBar()->isMinimumMode());
+    settings.setValue(QStringLiteral("projectDockRatio"), double(projectDock_->width()) / qMax(1, width()));
+    settings.setValue(QStringLiteral("propertyDockRatio"), double(propertyDock_->width()) / qMax(1, width()));
+    settings.setValue(QStringLiteral("outputHeightRatio"), double(outputDock_->height()) / qMax(1, height()));
+    settings.setValue(QStringLiteral("expandedOutputRatio"), double(expandedOutputHeight_) / qMax(1, height()));
+    settings.setValue(QStringLiteral("outputCollapsed"), outputCollapsed_);
+    const QList<int> monitorSizes = taskMonitorContentSplitter_->sizes();
+    const int monitorTotal = monitorSizes.value(0) + monitorSizes.value(1);
+    settings.setValue(QStringLiteral("monitorCurveRatio"), monitorTotal > 0
+        ? double(monitorSizes.value(0)) / monitorTotal : 0.64);
+    if (auto *meshPage = qobject_cast<MeshManagementPage *>(viewportPage_))
+        settings.setValue(QStringLiteral("meshLayout"), meshPage->layoutState());
+
+    QScreen *screen = QGuiApplication::screenAt(frameGeometry().center());
+    if (!screen) screen = QGuiApplication::primaryScreen();
+    if (screen) {
+        const QRect available = screen->availableGeometry();
+        const QRect windowRect = isMaximized() ? normalGeometry() : geometry();
+        settings.setValue(QStringLiteral("windowWidthRatio"), double(windowRect.width()) / qMax(1, available.width()));
+        settings.setValue(QStringLiteral("windowHeightRatio"), double(windowRect.height()) / qMax(1, available.height()));
+        settings.setValue(QStringLiteral("windowXRatio"), double(windowRect.left() - available.left()) / qMax(1, available.width()));
+        settings.setValue(QStringLiteral("windowYRatio"), double(windowRect.top() - available.top()) / qMax(1, available.height()));
+    }
+    settings.endGroup();
+    settings.sync();
+    if (restoreUserLayoutAction_) restoreUserLayoutAction_->setEnabled(settings.status() == QSettings::NoError);
+    statusBar()->showMessage(settings.status() == QSettings::NoError
+        ? uiText(u"\u5f53\u524d\u5e03\u5c40\u5df2\u4fdd\u5b58")
+        : uiText(u"\u5e03\u5c40\u4fdd\u5b58\u5931\u8d25\uff0c\u8bf7\u68c0\u67e5\u7528\u6237\u914d\u7f6e\u76ee\u5f55"), 4000);
+}
+
+void MainWindow::restoreUserLayout()
+{
+    QSettings settings(QStringLiteral("AeroSimWorkbench"), QStringLiteral("UiLayout"));
+    settings.beginGroup(QStringLiteral("UserLayout"));
+    if (settings.value(QStringLiteral("version")).toInt() != 1) {
+        settings.endGroup();
+        statusBar()->showMessage(uiText(u"\u6682\u65e0\u5df2\u4fdd\u5b58\u7684\u7528\u6237\u5e03\u5c40"), 4000);
+        if (restoreUserLayoutAction_) restoreUserLayoutAction_->setEnabled(false);
+        return;
+    }
+    const QByteArray geometryState = settings.value(QStringLiteral("geometry")).toByteArray();
+    const QByteArray mainWindowState = settings.value(QStringLiteral("mainWindowState")).toByteArray();
+    const bool maximized = settings.value(QStringLiteral("maximized")).toBool();
+    const bool ribbonMinimum = settings.value(QStringLiteral("ribbonMinimum")).toBool();
+    const double projectRatio = qBound(0.12, settings.value(QStringLiteral("projectDockRatio"), 0.18).toDouble(), 0.35);
+    const double propertyRatio = qBound(0.18, settings.value(QStringLiteral("propertyDockRatio"), 0.23).toDouble(), 0.38);
+    const double outputRatio = qBound(0.10, settings.value(QStringLiteral("outputHeightRatio"), 0.15).toDouble(), 0.45);
+    const double expandedOutputRatio = qBound(0.10, settings.value(QStringLiteral("expandedOutputRatio"), 0.15).toDouble(), 0.45);
+    const bool outputCollapsed = settings.value(QStringLiteral("outputCollapsed")).toBool();
+    const double monitorCurveRatio = qBound(0.45, settings.value(QStringLiteral("monitorCurveRatio"), 0.64).toDouble(), 0.82);
+    const QVariantMap meshLayout = settings.value(QStringLiteral("meshLayout")).toMap();
+    const double widthRatio = qBound(0.45, settings.value(QStringLiteral("windowWidthRatio"), 0.75).toDouble(), 1.0);
+    const double heightRatio = qBound(0.50, settings.value(QStringLiteral("windowHeightRatio"), 0.88).toDouble(), 1.0);
+    const double xRatio = qBound(0.0, settings.value(QStringLiteral("windowXRatio"), 0.1).toDouble(), 0.95);
+    const double yRatio = qBound(0.0, settings.value(QStringLiteral("windowYRatio"), 0.05).toDouble(), 0.95);
+    settings.endGroup();
+
+    const QByteArray previousGeometry = saveGeometry();
+    const QByteArray previousWindowState = saveState(1);
+    if (geometryState.isEmpty() || mainWindowState.isEmpty()
+        || !restoreGeometry(geometryState) || !restoreState(mainWindowState, 1)) {
+        restoreGeometry(previousGeometry);
+        restoreState(previousWindowState, 1);
+        statusBar()->showMessage(uiText(u"\u5df2\u4fdd\u5b58\u7684\u5e03\u5c40\u65e0\u6548\uff0c\u5df2\u4fdd\u7559\u5f53\u524d\u754c\u9762"), 5000);
+        return;
+    }
+    QScreen *screen = QGuiApplication::screenAt(frameGeometry().center());
+    if (!screen) screen = QGuiApplication::primaryScreen();
+    if (!maximized && screen) {
+        const QRect available = screen->availableGeometry();
+        const int targetWidth = qMin(available.width(), qMax(minimumWidth(), qRound(available.width() * widthRatio)));
+        const int targetHeight = qMin(available.height(), qMax(minimumHeight(), qRound(available.height() * heightRatio)));
+        const int maxX = available.right() - targetWidth + 1;
+        const int maxY = available.bottom() - targetHeight + 1;
+        const int targetX = maxX <= available.left() ? available.left()
+            : qBound(available.left(), available.left() + qRound(available.width() * xRatio), maxX);
+        const int targetY = maxY <= available.top() ? available.top()
+            : qBound(available.top(), available.top() + qRound(available.height() * yRatio), maxY);
+        showNormal();
+        setGeometry(targetX, targetY, targetWidth, targetHeight);
+    } else if (maximized) {
+        showMaximized();
+    }
+    ribbonBar()->setMinimumMode(ribbonMinimum);
+    expandedOutputHeight_ = qMax(120, qRound(height() * expandedOutputRatio));
+    setOutputCollapsed(outputCollapsed);
+    if (auto *meshPage = qobject_cast<MeshManagementPage *>(viewportPage_))
+        meshPage->restoreLayoutState(meshLayout);
+    taskMonitorContentSplitter_->setSizes({qRound(monitorCurveRatio * 1000), qRound((1.0 - monitorCurveRatio) * 1000)});
+    QTimer::singleShot(0, this, [this, projectRatio, propertyRatio, outputRatio, outputCollapsed] {
+        resizeDocks({projectDock_, propertyDock_},
+                    {qMax(220, qRound(width() * projectRatio)), qMax(300, qRound(width() * propertyRatio))},
+                    Qt::Horizontal);
+        if (!outputCollapsed)
+            resizeDocks({outputDock_}, {qMax(120, qRound(height() * outputRatio))}, Qt::Vertical);
+        constrainToAvailableScreen();
+    });
+    statusBar()->showMessage(uiText(u"\u5df2\u6062\u590d\u4e0a\u6b21\u4fdd\u5b58\u7684\u7528\u6237\u5e03\u5c40"), 4000);
+}
+
+void MainWindow::constrainToAvailableScreen()
+{
+    if (isMaximized()) return;
+    QScreen *target = nullptr;
+    for (auto *screen : QGuiApplication::screens()) {
+        if (screen->availableGeometry().intersects(frameGeometry())) {
+            target = screen;
+            break;
+        }
+    }
+    if (!target) target = QGuiApplication::primaryScreen();
+    if (!target) return;
+    const QRect available = target->availableGeometry();
+    const int targetWidth = qMin(available.width(), qMax(minimumWidth(), width()));
+    const int targetHeight = qMin(available.height(), qMax(minimumHeight(), height()));
+    const int maxX = available.right() - targetWidth + 1;
+    const int maxY = available.bottom() - targetHeight + 1;
+    const int targetX = maxX <= available.left() ? available.left() : qBound(available.left(), x(), maxX);
+    const int targetY = maxY <= available.top() ? available.top() : qBound(available.top(), y(), maxY);
+    setGeometry(targetX, targetY, targetWidth, targetHeight);
 }
 
 bool MainWindow::insertWidget(WidgetSlot slot, QWidget *widget)

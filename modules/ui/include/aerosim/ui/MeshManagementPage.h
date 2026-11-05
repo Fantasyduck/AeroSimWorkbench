@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QColor>
+#include <QVariantMap>
 #include <QVector>
 #include <QWidget>
 
@@ -25,6 +26,9 @@ class MeshManagementPage final : public QWidget {
     Q_OBJECT
 public:
     explicit MeshManagementPage(QWidget *viewportHost, QWidget *parent = nullptr);
+    QVariantMap layoutState() const;
+    void restoreLayoutState(const QVariantMap &state);
+    void restoreDefaultLayout();
 
 private:
     struct MeshUiState {
@@ -62,6 +66,7 @@ private:
     QComboBox *unitEditor_ = nullptr;
     QLabel *viewerStatus_ = nullptr;
     QLabel *axisIndicator_ = nullptr;
+    QSplitter *mainSplitter_ = nullptr;
     QSplitter *verticalSplitter_ = nullptr;
     QTabWidget *historyTabs_ = nullptr;
     QListWidget *historyList_ = nullptr;

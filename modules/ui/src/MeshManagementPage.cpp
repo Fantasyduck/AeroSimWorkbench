@@ -84,11 +84,11 @@ MeshManagementPage::MeshManagementPage(QWidget *viewportHost, QWidget *parent)
 
     verticalSplitter_ = new QSplitter(Qt::Vertical, this);
     verticalSplitter_->setObjectName(QStringLiteral("meshWorkspaceVerticalSplitter"));
-    auto *mainSplitter = new QSplitter(Qt::Horizontal, verticalSplitter_);
-    mainSplitter->setObjectName(QStringLiteral("meshWorkspaceMainSplitter"));
-    mainSplitter->setChildrenCollapsible(false);
+    mainSplitter_ = new QSplitter(Qt::Horizontal, verticalSplitter_);
+    mainSplitter_->setObjectName(QStringLiteral("meshWorkspaceMainSplitter"));
+    mainSplitter_->setChildrenCollapsible(false);
 
-    auto *objectPanel = new QFrame(mainSplitter);
+    auto *objectPanel = new QFrame(mainSplitter_);
     objectPanel->setObjectName(QStringLiteral("meshObjectPanel"));
     objectPanel->setMinimumWidth(245);
     objectPanel->setMaximumWidth(430);
@@ -175,7 +175,7 @@ MeshManagementPage::MeshManagementPage(QWidget *viewportHost, QWidget *parent)
     propertyScroll->setWidget(properties);
     objectLayout->addWidget(propertyScroll, 2);
 
-    auto *viewerPanel = new QFrame(mainSplitter);
+    auto *viewerPanel = new QFrame(mainSplitter_);
     viewerPanel->setObjectName(QStringLiteral("meshViewerPanel"));
     viewerPanel->setMinimumWidth(420);
     auto *viewerLayout = new QVBoxLayout(viewerPanel);
@@ -235,11 +235,11 @@ MeshManagementPage::MeshManagementPage(QWidget *viewportHost, QWidget *parent)
     viewerStatus_->setObjectName(QStringLiteral("meshViewerStatus"));
     viewerStatus_->setContentsMargins(10, 5, 10, 5);
     viewerLayout->addWidget(viewerStatus_);
-    mainSplitter->addWidget(objectPanel);
-    mainSplitter->addWidget(viewerPanel);
-    mainSplitter->setStretchFactor(0, 0);
-    mainSplitter->setStretchFactor(1, 1);
-    mainSplitter->setSizes({290, 850});
+    mainSplitter_->addWidget(objectPanel);
+    mainSplitter_->addWidget(viewerPanel);
+    mainSplitter_->setStretchFactor(0, 0);
+    mainSplitter_->setStretchFactor(1, 1);
+    mainSplitter_->setSizes({290, 850});
 
     auto *historyPanel = new QFrame(verticalSplitter_);
     historyPanel->setObjectName(QStringLiteral("meshHistoryPanel"));
@@ -274,7 +274,7 @@ MeshManagementPage::MeshManagementPage(QWidget *viewportHost, QWidget *parent)
     scriptLayout->addWidget(scriptInput, 1);
     historyTabs_->addTab(scriptPage, uiText(u"\u811a\u672c\u63a7\u5236\uff08\u9884\u7559\uff09"));
     historyLayout->addWidget(historyTabs_, 1);
-    verticalSplitter_->addWidget(mainSplitter);
+    verticalSplitter_->addWidget(mainSplitter_);
     verticalSplitter_->addWidget(historyPanel);
     verticalSplitter_->setStretchFactor(0, 1);
     verticalSplitter_->setStretchFactor(1, 0);
@@ -485,6 +485,38 @@ void MeshManagementPage::setHistoryCollapsed(bool collapsed)
         historyCollapseButton_->setText(uiText(u"\u6536\u8d77"));
         verticalSplitter_->setSizes({qMax(300, height() - expandedHistoryHeight_), expandedHistoryHeight_});
     }
+}
+
+QVariantMap MeshManagementPage::layoutState() const
+{
+    const QList<int> horizontal = mainSplitter_->sizes();
+    const int horizontalTotal = horizontal.value(0) + horizontal.value(1);
+    const QList<int> vertical = verticalSplitter_->sizes();
+    const int verticalTotal = vertical.value(0) + vertical.value(1);
+    QVariantMap state;
+    state.insert(QStringLiteral("objectPanelRatio"), horizontalTotal > 0
+        ? double(horizontal.value(0)) / horizontalTotal : 0.255);
+    state.insert(QStringLiteral("historyRatio"), verticalTotal > 0 && !historyCollapsed_
+        ? double(vertical.value(1)) / verticalTotal
+        : double(expandedHistoryHeight_) / qMax(1, height()));
+    state.insert(QStringLiteral("historyCollapsed"), historyCollapsed_);
+    return state;
+}
+
+void MeshManagementPage::restoreLayoutState(const QVariantMap &state)
+{
+    const double objectRatio = qBound(0.20, state.value(QStringLiteral("objectPanelRatio"), 0.255).toDouble(), 0.42);
+    const double historyRatio = qBound(0.10, state.value(QStringLiteral("historyRatio"), 0.20).toDouble(), 0.45);
+    mainSplitter_->setSizes({qRound(objectRatio * 1000), qRound((1.0 - objectRatio) * 1000)});
+    expandedHistoryHeight_ = qBound(90, qRound(qMax(450, height()) * historyRatio), qMax(120, height() / 2));
+    setHistoryCollapsed(state.value(QStringLiteral("historyCollapsed"), true).toBool());
+}
+
+void MeshManagementPage::restoreDefaultLayout()
+{
+    mainSplitter_->setSizes({290, 850});
+    expandedHistoryHeight_ = 145;
+    setHistoryCollapsed(true);
 }
 
 } // namespace aerosim
