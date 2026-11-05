@@ -11,7 +11,8 @@ set(_fixtures
     "curves.csv|5dfa4fd5ad4926e1b1843f358c306ab89fe3873bc53b2292454d1d8e26eedc71"
     "cube_t00.vtk|c35d1c2ad00c05ca1e2deb989ef47d302781850cd8fc70b2bce8aa269b947906"
     "cube_t01.vtk|f75e6452c4d7c6d279fe60ed31fe6e7e53e3244ce15e8bc9f6c0d6a8821dbe60"
-    "cube_t02.vtk|adf4d4de61fdd4cace47bd9c5849a94d9b9d4c8cd7ae269525f10c96e079fdf5")
+    "cube_t02.vtk|adf4d4de61fdd4cace47bd9c5849a94d9b9d4c8cd7ae269525f10c96e079fdf5"
+    "su2_history_steady.csv|63191e605506aec7d391cbcc0856d0a28a1a8332b051dd742ad7758c7d4a38c4")
 
 foreach(_fixture IN LISTS _fixtures)
     string(REPLACE "|" ";" _parts "${_fixture}")
@@ -77,4 +78,35 @@ foreach(_frame IN ITEMS 00 01 02)
     endforeach()
 endforeach()
 
-message(STATUS "Postprocess fixtures OK: 7 files, 27 points, 8 cells, 6 boundaries, 3 frames, 4 cases")
+# Solver history log: a trimmed export of a real SU2 run. Asserting its shape
+# keeps the reader tests meaningful -- they quote specific values from row 1 and
+# the last row, so a re-trimmed or re-ordered fixture has to be a deliberate edit.
+file(READ "${POSTPROCESS_FIXTURE_DIR}/su2_history_steady.csv" _history)
+string(REPLACE "\r\n" "\n" _history "${_history}")
+string(REPLACE "\r" "\n" _history "${_history}")
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/su2_history_normalised.csv" "${_history}")
+file(STRINGS "${CMAKE_CURRENT_BINARY_DIR}/su2_history_normalised.csv" _history_lines)
+list(LENGTH _history_lines _history_line_count)
+if(NOT _history_line_count EQUAL 80)
+    message(FATAL_ERROR "Expected 80 monitor lines (1 header + 79 data rows), found ${_history_line_count}")
+endif()
+list(GET _history_lines 0 _history_header)
+string(REGEX MATCHALL "," _history_commas "${_history_header}")
+list(LENGTH _history_commas _history_comma_count)
+if(NOT _history_comma_count EQUAL 16)
+    message(FATAL_ERROR "Expected 17 monitor columns, found ${_history_comma_count}+1")
+endif()
+foreach(_token IN ITEMS "Time_Iter" "Outer_Iter" "Inner_Iter" "rms[Rho]" "CD" "CL" "CEff")
+    string(FIND "${_history_header}" "${_token}" _at)
+    if(_at EQUAL -1)
+        message(FATAL_ERROR "su2_history_steady.csv lacks column ${_token}")
+    endif()
+endforeach()
+list(GET _history_lines 79 _history_last)
+# Columns are space-padded fixed-width fields ("          0,           0,         325,..."),
+# so the match has to tolerate the padding rather than assume "0,0,325,".
+if(NOT _history_last MATCHES ", *0, *325,")
+    message(FATAL_ERROR "The last monitor row no longer advances to Inner_Iter 325")
+endif()
+
+message(STATUS "Postprocess fixtures OK: 8 files, 27 points, 8 cells, 6 boundaries, 3 frames, 4 cases, 80 monitor lines (79 data rows)")

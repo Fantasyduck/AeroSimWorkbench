@@ -22,6 +22,8 @@
 | [后处理集成准备](PostProcessIntegrationGuide.md) | 主窗口/工作区/VTKViewer 的关系、数据与场景所有权、分批接入路径 | 集成方案待评审 |
 | [后处理公共契约](PostProcessContracts.md) | 区分已有引用/端口、已加入的轻量标识及待确认的数据/场景协议 | 部分已实现；其余为接口草案 |
 | [后处理功能交接表](PostProcessTaskHandoff.md) | 保留 16 项功能编号、输入输出、依赖、建议接入位置及测试条件 | 功能要求保留；目标/API 待评审 |
+| [监控序列实现规划](PostProcessMonitorSeriesPlan.md) | 监控日志读取、序列模型与曲线视图的分层设计、P0–P3 优先级与验收口径 | 规划；P0 已实现，P1 未接入 UI |
+| [监控序列执行汇总](PostProcessMonitorSeries/ExecutionSummary.md) / [修改日志](PostProcessMonitorSeries/ChangeLog.md) | 按规划条目核对完成情况、关键实现依据、偏离与待确认项、逐文件改动原因 | 执行记录；构建系统未在 CMake 上复验 |
 
 ## 测试数据与验证
 

@@ -1,6 +1,6 @@
 # 后处理解析测试夹具
 
-目录：`tests/fixtures/postprocess/`。七个数据文件已提交到仓库，`VerifyFixtures.cmake` 用 CMake 3.16+ 检查 SHA256、帧顺序、字段标记和解析工况值；顶层 CTest 无需 Python 即注册 `postprocess_fixture_check`。该检查只验证夹具完整性，**不代表正式 C++/VTK 8.2 读取器或算法已经通过**。
+目录：`tests/fixtures/postprocess/`。八个数据文件已提交到仓库，`VerifyFixtures.cmake` 用 CMake 3.16+ 检查 SHA256、帧顺序、字段标记和解析工况值；顶层 CTest 无需 Python 即注册 `postprocess_fixture_check`。该检查只验证夹具完整性，**不代表正式 C++/VTK 8.2 读取器或算法已经通过**。
 
 ## 内容、语义与期望
 
@@ -11,15 +11,33 @@
 | `index.json` | 夹具专用文件/帧索引、字段元数据（单位、点关联）、datasetId 和 fileId；三个有序有效帧。 | 同一数据集 `cube-run-1`，fileId 各异，物理时间 0/1/2 s；用于讨论正式协议，不是已有生产数据目录。 |
 | `cases.csv` | 四组 caseId、alpha/beta/delta、动压 1000 Pa、面积 2 m²、参考长度 0.5 m，body-xyz 下 Fx/Fy/Fz (N)、Mx/My/Mz (N·m)。 | case-02: α=5°, δ=10°, Fx=170, Fy=0, Fz=130, Mx=0, My=20, Mz=0；case-01 同 α/δ=0，用来讨论舵偏差。 |
 | `curves.csv` | 四个点组成一个示例 series，x=alpha (deg)、y=Cz 无量纲，保留 caseId。 | 定义仅为 `Cz=Fz/(q S)`，case-02=0.065；**不是**已定气动力符号规范。相同 α 的不同舵偏 case 不能无声覆盖。 |
+| `su2_history_steady.csv` | **真实求解日志的裁剪样本**：SU2 `history.csv`，1 行表头 + 79 行数据、17 列（`Time_Iter, Outer_Iter, Inner_Iter, rms[Rho], rms[RhoU], rms[RhoV], rms[RhoE], CD, CL, CSF, CMx, CMy, CMz, CFx, CFy, CFz, CEff`）。来源与裁剪方式见下。 | 定常算例：`Time_Iter` 与 `Outer_Iter` 恒为 0，推进的是 `Inner_Iter` 0→325。首行 `rms[Rho]`=-1.60335846、`CD`=0.0803708097；末行 `CD`=0.01100871693、`CEff`=83.08025067。残差为负值（SU2 记录的是 log10 量），因此对数轴会退化。 |
 
 等值测试建议：`Phi=0` 的几何是 x=0 平面；在 z=0 物面/切面上 `Pressure=100000 Pa` 是 x=0 线。切面测试 x=0，点网格交线覆盖 y/z=-1..1；VTK filter 三角化/去重可能改变点/单元计数，因此验收应检查几何范围和数值，不把 filter 输出单元数强定为接口。速度积分 `(1,0,0)` 应沿 +x；物面约束和积分步长待流线接口评审。三帧压力中心依次 100000/100100/100200 Pa。
 
 注意：VTK 的 legacy reader 如 `vtkStructuredPointsReader` 默认可能只载入一个标量；测试需启用 `ReadAllScalarsOn()`（并按需 `ReadAllVectorsOn()`）才能取得 Temperature、Phi 和 Velocity。`mesh.json` 显式边界元信息与 `.vtk` 隐式结构化网格配套，`.vtk` 本身不编码六个边界 ID；生产格式读取路径须说明如何保留边界。
 
+### `su2_history_steady.csv` 的来源与裁剪
+
+| 项 | 值 |
+| --- | --- |
+| 来源 | `https://github.com/alfiyandyhr/transonic-airfoil-optim` 的 `Solutions/baseline/history.csv` |
+| 取得日期 | 2026-10-28 |
+| 原始规模 | 326 行数据 + 1 行表头，99,408 字节 |
+| 裁剪方式 | 取前 40 行与后 39 行拼接，共 79 行。因此 `Inner_Iter` 在 x≈40 与 x≈285 之间存在断档，这是裁剪造成的，**不是绘制缺陷** |
+| 用途声明 | 仅用于列名解析、轴退化判定与曲线绘制的格式验证；不用于任何求解器验证或性能声明 |
+
+该仓库**没有 LICENSE 声明**（`license.spdx_id` 返回 NONE），因此不整包提交第三方数据，只提交上述裁剪小样本，与本文件第 27 行「真实仿真数据只记录来源与期望」的既有规定一致。
+
+两处解析特征直接来自该文件，读取器必须处理：列名带**双引号且引号内有对齐空格**（`    "rms[Rho]"    `），数值列是**空格填充的定宽字段**（`       -1.60335846`）。
+
 ## 可复现检查
 
 ```bash
 cmake -P tests/fixtures/postprocess/VerifyFixtures.cmake
+# 上次实测输出：
+# -- Postprocess fixtures OK: 8 files, 27 points, 8 cells, 6 boundaries,
+#    3 frames, 4 cases, 80 monitor lines (79 data rows)
 # 在 Qt 5.12.12 已安装的 Windows 构建目录中：
 ctest --test-dir build-windows -C Debug --output-on-failure
 ```
