@@ -9,7 +9,7 @@ set_target_properties(aerosim_cli PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_B
 
 if(AEROSIM_BUILD_GUI)
     # A desktop GUI must not allocate a second console window on Windows.
-    add_executable(aerosim_gui WIN32 gui_main.cpp)
+    add_executable(aerosim_gui WIN32 gui_main.cpp ../demos/monitor/MonitorDemo.cpp)
     target_link_libraries(aerosim_gui PRIVATE
         aerosim_application aerosim_mock aerosim_ui Qt5::Widgets)
     # Keep the application-level injection point. The scene target is absent

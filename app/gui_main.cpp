@@ -3,6 +3,10 @@
 #include "MockWorkflowService.h"
 #include "aerosim/ui/postprocess/PostProcessWorkbenchWindow.h"
 #include "aerosim/ui/MainWindow.h"
+#include "aerosim/ui/StartupLandingPage.h"
+#ifndef AEROSIM_POSTPROCESS_STANDALONE
+#include "../demos/monitor/MonitorDemo.h"
+#endif
 #include <QPixmap>
 
 #ifdef AEROSIM_HAS_VTK_VIEWER
@@ -37,12 +41,18 @@ int main(int argc, char *argv[])
     const bool smoke = app.arguments().contains(QStringLiteral("--smoke"));
 #ifndef AEROSIM_POSTPROCESS_STANDALONE
     aerosim::MainWindow window;
+    aerosim::StartupLandingPage landing;
 #endif
     aerosim::PostProcessWorkbenchWindow postprocess;
     const aerosim::ServiceBindings bindings = {
         controller.workflow(), controller.tasks(), nullptr, nullptr, nullptr, nullptr};
 #ifndef AEROSIM_POSTPROCESS_STANDALONE
     window.bindServices(bindings);
+    if (app.arguments().contains(QStringLiteral("--monitor-demo"))) {
+        aerosim::populateMonitorDemo(window.monitorPage());
+        window.setWindowTitle(QStringLiteral(u"AeroSimWorkbench · 计算监控联动演示（无真实求解）"));
+        window.showComputeMonitor();
+    } else if (app.arguments().contains(QStringLiteral("--monitor"))) window.showComputeMonitor();
 #endif
     postprocess.bindServices(bindings);
 #ifndef AEROSIM_POSTPROCESS_STANDALONE
@@ -50,6 +60,29 @@ int main(int argc, char *argv[])
         postprocess.show();
         postprocess.raise();
         postprocess.activateWindow();
+    });
+    QObject::connect(&landing, &aerosim::StartupLandingPage::enterWorkbenchRequested,
+                     &window, [&landing, &window](const QString &) {
+        landing.setReturnAvailable(true);
+        landing.hide();
+        window.show();
+        window.raise();
+        window.activateWindow();
+    });
+    QObject::connect(&landing, &aerosim::StartupLandingPage::returnToWorkbenchRequested,
+                     &window, [&landing, &window] {
+        landing.hide();
+        window.show();
+        window.raise();
+        window.activateWindow();
+    });
+    QObject::connect(&window, &aerosim::MainWindow::showStartupRequested,
+                     &landing, [&landing, &window] {
+        window.hide();
+        landing.setReturnAvailable(true);
+        landing.show();
+        landing.raise();
+        landing.activateWindow();
     });
 #endif
 #ifdef AEROSIM_HAS_VTK_VIEWER
@@ -77,7 +110,11 @@ int main(int argc, char *argv[])
     QWidget *initialWindow = &postprocess;
 #else
     QWidget *initialWindow = app.arguments().contains(QStringLiteral("--postprocess"))
-        ? static_cast<QWidget *>(&postprocess) : static_cast<QWidget *>(&window);
+        ? static_cast<QWidget *>(&postprocess)
+        : (app.arguments().contains(QStringLiteral("--workbench"))
+           || app.arguments().contains(QStringLiteral("--monitor"))
+           || app.arguments().contains(QStringLiteral("--monitor-demo")))
+            ? static_cast<QWidget *>(&window) : static_cast<QWidget *>(&landing);
 #endif
     initialWindow->show();
 
