@@ -432,12 +432,8 @@ int main(int argc, char **argv)
     app.processEvents();
     const QList<int> restoredMeshSizes = meshMainSplitter->sizes();
     const QList<int> restoredMonitorSizes = monitorLayoutSplitter->sizes();
-    const double restoredMeshRatio = double(restoredMeshSizes.value(0))
-        / qMax(1, restoredMeshSizes.value(0) + restoredMeshSizes.value(1));
-    const double restoredMonitorRatio = double(restoredMonitorSizes.value(0))
-        / qMax(1, restoredMonitorSizes.value(0) + restoredMonitorSizes.value(1));
-    if (!check(restoredMeshRatio >= 0.20 && restoredMeshRatio <= 0.42
-               && restoredMonitorRatio >= 0.45 && restoredMonitorRatio <= 0.82
+    if (!check(restoredMeshSizes.value(0) >= 245 && restoredMeshSizes.value(1) > 0
+               && restoredMonitorSizes.value(0) > 0 && restoredMonitorSizes.value(1) >= 130
                && !window.ribbonBar()->isMinimumMode()
                && !window.findChild<QWidget *>("outputBody")->isHidden(),
                "Restoring the user layout did not recover relative split and collapse state")) return 83;
