@@ -66,6 +66,16 @@ int main()
     resource.kind = QStringLiteral("mesh");
     resource.filePath = QStringLiteral("mesh/original/model.cgns");
     resource.revision = 2;
+    const aerosim::ResourceRef aggregateResource{
+        QStringLiteral("result-resource-001"), project.projectId,
+        QStringLiteral("result"), QStringLiteral("results/result.vtk"), 4};
+    AEROSIM_CHECK(context,
+        aggregateResource.resourceId == QStringLiteral("result-resource-001"));
+    AEROSIM_CHECK(context, aggregateResource.projectId == project.projectId);
+    AEROSIM_CHECK(context, aggregateResource.kind == QStringLiteral("result"));
+    AEROSIM_CHECK(context,
+        aggregateResource.filePath == QStringLiteral("results/result.vtk"));
+    AEROSIM_CHECK(context, aggregateResource.revision == 4);
 
     aerosim::MeshRef mesh;
     mesh.resource = resource;
