@@ -114,7 +114,7 @@
 
 **Decision**: `ActionAuthorizer` 根据动作定义和关联步骤生成 `WorkflowActionView`。需要当前有效校验的新执行操作必须同时满足：applicable、Completed、Valid、无 blocker、stamp 与当前输入一致。`requestRun()` 不信任 UI 中已显示的 enabled，每次再执行相同授权。
 
-browse、navigate、edit、save、revalidate 不因 Stale 禁用。批处理计划编辑属于 PR 3；PR 2 只保证通用动作规则能区分“编辑计划”和“提交执行”。已创建任务不受当前 Stale 追溯影响。
+browse、navigate、edit、save、revalidate 不因 Stale 禁用。StateConfig、BatchPlan append-only revision 与 execution snapshot 属于冻结计划 PR 3；PR 2 只用内部 `WorkflowActionRule` 和 Mock action ID 区分“计划编辑类动作”和“提交执行类动作”，不创建 BatchPlan 类型。已创建任务不受当前 Stale 追溯影响；测试通过既有端口断言 Stale 不发 Stop/Cancel、不改 MockTaskService record、不产生历史结果失效事件，不提前实现 PR 4 Task/Attempt 状态机。
 
 **Rationale**: UI 展示不是安全边界，服务端重新校验可防止绕过和旧 view 提交。
 
@@ -128,7 +128,7 @@ browse、navigate、edit、save、revalidate 不因 Stale 禁用。批处理计�
 
 **Decision**: `WorkflowFactsSnapshot` 只包含 scope、definitionVersion、作用域级 factRevision、capturedAt 和每个步骤的 committed completion、最近 validation fact/stamp/issues、step factRevision 与时间。不包含 draft、pending validation、Stale、blockers、applicable、actions、nextSuggestion 或 viewRevision。
 
-恢复先完整验证快照，再原子替换 facts；失败不得部分恢复。恢复后清理 draft/pending generation，保留快照 fact revisions，并使用当前 definition/inputs/dependencies 重算所有派生状态。
+默认恢复目标是空 facts store。恢复先完整验证快照，再原子载入 facts；失败不得部分恢复。非空 store 中，快照 revision 低于当前 revision，或 revision 相同但事实内容不同，返回 `AccessStatus::Conflict`/`workflow.snapshot.revision_conflict`；相同 revision 且内容完全相同是幂等成功；更高 revision 的合法快照可原子替换。成功恢复后清理 draft/pending generation，保留快照 fact revisions，使用当前 definition/inputs/dependencies 重算所有派生状态；下一次事实修改从恢复后的最高 revision 继续递增。
 
 **Rationale**: 既满足 facts 可恢复语义，又不引入未定 JSON 库、文件 schema 和迁移协议。
 
@@ -136,13 +136,14 @@ browse、navigate、edit、save、revalidate 不因 Stale 禁用。批处理计�
 
 - PR 2 定义正式 JSON：超出 Clarify 边界且违反宪章的未定依赖约束，拒绝。
 - 恢复快照中保存的 blockers/actions：会与当前输入分叉，拒绝。
+- 让旧快照无条件覆盖更高 revision：会造成事实版本回退和已提交事实丢失，拒绝。
 - 不定义任何恢复语义：不满足已澄清的 PR 2 范围，拒绝。
 
 ## Decision 10: 服务所属线程是 facts 的唯一提交线程
 
 **Decision**: `view()`/`viewV2()` 仅在服务与调用方同线程时做同步轻量查询。耗时专业校验可在 worker 执行，但结果必须以轻量值消息通过 `Qt::QueuedConnection` 送回服务所属线程，由该线程比较 stamp 并提交 facts。不为引擎加锁以支持任意跨线程同步调用。
 
-`WorkflowViewV2` 在建立连接前通过 `registerContractMetaTypes()` 注册。只在内部排队消息实际使用时才为其声明并注册模块级元类型。`AccessResult<WorkflowViewV2>` 不注册，因为它只用于同线程同步查询。
+`WorkflowViewV2` 在建立连接前通过 `registerContractMetaTypes()` 注册。内部只有真实作为 queued signal 参数的 `ValidationCompletion` 声明并注册模块级元类型；`PendingValidation` 作为服务线程内部状态不注册。`AccessResult<WorkflowViewV2>` 不注册，因为它只用于同线程同步查询。
 
 **Rationale**: 单写线程模型比内部锁更简单、可测，也与当前 UI/service 同线程同步查询契约一致。
 
@@ -168,6 +169,14 @@ browse、navigate、edit、save、revalidate 不因 Stale 禁用。批处理计�
 - 复用旧 StepState token：无法表达独立维度，拒绝。
 - 存储 C++ ordinal：不稳定，拒绝。
 - 只扩展 MainWindow 测试：绑定 Widgets/SARibbon 且不能覆盖 headless 规则，拒绝。
+
+## Decision 12: 定义唯一性和构建检查在首个可运行节点完成
+
+**Decision**: `WorkflowDefinition` 校验 stepId/actionId 唯一，并校验每个下游步骤内 `(dependencyStepId, code)` 唯一；重复定义返回稳定错误而不新增公共 blocker ID。公共 V2 struct 仍是被动值类型，公共 contracts 测试不虚构 stepId 校验入口。
+
+首个 `aerosim_workflow` 静态库目标必须包含真实 `WorkflowDefinition.cpp`，不得创建无实现源或假通过占位目标。每个测试任务同时完成对应 CMake 注册，每个实现任务同时把必要 `.cpp` 纳入库目标，使任务完成条件可在该节点运行。独立模块从一开始固定 C++14、Qt 5.12.12 EXACT、CMake 3.18.2 兼容语法和 MSVC `/utf-8`；性能使用规模倍增夹具和操作计数验证 O(S+D+A+R)，不依赖脆弱的绝对耗时。
+
+**Rationale**: 这消除公共被动模型与内部定义校验的职责混淆，也避免测试注册晚于“测试应通过”的不可执行任务顺序。
 
 ## Research Outcome
 

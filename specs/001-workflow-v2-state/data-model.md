@@ -41,6 +41,7 @@ Workflow V2 分为三类数据：
 | `targetPageId` | `QString` | 与当前 UI 导航契约兼容的修复页面 |
 
 Blocker 不是 fact。它与 completion/validation 分开表达，所以 `Completed + Valid + blockers[]` 是有效组合。
+同一个下游步骤的当前 blockers 中 `(dependencyStepId, code)` 必须唯一；该身份来自已通过校验的工作流定义，不新增公共 blocker ID 字段。
 
 ### 2.4 WorkflowStepViewV2
 
@@ -94,6 +95,15 @@ WorkflowStepDefinition
 
 本 PR 的 definition 是 workflow 模块内部值模型，不定义 JSON 文件格式或外部 DSL。Mock 可直接构造值对象。
 
+定义校验由 workflow 模块负责，公共 V2 view struct 不提供可写校验入口。校验必须在接受 definition 前原子检查：
+
+- `definitionVersion` 非空；
+- `stepId` 在 definition 内唯一；
+- `actionId` 在 definition 内唯一；
+- `requirementId` 在同一下游步骤内唯一；
+- `(dependencyStepId, code)` 在同一下游步骤内唯一，重复时返回稳定错误 `workflow.definition.duplicate_blocker_identity`；
+- 失败 definition 不替换当前 definition，也不产生部分 facts/view 修改。
+
 ### 3.3 DependencyRequirement
 
 ```text
@@ -145,6 +155,19 @@ WorkflowFactsSnapshot
 - factRevision 不小于所有 step factRevision；
 - stepId 在 snapshot 内唯一；
 - 任一 validation fact/stamp 不合法时整个 restore 失败，不部分应用。
+
+恢复目标规则：
+
+- 空 facts store 接受合法 snapshot，并保留 snapshot 的 scope/step factRevision；
+- 非空 store 的 scope 必须与 snapshot 匹配；
+- snapshot factRevision 小于当前 store factRevision 时返回 `AccessStatus::Conflict`；
+- revision 相同且 facts 内容完全相同是幂等成功，不改变 facts/view revision；
+- revision 相同但 facts 内容不同返回 Conflict；
+- revision 更高且结构有效时可原子替换；
+- revision 冲突统一使用错误码 `workflow.snapshot.revision_conflict`；
+- 成功恢复后的下一次事实修改使用 `max(restored scope factRevision, restored step factRevisions) + 1` 或更高的下一单调值。
+
+这里的“facts 内容完全相同”比较 scope、definitionVersion、scope factRevision 及全部 step committed facts、validation fact/stamp/issues、step revision 与事实时间；`capturedAt` 只是 snapshot 捕获元数据，不参与同 revision 的事实等价判断。
 
 ### 4.2 WorkflowStepFacts
 
@@ -303,7 +326,10 @@ Snapshot 只从 `WorkflowFactsStore` 导出。Restore 只替换 committed facts�
 | 上游输入变化 | unchanged | unchanged | retained | Stale when stamp mismatches | unchanged | increment if visible state changed |
 | blocker 出现/解除 | unchanged | unchanged | unchanged | independently derived | unchanged | increment if view changed |
 | 过期异步结果 | unchanged | unchanged | unchanged | unchanged | unchanged | unchanged; no view signal |
-| snapshot restore | restored | cleared | restored | recomputed | preserve snapshot revision | publish a newer view revision |
+| snapshot restore into empty/newer target | restored | cleared | restored | recomputed | preserve valid snapshot revision | increment viewRevision only when observable view changes |
+| repeat identical snapshot | unchanged | unchanged | unchanged | recomputed/equal | unchanged | unchanged; no business view signal |
+| older/same-revision-different snapshot | unchanged | unchanged | unchanged | unchanged | unchanged; Conflict | unchanged; no view signal |
+| first accepted fact after restore | updated | unchanged | retained/updated | recomputed | increment from restored maximum | increment if view changed |
 
 ## 9. 依赖推导规则
 
@@ -333,13 +359,14 @@ Snapshot 只从 `WorkflowFactsStore` 导出。Restore 只替换 committed facts�
 
 1. 验证整个 snapshot 的 scope、唯一性、revision 和 stamp 结构；
 2. 验证成功前不修改现有 facts；
-3. 原子替换 committed facts；
-4. 清除 draft overlays 和 pending validation generations；
-5. 保留 snapshot factRevision/step factRevision；
-6. 使用当前 definition、inputs 和 dependencies 重算 applicable、validation state、blockers、actions 和 nextSuggestion；
-7. 当前 definition 新增的步骤以 NotStarted/NotValidated 出现；
-8. 快照中已不属于当前 definition 的历史 step facts 可保留于快照审计数据，但不进入当前活动 view；
-9. 发布一个新的 viewRevision。
+3. 空 facts store 接受合法 snapshot；非空 store 先执行本文件 4.1 的 scope/revision/content 冲突规则，任何冲突返回 `AccessStatus::Conflict`/`workflow.snapshot.revision_conflict`；
+4. 相同 revision 且内容完全相同的重复恢复是幂等成功，不清运行期状态、不递增 revision、不发布业务 view 信号；
+5. 其他被允许的恢复原子替换 committed facts，清除 draft overlays 和 pending validation generations；
+6. 保留 snapshot factRevision/step factRevision，并把下一事实 revision 基线设置为恢复后的最高有效 revision；
+7. 使用当前 definition、inputs 和 dependencies 重算 applicable、validation state、blockers、actions 和 nextSuggestion；
+8. 当前 definition 新增的步骤以 NotStarted/NotValidated 出现；
+9. 快照中已不属于当前 definition 的历史 step facts 可保留于快照审计数据，但不进入当前活动 view；
+10. 仅当恢复后的可观察 view 与当前 view 不同时发布更高 viewRevision；任何失败不得改变 facts、draft、pending、issues、blockers、actions 或 revisions。
 
 ## 12. Legacy 视图映射
 

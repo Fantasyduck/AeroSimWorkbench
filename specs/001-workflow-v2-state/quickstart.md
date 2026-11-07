@@ -22,6 +22,7 @@
 - Debug configuration
 
 Workflow V2 的 contracts、workflow 和 Mock 目标只依赖 Qt Core，不需要 SARibbon、Qt Widgets 或 VTK。
+独立 workflow CMake 必须使用 C++14、`find_package(Qt5 5.12.12 EXACT COMPONENTS Core)`、CMake 3.18.2 兼容语法；MSVC 使用 `/utf-8`，不得使用 C++17 library/language features。
 
 ## 2. Windows Headless Full Validation
 
@@ -81,12 +82,15 @@ ctest --test-dir build-linux --output-on-failure \
 | `contracts_public_headers_compile` | 新增 Workflow V2 类型与 `TaskPorts.h` 直接 include 自包含 |
 | `contracts_stable_enum_token_manifest` | 旧 token 不变，V2 token 唯一且稳定 |
 | `contracts_workflow_v2` | V2 默认值、token round-trip、`viewV2()` 默认 Unsupported、metatype 注册 |
+| `workflow_definition_validation` | definitionVersion、stepId/actionId/requirementId 与 `(dependencyStepId, code)` 唯一性；重复定义原子拒绝 |
 | `workflow_state_derivation` | completion/validation/applicability 独立推导和草稿 overlay |
 | `workflow_input_stamp` | 精确 stamp 匹配与纯展示属性排除 |
 | `workflow_dependency_blockers` | 原子依赖、多 blocker、局部恢复、无关步骤隔离 |
 | `workflow_action_authorization` | 新执行门控和修复/查看动作可用性 |
+| `workflow_async_validation` | generation + exact stamp 双门控、queued service-thread 提交和过期结果零可观察变化 |
 | `workflow_legacy_adapter` | 冻结映射优先级与单向 adapter |
-| `workflow_snapshot_roundtrip` | 存储无关 facts 往返和恢复后派生状态重算 |
+| `workflow_snapshot_roundtrip` | 空 store facts 往返、非空 store revision Conflict/幂等、恢复后递增和派生状态重算 |
+| `workflow_acceptance` | FR/SC/全部验收场景追踪与 1×/2×/4× 操作计数检查 |
 | `mock_workflow_v2` | 双 view 信号、异步乱序丢弃、`requestRun()` 权威门控 |
 | `cli_mock_roundtrip` | 现有 CLI 装配和旧接口不回归 |
 | `ui_window_integration` | 现有 MainWindow 仍使用 legacy view/action/navigation（GUI 构建时） |
@@ -131,6 +135,7 @@ ctest --test-dir build-linux --output-on-failure \
 3. 无关步骤失败不产生 blocker。
 4. 仅恢复一条依赖时，只移除对应 blocker。
 5. blocker 解除不改写 completion/validation fact；下游 stamp 仍旧时保持 Stale。
+6. 同一下游步骤重复 `(dependencyStepId, code)` 时，definition 以 `workflow.definition.duplicate_blocker_identity` 拒绝且当前 definition/facts/view 不变。
 
 ### 6.5 Action authorization
 
@@ -143,6 +148,10 @@ ctest --test-dir build-linux --output-on-failure \
 - stamp current。
 
 任一失败必须拒绝新执行。Stale 时 browse/navigate/edit/save/revalidate 仍可用。`requestRun()` 必须重新授权；拒绝时不发 TaskCommand。
+
+批处理相关验收只构造通用 `WorkflowActionRule`/Mock action ID，区分计划编辑类动作和提交执行类动作；不得创建 PR 3 的 StateConfig、BatchPlan 或 execution snapshot 类型。
+
+对已有任务的非追溯验收必须通过现有端口观察：工作流变 Stale 前后，不产生 Stop/Cancel TaskCommand，既有 MockTaskService record 完全相同，也不产生使历史结果失效的现有任务事件。该测试不实现 PR 4 的 Task/Attempt 状态机。
 
 ### 6.6 Legacy compatibility
 
@@ -160,10 +169,17 @@ ctest --test-dir build-linux --output-on-failure \
 
 ### 6.7 Snapshot round-trip
 
-1. 至少 100 次存储无关往返，保持 committed facts、issues、stamp、definitionVersion、factRevision 和时间。
+1. 至少 100 次向空 facts store 的存储无关往返，保持 committed facts、issues、stamp、definitionVersion、factRevision 和时间。
 2. snapshot 不包含 Stale、blockers、actions、nextSuggestion、draft 或 pending validations。
 3. 恢复后使用当前 definition/inputs/dependencies 重算派生状态。
 4. 不创建 JSON fixture，不读写工程文件。
+5. 非空 store 的当前 revision 高于 snapshot 时返回 `AccessStatus::Conflict`/`workflow.snapshot.revision_conflict`，facts、draft、pending 和 view 完全不变。
+6. 相同 revision 且内容相同的重复恢复幂等成功且不递增 revision/发 view 信号；相同 revision 但内容不同返回 Conflict。
+7. 合法的更高 revision snapshot 原子恢复，失败不产生部分修改；恢复后的首次事实修改从恢复最高 revision 继续递增。
+
+### 6.8 Scale and operation-count check
+
+使用固定内容、规模按 1×/2×/4× 增长的 steps、declared dependencies、actions 和 relevant inputs 夹具，记录 deriver/evaluator/matcher 的访问或比较次数。总操作计数必须随 `S+D+A+R` 线性增长，不允许出现对所有 steps 与所有 dependencies 的无关笛卡尔扫描。该检查使用操作计数作为主要判据，墙钟时间只作诊断，避免在共享 CI 上设置脆弱的绝对耗时阈值。
 
 ## 7. Failure Interpretation
 

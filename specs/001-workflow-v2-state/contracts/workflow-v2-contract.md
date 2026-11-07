@@ -4,6 +4,8 @@
 
 本文是 PR 2 的公共 C++/Qt Core 契约设计，供后续实现和接口评审使用，不是本次 Plan 阶段已修改的生产头文件。
 
+**Review status**: Pending. 本文的修订、提交或合并均不等于公共接口已经批准。实施任务 T001 仍要求维护者人工记录评审人、日期、调用方影响、兼容性、线程、所有权、生命周期和迁移结论；批准前不得修改生产 `contracts/`。
+
 设计保留以下现有契约不变：
 
 - `IWorkflowService::view(const ScopeRef &) const`；
@@ -68,8 +70,11 @@ struct WorkflowViewV2 {
 - `stepId` 在一个 view 内唯一；
 - `applicable=false` 不是第四种 completion，且 `applicabilityRuleId` 必须能追溯判定来源；
 - blocker 是派生数据，不改写 completion 或 validation fact；
+- 同一个下游 step 的 blockers 中 `(dependencyStepId, code)` 唯一；重复身份由 workflow definition 校验以 `workflow.definition.duplicate_blocker_identity` 拒绝，不为此新增公共 blocker ID；
 - `factRevision` 仅反映该步骤 committed facts 的最近修改；
 - `viewRevision` 反映任何可观察视图变化，包括纯派生状态变化。
+
+这些 public structs 是轻量被动值类型，不提供 definition/stepId 唯一性校验 API。stepId、actionId、requirement 和 blocker identity 的定义校验属于 `modules/workflow/`。
 
 ## 2. Stable Enum Tokens
 

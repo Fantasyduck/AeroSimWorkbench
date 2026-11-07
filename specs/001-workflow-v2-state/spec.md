@@ -56,7 +56,7 @@
 3. **Given** 步骤本身为 Completed 且 Valid，但存在上游阻塞项，**When** 用户查看计算操作，**Then** 操作被禁止且列出所有导致阻塞的上游步骤。
 4. **Given** 步骤为 Completed 且 Stale，**When** 用户浏览页面、导航到问题位置、编辑或保存配置、或发起重新校验，**Then** 这些修复与查看动作仍可使用。
 5. **Given** 用户为包含 Stale 工况的批处理准备计划，**When** 用户创建、编辑或保存计划，**Then** 计划操作可继续；**When** 用户提交新的批处理执行，**Then** 系统必须重新检查所有相关工况、完成状态、校验状态、依赖阻塞和输入版本并拒绝无效提交。
-6. **Given** 计算任务已经创建或已有历史执行与结果，**When** 当前工作流后续变为 Stale，**Then** 系统不得仅因当前状态自动取消任务、判定任务失败或使历史结果失效。
+6. **Given** 计算任务已经创建或已有历史执行与结果，**When** 当前工作流后续变为 Stale，**Then** 系统不得仅因当前状态发出 Stop/Cancel 命令，既有 MockTaskService 记录必须保持不变，且不得通过现有工作流接口或任务事件追溯地使历史结果失效。
 7. **Given** 工作流定义为当前步骤声明了多个适用依赖，**When** 其中两个上游要求不满足而其他要求满足，**Then** 当前步骤只产生这两个来源清晰、原因独立的 blocker，不因无关步骤产生额外 blocker。
 8. **Given** 当前步骤同时存在多个 blocker，**When** 其中一个上游要求重新满足，**Then** 只移除该要求对应的 blocker，其他 blocker、下游完成事实和历史校验事实保持不变。
 9. **Given** 上游资源版本变化后已重新校验通过，但下游步骤的校验印章仍指向旧版本，**When** 对应 blocker 因上游要求已满足而移除，**Then** 下游 ValidationState 仍为 Stale，直到针对当前输入重新校验成功。
@@ -110,9 +110,12 @@
 
 **Acceptance Scenarios**:
 
-1. **Given** 快照包含完成事实、最近校验事实与印章、definitionVersion、factRevision 和时间信息，**When** 系统通过存储无关的快照往返恢复，**Then** 这些已提交事实和版本保持一致。
+1. **Given** 快照包含完成事实、最近校验事实与印章、definitionVersion、factRevision 和时间信息，且目标 WorkflowService 的事实存储为空，**When** 系统通过存储无关的快照往返恢复，**Then** 这些已提交事实和版本保持一致。
 2. **Given** 恢复时的当前输入或工作流定义与快照中的校验印章不匹配，**When** 系统生成恢复后视图，**Then** 系统保留历史校验事实，但按 FR-010 将当前校验推导为 Stale，并使用当前依赖事实重算 blocker 和动作授权。
 3. **Given** 快照中不包含 Stale、blocker、动作可用性或下一步建议，**When** 系统恢复工作流，**Then** 系统能从已恢复事实与当前输入完整重算这些派生状态。
+4. **Given** 目标事实存储已有高于快照的 factRevision，**When** 用户尝试恢复该旧快照，**Then** 系统返回 Conflict，保持当前 facts、draft、pending validation、revisions 和视图不变，不产生部分恢复。
+5. **Given** 目标事实存储已有与快照相同 revision 且内容完全相同的 facts，**When** 重复恢复同一快照，**Then** 系统将其视为幂等成功，不改写事实版本，也不产生无意义的视图版本或业务信号；相同 revision 但内容不同必须返回 Conflict。
+6. **Given** 快照已成功恢复，**When** 随后接受一次新的事实修改，**Then** 新 factRevision 必须从恢复后的最高有效 revision 继续单调递增。
 
 ### Edge Cases
 
@@ -130,6 +133,7 @@
 - 未提供或未验证的 fingerprint 不是内容相同的证据，也不能代替身份与 revision 比较。
 - 纯展示属性不在工作流校验输入集中；MeshPresentation 的颜色、透明度、可见性和显示缩放变化不导致计算输入失效。
 - 恢复事实快照时不相信旧的 Stale、blocker、动作可用性或下一步建议；它们必须根据恢复时的当前定义、当前输入与当前依赖事实重新计算。
+- 空事实存储允许恢复合法快照；已有事实存储不得被更低 revision 的旧快照覆盖，相同 revision 只允许内容完全相同的幂等恢复，任何 Conflict 或结构校验失败都不得产生部分修改。
 
 ## Requirements *(mandatory)*
 
@@ -162,20 +166,20 @@
 - **FR-006**: 用户取消编辑或保存失败时，系统 MUST 丢弃未提交草稿对工作流的影响，并 MUST NOT 改变最近已提交的配置事实、版本、完成事实、校验事实或校验输入印章。
 - **FR-007**: 上游输入变化时，系统 MUST 保留已完成步骤的 Completed 事实，将不再匹配的校验状态推导为 Stale，并重新计算所有受影响的依赖阻塞。
 - **FR-008**: 校验通过或失败 MUST NOT 改变完成状态；它们必须分别产生 Valid 或 Invalid，并保留与该校验相关的输入印章和问题。
-- **FR-009**: 系统 MUST 提供存储无关的工作流事实快照与恢复语义。快照 MUST 保留完成事实、最近校验事实及其输入印章、definitionVersion、factRevision 和相关时间信息；Stale、依赖阻塞、操作是否可用及下一步建议 MUST 从恢复的事实和恢复时的当前定义、输入与依赖事实重新推导，不得作为快照中的独立权威事实。快照往返 MUST 保持已提交事实与版本一致，但本功能 MUST NOT 冻结或实现正式工程 JSON schema、文件 IO、schema 迁移或存储适配器。
+- **FR-009**: 系统 MUST 提供存储无关的工作流事实快照与恢复语义。快照 MUST 保留完成事实、最近校验事实及其输入印章、definitionVersion、factRevision 和相关时间信息；Stale、依赖阻塞、操作是否可用及下一步建议 MUST 从恢复的事实和恢复时的当前定义、输入与依赖事实重新推导，不得作为快照中的独立权威事实。合法快照 MUST 可恢复到空事实存储并保持已提交事实与版本一致；已有事实存储的当前 factRevision 高于快照时 MUST 返回 Conflict，相同 revision 仅在事实内容完全相同时允许幂等成功，否则 MUST 返回 Conflict；任何拒绝或校验失败 MUST NOT 产生部分修改。成功恢复后的下一次事实修改 MUST 从恢复的最高有效 revision 继续递增。本功能 MUST NOT 冻结或实现正式工程 JSON schema、文件 IO、schema 迁移或存储适配器。
 - **FR-010**: 每个校验结果 MUST 关联实际校验时使用的精确输入印章，包括 scope、definitionVersion、参数身份与 revision、每个实际参与校验的资源身份与 revision，以及参与校验且已验证的 fingerprint。系统 MUST 在接受异步结果或判定现有校验仍然有效前逐项与当前输入比较；任一已记录项不匹配时 MUST 丢弃异步结果或将原校验推导为 Stale。相同 fingerprint MUST NOT 覆盖 revision 差异；未提供或未验证的 fingerprint MUST NOT 被当作内容相同的证据或用于绕过身份与 revision 检查。比较 MUST 仅包含实际影响当前工作流校验的输入；MeshPresentation 等纯展示属性 MUST NOT 导致计算输入失效。本功能 MUST NOT 跨 revision 复用旧校验结果。
 - **FR-011**: 被丢弃的校验结果 MUST NOT 改变事实版本、当前问题、依赖阻塞、操作可用性或任何对用户可观察的状态。
 - **FR-012**: Completed + Stale MUST 只阻止创建新的计算执行及其他明确依赖“当前输入校验有效”的业务动作；页面浏览、导航、配置编辑、保存和重新校验 MUST 始终允许。对任何需要当前有效校验的动作，授权判定 MUST 同时要求相关步骤适用、CompletionState 为 Completed、ValidationState 为 Valid、无依赖阻塞，且校验输入印章与当前输入版本一致；NotValidated、Invalid、Stale 或任一其他条件不满足时 MUST 拒绝该动作。批处理计划可被创建、编辑和保存，但每次提交新批处理执行时 MUST 对所有相关工况重新执行该授权判定。
-- **FR-013**: 每个工作流步骤的依赖要求 MUST 由工作流定义显式声明，并至少能声明上游完成状态、当前校验有效性和输入版本匹配要求。系统 MUST 仅对未满足的已声明适用依赖分别推导 DependencyBlocker，并 MUST NOT 因无关步骤的失败或变化阻塞当前步骤。每个 blocker MUST 标识依赖来源、未满足条件、稳定原因代码、可理解说明和可用目标页面；多个依赖 MUST 分别计算，所有当前 blocker MUST 同时可见。
+- **FR-013**: 每个工作流步骤的依赖要求 MUST 由工作流定义显式声明，并至少能声明上游完成状态、当前校验有效性和输入版本匹配要求。系统 MUST 仅对未满足的已声明适用依赖分别推导 DependencyBlocker，并 MUST NOT 因无关步骤的失败或变化阻塞当前步骤。每个 blocker MUST 标识依赖来源、未满足条件、稳定原因代码、可理解说明和可用目标页面；同一个下游步骤内 `(dependencyStepId, code)` MUST 唯一，重复定义 MUST 被工作流定义校验明确拒绝；多个依赖 MUST 分别计算，所有当前 blocker MUST 同时可见。本功能不为此新增公共 blocker ID 类型。
 - **FR-014**: DependencyBlocker MUST 从当前依赖事实动态推导，不得作为可手工改写的独立权威事实。某条依赖要求重新满足时，系统 MUST 只移除该要求对应的 blocker，MUST NOT 清除其他仍有效的 blocker，也 MUST NOT 改变下游已保存的完成事实或历史校验事实。DependencyBlocker、CompletionState 和 ValidationState MUST 分别推导与表达；blocker 解除后，下游 ValidationState 仍 MUST 按 FR-010 判定，印章不匹配时保持 Stale 直到对当前输入重新校验成功。
-- **FR-015**: 每次被接受的工作流事实变化 MUST 产生更新的事实版本；每个对外可观察的视图变化 MUST 产生可区分新旧的视图版本。
+- **FR-015**: 每次被接受的工作流事实变化 MUST 产生更新的事实版本；快照恢复是唯一保留已记录历史 factRevision 的导入操作，但不得使已有事实存储发生 revision 回退，且恢复后的下一次事实修改 MUST 继续递增。每个对外可观察的视图变化 MUST 产生可区分新旧的视图版本，幂等恢复不得制造无意义版本。
 - **FR-016**: 系统 MUST 以 V2 工作流事实为唯一权威状态来源，并从同一份事实产生 V2 视图和现有视图，不得维护两套可分叉的状态。
 - **FR-017**: 现有视图的映射优先级 MUST 固定为：任一阻塞项 → Blocked；否则 Stale 或 Invalid → NeedsValidation；否则 Completed 且 Valid → Complete；其余 → Pending。该映射 MUST NOT 反向写回为 V2 事实。
 - **FR-018**: 现有工作流查询、运行请求、任务事件输入以及新旧视图变化通知 MUST 在兼容期内可同时使用，既有调用方不得因本功能被强制迁移。
 - **FR-019**: 工作流操作的禁用原因、问题作用域和目标页面 MUST 与现有 Ribbon、统一工作区树和中央业务页面定位逻辑兼容，不得要求重建导航结构。
 - **FR-020**: Mock 工作流 MUST 能模拟完成、校验、输入变化、依赖阻塞、阻塞恢复和异步结果乱序，同时 MUST 继续明确表示其不是真实专业校验或求解执行。
 - **FR-021**: 自动化验收 MUST 至少覆盖全部用户故事、冻结的旧视图映射矩阵、每种校验输入印章不匹配、多阻塞项以及阻塞恢复，并必须保持现有工作流与 UI 集成验收通过。
-- **FR-022**: 当前工作流视图 MUST 只用于门控新的计算提交，MUST NOT 直接改变或否定已创建计算任务所固定的输入；已创建任务、历史执行和结果 MUST 按各自的不可变执行快照及任务状态机处理，不得仅因当前工作流变为 Stale 就自动取消、判定失败或使历史结果失效；具体任务状态机不属于本功能。
+- **FR-022**: 当前工作流视图 MUST 只用于门控新的计算提交，MUST NOT 直接改变或否定已创建计算任务所固定的输入；已创建任务、历史执行和结果 MUST 按各自的不可变执行快照及任务状态机处理。当前工作流变为 Stale 时，工作流服务 MUST NOT 因此发出 Stop/Cancel TaskCommand，MUST NOT 改写既有 MockTaskService 记录，也 MUST NOT 通过现有接口或任务事件追溯地使历史结果失效；具体 Task/Attempt 状态机仍不属于本功能。
 - **FR-023**: 业务动作的最终授权结果 MUST 由 WorkflowService 或拥有该规则的相应业务服务统一判定；UI MUST 只展示授权状态、禁用原因和导航目标，并提交已授权的请求，MUST NOT 自行放宽、绕过或重新定义校验规则。
 
 ### Key Entities
@@ -188,7 +192,7 @@
 - **Dependency Blocker（依赖阻塞项）**: 工作流定义中某条适用依赖要求当前未满足时，从当前上游事实推导出的禁止原因；包含来源步骤、未满足条件、原因、说明和修复定位，不是可手工改写的独立业务事实。
 - **Workflow View（工作流视图）**: 向界面和其他调用方提供的当前步骤、操作、问题与建议快照；V2 视图与现有视图由同一事实派生。
 - **Action Authorization（动作授权）**: 业务服务根据动作是否要求当前有效校验，结合适用性、完成状态、校验状态、依赖阻塞和输入版本产生的可执行结果及原因；UI 不是该结果的权威来源。
-- **Workflow Facts Snapshot（工作流事实快照）**: 与具体存储格式无关的可恢复事实集，包含已提交完成事实、最近校验事实与印章、definitionVersion、factRevision 和相关时间信息；不保存 Stale、blocker、动作授权或下一步建议等派生状态。
+- **Workflow Facts Snapshot（工作流事实快照）**: 与具体存储格式无关的可恢复事实集，包含已提交完成事实、最近校验事实与印章、definitionVersion、factRevision 和相关时间信息；不保存 Stale、blocker、动作授权或下一步建议等派生状态。默认恢复目标为空事实存储；非空存储使用 scope、revision 和事实内容执行冲突/幂等检查。
 
 ## Success Criteria *(mandatory)*
 
@@ -202,7 +206,7 @@
 - **SC-006**: 所有被禁止的计算操作都提供至少一个可理解原因；在已知目标页面的场景中，100% 提供与现有导航规则兼容的修复定位。
 - **SC-007**: 验收人员可在不查阅内部实现的情况下，仅通过状态视图和操作结果区分“已完成但过期”、“已完成且有效”与“因依赖被阻塞”三种场景，目标识别正确率为 100%。
 - **SC-008**: 在声明多个依赖、局部依赖恢复、无关步骤失败和上游版本变更的验收矩阵中，100% 的 blocker 与工作流定义中当前未满足的适用依赖一一对应，且 blocker 解除误改下游完成或历史校验事实的次数为 0。
-- **SC-009**: 工作流事实快照在至少 100 次可重复往返恢复中，已提交事实、输入印章、definitionVersion 和 factRevision 丢失或改写的次数为 0；恢复后使用旧派生状态而未按当前输入重算的次数为 0。
+- **SC-009**: 工作流事实快照在至少 100 次空存储往返恢复中，已提交事实、输入印章、definitionVersion 和 factRevision 丢失或改写的次数为 0；恢复后使用旧派生状态而未按当前输入重算的次数为 0；旧快照覆盖更高 revision、相同 revision 不同内容、重复幂等恢复、恢复失败零部分修改及恢复后首次修改递增的验收结果 100% 符合 FR-009/FR-015。
 
 ## Assumptions
 
