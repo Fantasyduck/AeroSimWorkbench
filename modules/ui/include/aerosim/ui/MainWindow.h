@@ -11,12 +11,14 @@
 class QAction;
 class QCheckBox;
 class QComboBox;
+class QDoubleSpinBox;
 class QLabel;
 class QLineEdit;
 class QProgressBar;
 class QPlainTextEdit;
 class QPushButton;
 class QSplitter;
+class QSpinBox;
 class QStackedWidget;
 class QTableWidget;
 class QTreeWidget;
@@ -62,6 +64,10 @@ private:
     void restoreUserLayout();
     void constrainToAvailableScreen();
     void submitRun();
+    void submitSingleCalculation();
+    void addBatchCase();
+    void removeBatchCase();
+    void submitBatchCalculation();
     void appendMessage(const QString &message);
     void appendLog(const QString &level, const QString &source, const QString &message,
                    const QString &scope = QString());
@@ -96,6 +102,8 @@ private:
     QWidget *batchPlanPage_ = nullptr;
     QWidget *batchMonitorPage_ = nullptr;
     QWidget *taskMonitorPage_ = nullptr;
+    QWidget *singleCalculationPage_ = nullptr;
+    QWidget *batchCalculationPage_ = nullptr;
     QWidget *dataProcessPage_ = nullptr;
     QWidget *postprocessOverviewPage_ = nullptr;
     QHash<QString, QWidget *> workspacePages_;
@@ -103,6 +111,7 @@ private:
     QHash<QString, QString> moduleLastPages_;
     QTableWidget *stateTable_ = nullptr;
     QTableWidget *batchPlanTable_ = nullptr;
+    QTableWidget *batchCalculationTable_ = nullptr;
     QTableWidget *outputLogTable_ = nullptr;
     QDockWidget *projectDock_ = nullptr;
     QDockWidget *propertyDock_ = nullptr;
@@ -127,6 +136,15 @@ private:
     QComboBox *logModuleFilter_ = nullptr;
     QComboBox *taskLogStreamFilter_ = nullptr;
     QLineEdit *logSearch_ = nullptr;
+    QComboBox *singleCaseCombo_ = nullptr;
+    QComboBox *singleOutputModeCombo_ = nullptr;
+    QDoubleSpinBox *singleMachSpin_ = nullptr;
+    QDoubleSpinBox *singleAoASpin_ = nullptr;
+    QDoubleSpinBox *singleTemperatureSpin_ = nullptr;
+    QSpinBox *singleMpiSpin_ = nullptr;
+    QLabel *singleGenerationStatus_ = nullptr;
+    QLabel *batchGenerationStatus_ = nullptr;
+    quint64 batchPlanVersion_ = 0;
     QCheckBox *logAutoScroll_ = nullptr;
     QCheckBox *taskLogAutoScroll_ = nullptr;
     QPlainTextEdit *taskLogView_ = nullptr;

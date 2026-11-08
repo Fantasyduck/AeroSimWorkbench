@@ -49,12 +49,14 @@
 #include <QScrollBar>
 #include <QScreen>
 #include <QSplitter>
+#include <QSpinBox>
 #include <QTextCharFormat>
 #include <QTextBlock>
 #include <QTextCursor>
 #include <QTreeWidget>
 #include <QTreeWidgetItemIterator>
 #include <QVBoxLayout>
+#include <QUuid>
 #include <cstddef>
 
 // Keep only this module's generated resource object in the static UI library.
@@ -608,6 +610,87 @@ void MainWindow::createWorkspace()
     newPlan->setToolTip(uiText(u"\u7b49\u5f85\u5de5\u4f5c\u533a\u4e0e\u6279\u5904\u7406\u670d\u52a1\u63a5\u5165"));
     batchLayout->addWidget(newPlan, 0, Qt::AlignLeft);
 
+    // These two pages are the user-facing entry points for creating execution
+    // requests.  They deliberately use the existing RunRequest contract; the
+    // real solver and persistent BatchPlan service can replace the Mock later.
+    singleCalculationPage_ = createWorkspacePage(
+        QStringLiteral("singleCalculationPage"), uiText(u"\u5355\u6b21\u8ba1\u7b97"),
+        uiText(u"\u4e00\u7ec4\u5de5\u51b5\u53c2\u6570\u751f\u6210\u4e00\u4e2a\u6267\u884c\u8bf7\u6c42\u3002\u63d0\u4ea4\u540e\u5c06\u8fdb\u5165\u4efb\u52a1\u76d1\u63a7\uff1b\u5f53\u524d\u4f7f\u7528 Mock \u670d\u52a1\uff0c\u4e0d\u542f\u52a8\u771f\u5b9e\u6c42\u89e3\u5668\u3002"));
+    auto *singleLayout = qobject_cast<QVBoxLayout *>(singleCalculationPage_->layout());
+    auto *singleGroup = new QGroupBox(uiText(u"\u8ba1\u7b97\u5de5\u51b5\u4e0e\u53c2\u6570"), singleCalculationPage_);
+    auto *singleForm = new QFormLayout(singleGroup);
+    singleCaseCombo_ = new QComboBox(singleGroup);
+    singleCaseCombo_->setObjectName(QStringLiteral("singleCaseCombo"));
+    singleCaseCombo_->addItems({QStringLiteral("State_001"), QStringLiteral("State_002"), QStringLiteral("State_003")});
+    singleMachSpin_ = new QDoubleSpinBox(singleGroup);
+    singleMachSpin_->setObjectName(QStringLiteral("singleMachSpin"));
+    singleMachSpin_->setRange(0.01, 20.0); singleMachSpin_->setSingleStep(0.05); singleMachSpin_->setValue(0.80);
+    singleAoASpin_ = new QDoubleSpinBox(singleGroup);
+    singleAoASpin_->setObjectName(QStringLiteral("singleAoASpin"));
+    singleAoASpin_->setRange(-90.0, 90.0); singleAoASpin_->setSingleStep(0.5); singleAoASpin_->setValue(2.0);
+    singleTemperatureSpin_ = new QDoubleSpinBox(singleGroup);
+    singleTemperatureSpin_->setObjectName(QStringLiteral("singleTemperatureSpin"));
+    singleTemperatureSpin_->setRange(100.0, 2000.0); singleTemperatureSpin_->setSuffix(QStringLiteral(" K")); singleTemperatureSpin_->setValue(288.15);
+    singleMpiSpin_ = new QSpinBox(singleGroup);
+    singleMpiSpin_->setObjectName(QStringLiteral("singleMpiSpin"));
+    singleMpiSpin_->setRange(1, 4096); singleMpiSpin_->setValue(4);
+    singleOutputModeCombo_ = new QComboBox(singleGroup);
+    singleOutputModeCombo_->setObjectName(QStringLiteral("singleOutputModeCombo"));
+    singleOutputModeCombo_->addItem(uiText(u"\u63d0\u4ea4\u672c\u5730\u8ba1\u7b97"), QStringLiteral("local"));
+    singleOutputModeCombo_->addItem(uiText(u"\u4ec5\u751f\u6210\u8f93\u5165\u6587\u4ef6"), QStringLiteral("input-only"));
+    singleOutputModeCombo_->addItem(uiText(u"\u4ec5\u751f\u6210\u8ba1\u7b97\u538b\u7f29\u5305"), QStringLiteral("package-only"));
+    singleForm->addRow(uiText(u"\u5de5\u51b5"), singleCaseCombo_);
+    singleForm->addRow(uiText(u"\u9a6c\u8d6b\u6570"), singleMachSpin_);
+    singleForm->addRow(uiText(u"\u653b\u89d2"), singleAoASpin_);
+    singleForm->addRow(uiText(u"\u6e29\u5ea6"), singleTemperatureSpin_);
+    singleForm->addRow(uiText(u"MPI \u8fdb\u7a0b\u6570"), singleMpiSpin_);
+    singleForm->addRow(uiText(u"\u8f93\u51fa\u65b9\u5f0f"), singleOutputModeCombo_);
+    singleLayout->addWidget(singleGroup);
+    auto *singleHint = new QLabel(uiText(u"\u70b9\u51fb\u63d0\u4ea4\u540e\uff0c\u754c\u9762\u4f1a\u4e3a\u672c\u6b21\u8f93\u5165\u751f\u6210 snapshot ID\uff0c\u5e76\u8c03\u7528 WorkflowService\u3002"), singleCalculationPage_);
+    singleHint->setWordWrap(true); singleLayout->addWidget(singleHint);
+    auto *singleSubmit = new QPushButton(uiText(u"\u751f\u6210\u5e76\u63d0\u4ea4\u5355\u6b21\u4efb\u52a1"), singleCalculationPage_);
+    singleSubmit->setObjectName(QStringLiteral("submitSingleCalculation"));
+    connect(singleSubmit, &QPushButton::clicked, this, &MainWindow::submitSingleCalculation);
+    singleLayout->addWidget(singleSubmit, 0, Qt::AlignLeft);
+    singleGenerationStatus_ = new QLabel(uiText(u"\u5c1a\u672a\u751f\u6210\u4efb\u52a1"), singleCalculationPage_);
+    singleGenerationStatus_->setObjectName(QStringLiteral("singleGenerationStatus"));
+    singleGenerationStatus_->setWordWrap(true); singleLayout->addWidget(singleGenerationStatus_);
+    singleLayout->addStretch();
+
+    batchCalculationPage_ = createWorkspacePage(
+        QStringLiteral("batchCalculationPage"), uiText(u"\u6279\u91cf\u8ba1\u7b97"),
+        uiText(u"\u5148\u7528 + \u6dfb\u52a0\u591a\u7ec4\u5de5\u51b5\u53c2\u6570\uff0c\u518d\u63d0\u4ea4\u6279\u5904\u7406\u8ba1\u5212\u3002\u5f53\u524d\u5b9e\u73b0\u662f UI/Mock \u6d41\u7a0b\uff0c\u4e0d\u58f0\u79f0\u5df2\u6709\u6b63\u5f0f BatchRun \u6301\u4e45\u5316\u3002"));
+    auto *batchCalculationLayout = qobject_cast<QVBoxLayout *>(batchCalculationPage_->layout());
+    batchCalculationTable_ = new QTableWidget(0, 6, batchCalculationPage_);
+    batchCalculationTable_->setObjectName(QStringLiteral("batchCalculationTable"));
+    batchCalculationTable_->setHorizontalHeaderLabels({uiText(u"\u5de5\u51b5"), uiText(u"\u9a6c\u8d6b\u6570"), uiText(u"\u653b\u89d2"), uiText(u"\u6e29\u5ea6(K)"), QStringLiteral("MPI"), uiText(u"\u6821\u9a8c")});
+    batchCalculationTable_->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
+    batchCalculationTable_->setSelectionBehavior(QAbstractItemView::SelectRows);
+    batchCalculationTable_->setSelectionMode(QAbstractItemView::SingleSelection);
+    batchCalculationTable_->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    batchCalculationLayout->addWidget(batchCalculationTable_, 1);
+    auto *batchButtons = new QHBoxLayout;
+    auto *addBatch = new QPushButton(uiText(u"+ \u6dfb\u52a0\u5de5\u51b5"), batchCalculationPage_);
+    addBatch->setObjectName(QStringLiteral("addBatchCase"));
+    auto *removeBatch = new QPushButton(uiText(u"- \u79fb\u9664\u9009\u4e2d"), batchCalculationPage_);
+    removeBatch->setObjectName(QStringLiteral("removeBatchCase"));
+    connect(addBatch, &QPushButton::clicked, this, &MainWindow::addBatchCase);
+    connect(removeBatch, &QPushButton::clicked, this, &MainWindow::removeBatchCase);
+    batchButtons->addWidget(addBatch); batchButtons->addWidget(removeBatch); batchButtons->addStretch();
+    batchCalculationLayout->addLayout(batchButtons);
+    auto *submitBatch = new QPushButton(uiText(u"\u751f\u6210\u5e76\u63d0\u4ea4\u6279\u91cf\u4efb\u52a1"), batchCalculationPage_);
+    submitBatch->setObjectName(QStringLiteral("submitBatchCalculation"));
+    connect(submitBatch, &QPushButton::clicked, this, &MainWindow::submitBatchCalculation);
+    batchCalculationLayout->addWidget(submitBatch, 0, Qt::AlignLeft);
+    batchGenerationStatus_ = new QLabel(uiText(u"\u8bf7\u5148\u6dfb\u52a0\u81f3\u5c11\u4e00\u7ec4\u5de5\u51b5\u3002"), batchCalculationPage_);
+    batchGenerationStatus_->setObjectName(QStringLiteral("batchGenerationStatus"));
+    batchGenerationStatus_->setWordWrap(true); batchCalculationLayout->addWidget(batchGenerationStatus_);
+    batchCalculationLayout->addStretch();
+    workspaceStack_->addWidget(singleCalculationPage_);
+    workspaceStack_->addWidget(batchCalculationPage_);
+    workspacePages_.insert(QStringLiteral("single-calculation"), singleCalculationPage_);
+    workspacePages_.insert(QStringLiteral("batch-calculation"), batchCalculationPage_);
+
     batchMonitorPage_ = createWorkspacePage(QStringLiteral("batchMonitorPage"), uiText(u"\u6279\u5904\u7406\u603b\u4f53\u76d1\u63a7"),
         uiText(u"Mock \u754c\u9762\u793a\u4f8b\uff1a3 \u4e2a\u5b50\u4efb\u52a1\uff0c\u5df2\u5b8c\u6210 1\uff0c\u8fd0\u884c\u4e2d 1\uff0c\u7b49\u5f85 1\uff0c\u5931\u8d25 0\u3002\u5c1a\u672a\u63a5\u5165\u771f\u5b9e BatchRun \u6570\u636e\u3002"));
     auto *batchMonitorLayout = qobject_cast<QVBoxLayout *>(batchMonitorPage_->layout());
@@ -649,9 +732,7 @@ void MainWindow::createWorkspace()
         {"mesh-info", u"\u7f51\u683c\u4fe1\u606f", u"\u7528\u4e8e\u663e\u793a\u7f51\u683c\u7c7b\u578b\u3001\u6587\u4ef6\u4e0e\u89c4\u6a21\u3002\u5f53\u524d\u4e3a\u7a7a\u72b6\u6001\uff0c\u4e0d\u4f2a\u9020\u7f51\u683c\u5c5e\u6027\u3002"},
         {"trajectory-file", u"\u5f39\u9053\u6587\u4ef6", u"\u5f39\u9053\u6587\u4ef6\u9009\u62e9\u4e0e\u7ba1\u7406\u5165\u53e3\u3002\u672c\u671f\u4e0d\u5b9e\u73b0\u6587\u4ef6\u89e3\u6790\u3002"},
         {"trajectory-data", u"\u5f39\u9053\u6570\u636e", u"\u5f39\u9053\u6570\u636e\u67e5\u770b\u5165\u53e3\u3002\u5f53\u524d\u5de5\u4f5c\u533a\u6ca1\u6709\u53ef\u5c55\u793a\u7684\u771f\u5b9e\u6570\u636e\u3002"},
-        {"state-extraction", u"\u72b6\u6001\u63d0\u53d6", u"\u4ece\u5f39\u9053\u6570\u636e\u63d0\u53d6\u8ba1\u7b97\u72b6\u6001\u7684\u914d\u7f6e\u5165\u53e3\u3002\u672c\u671f\u4e0d\u6267\u884c\u63d0\u53d6\u8ba1\u7b97\u3002"},
-        {"single-calculation", u"\u5355\u6b21\u8ba1\u7b97", u"\u9009\u62e9\u5df2\u6709\u5de5\u51b5\u5e76\u51c6\u5907\u4e00\u6b21\u8ba1\u7b97\u3002\u771f\u5b9e\u6c42\u89e3\u5668\u542f\u52a8\u4ecd\u7531\u73b0\u6709\u670d\u52a1\u5951\u7ea6\u63a7\u5236\u3002"},
-        {"batch-calculation", u"\u6279\u91cf\u8ba1\u7b97", u"\u9009\u62e9\u5df2\u6709\u6279\u5904\u7406\u8ba1\u5212\u7684\u51c6\u5907\u9875\u3002\u672c\u671f\u4e0d\u6267\u884c\u4efb\u52a1\u8c03\u5ea6\u3002"}
+        {"state-extraction", u"\u72b6\u6001\u63d0\u53d6", u"\u4ece\u5f39\u9053\u6570\u636e\u63d0\u53d6\u8ba1\u7b97\u72b6\u6001\u7684\u914d\u7f6e\u5165\u53e3\u3002\u672c\u671f\u4e0d\u6267\u884c\u63d0\u53d6\u8ba1\u7b97\u3002"}
     };
     for (const auto &definition : placeholderPages) {
         auto *page = createWorkspacePage(QString::fromLatin1(definition.id) + QStringLiteral("Page"),
@@ -1641,6 +1722,113 @@ void MainWindow::submitRun()
     for (const auto &issue : result.issues)
         appendLog(QStringLiteral("ERROR"), QStringLiteral("Validation"), issue.message, QStringLiteral("current-project"));
     if (!result.allowed) showOutput(3);
+}
+
+void MainWindow::submitSingleCalculation()
+{
+    if (!workflow_ || workflow_->thread() != thread()) {
+        const QString message = uiText(u"\u5de5\u4f5c\u6d41\u670d\u52a1\u5c1a\u672a\u8fde\u63a5\uff0c\u672a\u751f\u6210\u4efb\u52a1");
+        if (singleGenerationStatus_) singleGenerationStatus_->setText(message);
+        appendLog(QStringLiteral("ERROR"), QStringLiteral("UI"), message);
+        return;
+    }
+
+    const QString caseId = singleCaseCombo_->currentText();
+    const QString snapshotId = QStringLiteral("ui-%1-rev-1").arg(caseId);
+    RunRequest request;
+    request.scope.projectId = QStringLiteral("mock-project");
+    request.scope.caseId = caseId;
+    request.inputSnapshot.snapshotId = snapshotId;
+    request.inputSnapshot.scope = request.scope;
+    request.inputSnapshot.revision = 1;
+    runRequest_ = request;
+    hasRunContext_ = true;
+    const auto result = workflow_->requestRun(request);
+    if (result.allowed) {
+        const QString message = uiText(u"\u5df2\u751f\u6210\u5355\u6b21\u4efb\u52a1\u8bf7\u6c42\uff1a%1\uff08Mock\uff09").arg(snapshotId);
+        singleGenerationStatus_->setText(message + uiText(u"\uff1b\u8bf7\u5728\u8ba1\u7b97\u76d1\u63a7\u4e2d\u67e5\u770b\u4efb\u52a1\u4e8b\u4ef6"));
+        appendMessage(message);
+    } else {
+        singleGenerationStatus_->setText(uiText(u"\u5355\u6b21\u4efb\u52a1\u6821\u9a8c\u5931\u8d25"));
+        for (const auto &issue : result.issues)
+            appendLog(QStringLiteral("ERROR"), QStringLiteral("Validation"), issue.message);
+    }
+}
+
+void MainWindow::addBatchCase()
+{
+    QDialog dialog(batchCalculationPage_);
+    dialog.setWindowTitle(uiText(u"\u6dfb\u52a0\u6279\u5904\u7406\u5de5\u51b5"));
+    auto *form = new QFormLayout(&dialog);
+    auto *caseCombo = new QComboBox(&dialog);
+    caseCombo->addItems({QStringLiteral("State_001"), QStringLiteral("State_002"), QStringLiteral("State_003")});
+    auto *mach = new QDoubleSpinBox(&dialog); mach->setRange(0.01, 20.0); mach->setValue(0.8); mach->setSingleStep(0.05);
+    auto *aoa = new QDoubleSpinBox(&dialog); aoa->setRange(-90.0, 90.0); aoa->setValue(2.0); aoa->setSingleStep(0.5);
+    auto *temperature = new QDoubleSpinBox(&dialog); temperature->setRange(100.0, 2000.0); temperature->setValue(288.15); temperature->setSuffix(QStringLiteral(" K"));
+    auto *mpi = new QSpinBox(&dialog); mpi->setRange(1, 4096); mpi->setValue(4);
+    form->addRow(uiText(u"\u5de5\u51b5"), caseCombo);
+    form->addRow(uiText(u"\u9a6c\u8d6b\u6570"), mach);
+    form->addRow(uiText(u"\u653b\u89d2"), aoa);
+    form->addRow(uiText(u"\u6e29\u5ea6"), temperature);
+    form->addRow(QStringLiteral("MPI"), mpi);
+    auto *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+    form->addRow(buttons);
+    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    if (dialog.exec() != QDialog::Accepted) return;
+
+    const int row = batchCalculationTable_->rowCount();
+    batchCalculationTable_->insertRow(row);
+    const QStringList values = {
+        caseCombo->currentText(), QString::number(mach->value(), 'f', 3),
+        QString::number(aoa->value(), 'f', 3), QString::number(temperature->value(), 'f', 2),
+        QString::number(mpi->value()), uiText(u"\u5df2\u901a\u8fc7")};
+    for (int column = 0; column < values.size(); ++column)
+        batchCalculationTable_->setItem(row, column, new QTableWidgetItem(values.at(column)));
+    batchCalculationTable_->selectRow(row);
+    batchGenerationStatus_->setText(uiText(u"\u5df2\u7f16\u8f91 %1 \u7ec4\u5de5\u51b5\uff0c\u53ef\u7ee7\u7eed\u6dfb\u52a0\u6216\u63d0\u4ea4\u3002").arg(batchCalculationTable_->rowCount()));
+}
+
+void MainWindow::removeBatchCase()
+{
+    const int row = batchCalculationTable_ ? batchCalculationTable_->currentRow() : -1;
+    if (row < 0) return;
+    batchCalculationTable_->removeRow(row);
+    batchGenerationStatus_->setText(batchCalculationTable_->rowCount() == 0
+        ? uiText(u"\u8bf7\u5148\u6dfb\u52a0\u81f3\u5c11\u4e00\u7ec4\u5de5\u51b5\u3002")
+        : uiText(u"\u5df2\u7f16\u8f91 %1 \u7ec4\u5de5\u51b5\u3002").arg(batchCalculationTable_->rowCount()));
+}
+
+void MainWindow::submitBatchCalculation()
+{
+    if (!batchCalculationTable_ || batchCalculationTable_->rowCount() == 0) {
+        batchGenerationStatus_->setText(uiText(u"\u6279\u5904\u7406\u8ba1\u5212\u4e3a\u7a7a\uff0c\u8bf7\u5148\u70b9\u51fb + \u6dfb\u52a0\u5de5\u51b5\u3002"));
+        return;
+    }
+    if (!workflow_ || workflow_->thread() != thread()) {
+        batchGenerationStatus_->setText(uiText(u"\u5de5\u4f5c\u6d41\u670d\u52a1\u5c1a\u672a\u8fde\u63a5\uff0c\u672a\u63d0\u4ea4\u6279\u5904\u7406\u8ba1\u5212\u3002"));
+        return;
+    }
+
+    const QString planId = QStringLiteral("ui-batch-%1").arg(QUuid::createUuid().toString(QUuid::WithoutBraces).left(8));
+    const quint64 version = ++batchPlanVersion_;
+    int accepted = 0;
+    for (int row = 0; row < batchCalculationTable_->rowCount(); ++row) {
+        RunRequest request;
+        request.scope.projectId = QStringLiteral("mock-project");
+        request.scope.caseId = batchCalculationTable_->item(row, 0)->text();
+        request.batchPlanId = planId;
+        request.batchPlanVersion = version;
+        request.inputSnapshot.snapshotId = QStringLiteral("%1-row-%2").arg(planId).arg(row + 1);
+        request.inputSnapshot.scope = request.scope;
+        request.inputSnapshot.revision = 1;
+        const auto result = workflow_->requestRun(request);
+        if (result.allowed) ++accepted;
+        for (const auto &issue : result.issues)
+            appendLog(QStringLiteral("ERROR"), QStringLiteral("Validation"), issue.message, planId);
+    }
+    batchGenerationStatus_->setText(uiText(u"\u5df2\u751f\u6210\u6279\u5904\u7406\u8ba1\u5212 %1\uff08v%2\uff09\uff0c\u63d0\u4ea4 %3 \u4e2a Mock \u6267\u884c\u8bf7\u6c42\u3002\u771f\u5b9e\u6c42\u89e3\u5668\u4ecd\u9700\u8fd0\u884c\u6a21\u5757\u63a5\u5165\u3002").arg(planId).arg(version).arg(accepted));
+    appendMessage(uiText(u"\u6279\u5904\u7406\u8ba1\u5212\u5df2\u63d0\u4ea4\uff1a%1 \u4e2a\u5b50\u8bf7\u6c42\uff08Mock\uff09").arg(accepted));
 }
 
 void MainWindow::displayTaskEvent(const TaskEvent &event)

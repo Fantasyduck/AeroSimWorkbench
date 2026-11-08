@@ -317,6 +317,20 @@ int main(int argc, char **argv)
                "Batch configuration did not locate and open BatchPlan management")) return 38;
     if (!check(window.findChild<QTableWidget *>("batchPlanTable")->columnCount() == 3,
                "BatchPlan page is missing its model-neutral table")) return 39;
+    auto *singleCalculationItem = calculationNode->child(0)->child(2);
+    auto *batchCalculationItem = calculationNode->child(0)->child(3);
+    projectTree->setCurrentItem(singleCalculationItem);
+    app.processEvents();
+    if (!check(workspace->currentWidget()->objectName() == "singleCalculationPage"
+               && window.findChild<QPushButton *>("submitSingleCalculation")
+               && window.findChild<QComboBox *>("singleCaseCombo"),
+               "Single calculation page did not expose task generation controls")) return 74;
+    projectTree->setCurrentItem(batchCalculationItem);
+    app.processEvents();
+    if (!check(workspace->currentWidget()->objectName() == "batchCalculationPage"
+               && window.findChild<QPushButton *>("addBatchCase")
+               && window.findChild<QTableWidget *>("batchCalculationTable")->columnCount() == 6,
+               "Batch calculation page did not expose plan editing controls")) return 75;
     auto *batchRunItem = calculationNode->child(1)->child(1)->child(0);
     auto *batchTaskItem = batchRunItem->child(0);
     projectTree->setCurrentItem(batchRunItem);
