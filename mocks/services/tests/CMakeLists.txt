@@ -1,0 +1,4 @@
+add_executable(aerosim_mock_workflow_v2_test MockWorkflowV2Tests.cpp)
+target_link_libraries(aerosim_mock_workflow_v2_test PRIVATE aerosim::mock Qt5::Core)
+add_test(NAME mock_workflow_v2 COMMAND aerosim_mock_workflow_v2_test)
+add_custom_target(aerosim_mock_tests DEPENDS aerosim_mock_workflow_v2_test)

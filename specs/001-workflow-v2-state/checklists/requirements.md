@@ -36,3 +36,15 @@
   historical branch source used for that reference rather than treating it as current `main`.
 - The specification is ready for `$speckit-clarify` or `$speckit-plan`; this invocation does not
   enter either phase.
+
+## PR 2 Implementation Scope Audit (2026-11-08)
+
+- [x] Workflow V2 changes are limited to public workflow contracts, the workflow service/deriver, Mock integration, compatibility assertions, tests, and build registration.
+- [x] No StateConfig, BatchPlan, BatchRun, execution-snapshot model, or Task/Attempt V2 state machine was introduced; PR 3 remains reserved for StateConfig, BatchPlan revision, and execution snapshot.
+- [x] No formal JSON schema, JSON/file IO, migration, or persistence adapter was introduced; `WorkflowFactsSnapshot` is an in-memory storage-neutral value.
+- [x] No cross-revision validation cache was introduced.
+- [x] No MainWindow, Ribbon, workspace-tree, solver, mesh, result, or visualization production implementation was refactored.
+- [x] `git diff --check` and changed-path review pass; `scripts/build-windows.cmd` remains unchanged.
+- [x] T001 public interface design is recorded as approved by the authorized maintainer; this does not assert any unrelated external approval.
+- [ ] Windows VS2017 v141 x64 Debug with Qt 5.12.12 remains to be run by a maintainer with that environment.
+- [ ] GUI/SARibbon `ui_window_integration` remains to be rerun on the supported Windows GUI environment.

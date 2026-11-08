@@ -47,3 +47,18 @@
 ## 2026-10-23 后处理原型清理验证
 
 在目标 Windows 10 主机的临时 worktree `F:\AeroSimWorkbenchCleanupCheck` 中，以 VS2017 v141 x64、Qt 5.12.12、CMake 3.18.2 执行 `scripts\build-windows.cmd all Debug`：GUI 与 CLI 骨架编译成功，CTest **3/3** 通过（CLI Mock、GUI offscreen Mock、后处理夹具检查）。另设 `AEROSIM_BUILD_GUI=OFF` 和独立构建目录后再次执行同一脚本：CLI 编译成功，CTest **2/2** 通过（CLI Mock、夹具检查）。本机 macOS 的 `cmake -P tests/fixtures/postprocess/VerifyFixtures.cmake` 也通过。此轮没有启用技术栈探针，也未验证正式 C++/VTK 后处理模块。
+
+## 2026-11-08 Workflow V2 PR 2 实施验证
+
+当前开发环境为 macOS arm64、AppleClang 21.0.0、CMake 4.4.4、Homebrew Qt 5.15.19。仓库保持 `Qt 5.12.12 EXACT`；直接配置按预期因版本不匹配而停止，没有放宽仓库内的正式工具链约束。
+
+| 验证 | 实际结果 |
+| --- | --- |
+| 原始源树 headless CMake 配置 | `find_package(Qt5 5.12.12 EXACT)` 正确拒绝本机 Qt 5.15.19；未伪装为正式通过 |
+| 临时源码副本，仅将 Qt 查找放宽到本机 5.15，headless Debug | CMake/AUTOMOC 配置和全部目标编译成功；仓库源文件未因此改动 |
+| 临时副本全量 CTest | **20/20 通过**，包括 contracts、workflow、snapshot、Mock、CLI 和夹具检查 |
+| Workflow V2 聚焦过滤 | **12/12 通过**：`contracts_workflow_v2|workflow_|mock_workflow_v2|cli_mock_roundtrip` |
+| GUI/`ui_window_integration` | 本轮未验证；没有改动 MainWindow 生产代码，只增加 legacy-only 默认 Unsupported 兼容断言 |
+| Windows VS2017 v141 x64 Debug、Qt 5.12.12 | **未验证**；当前环境不是 Windows，未执行 `scripts\build-windows.cmd aerosim_workflow_tests Debug` 或 `scripts\build-windows.cmd all Debug` |
+
+Windows 维护者需在目标环境执行上述两条构建命令，然后执行 `ctest -C Debug --output-on-failure -R "contracts_workflow_v2|workflow_|mock_workflow_v2|cli_mock_roundtrip|ui_window_integration"`。本轮未修改 `scripts/build-windows.cmd`，未引入 Widgets、VTK、JSON 或求解器依赖到 workflow 目标。

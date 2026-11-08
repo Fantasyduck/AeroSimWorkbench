@@ -69,6 +69,19 @@ int main()
          {aerosim::StepState::Complete, "complete"},
          {aerosim::StepState::Blocked, "blocked"}});
 
+    checkMapping<aerosim::CompletionState>(context, &aerosim::enumToken,
+        &aerosim::completionStateFromToken,
+        {{aerosim::CompletionState::NotStarted, "not_started"},
+         {aerosim::CompletionState::InProgress, "in_progress"},
+         {aerosim::CompletionState::Completed, "completed"}});
+
+    checkMapping<aerosim::ValidationState>(context, &aerosim::enumToken,
+        &aerosim::validationStateFromToken,
+        {{aerosim::ValidationState::NotValidated, "not_validated"},
+         {aerosim::ValidationState::Valid, "valid"},
+         {aerosim::ValidationState::Invalid, "invalid"},
+         {aerosim::ValidationState::Stale, "stale"}});
+
     checkMapping<aerosim::TaskCommandType>(context, &aerosim::enumToken,
         &aerosim::taskCommandTypeFromToken,
         {{aerosim::TaskCommandType::Start, "start"},
