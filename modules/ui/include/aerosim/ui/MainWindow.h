@@ -49,6 +49,13 @@ signals:
     void parameterDraftChanged(const QString &pageId, const QVariantMap &values);
 
 private:
+    struct StateDraft {
+        double mach = 0.8;
+        double angleOfAttack = 2.0;
+        double temperature = 288.15;
+        double altitude = 5000.0;
+    };
+
     void createRibbon();
     void applyWindowTheme(const QString &id);
     void createWorkspace();
@@ -72,6 +79,7 @@ private:
     bool editCalculationParameters(QString &caseId, double &mach, double &aoa,
                                    double &temperature, int &mpi);
     void addState();
+    void editState();
     void removeState();
     void refreshStateModel();
     void appendMessage(const QString &message);
@@ -154,9 +162,11 @@ private:
     QLabel *batchRunSummary_ = nullptr;
     QProgressBar *batchRunProgress_ = nullptr;
     QPushButton *addStateButton_ = nullptr;
+    QPushButton *editStateButton_ = nullptr;
     QPushButton *removeStateButton_ = nullptr;
     QTreeWidgetItem *statesNavigationItem_ = nullptr;
     QStringList stateIds_ = {QStringLiteral("State_001"), QStringLiteral("State_002"), QStringLiteral("State_003")};
+    QHash<QString, StateDraft> stateDrafts_;
     quint64 batchPlanVersion_ = 0;
     QCheckBox *logAutoScroll_ = nullptr;
     QCheckBox *taskLogAutoScroll_ = nullptr;
