@@ -39,7 +39,7 @@
 
 ## 公共契约与第三方依赖
 
-`contracts/` 中的 Core 与 UI 插入接口是跨模块公共契约。需要改动时，在 PR 中说明调用方、数据生命周期、线程语义与兼容影响；完成接口评审后再修改契约和 Mock，最后更新实现。不得在模块内复制一份相似的 TaskCommand、TaskEvent、WorkflowView 等公共类型。
+`contracts/` 中的 Core 与 UI 插入接口是跨模块公共契约。需要改动时，在 PR 中说明调用方、数据生命周期、线程语义与兼容影响；完成接口评审后再修改契约和 Mock，最后更新实现。不得在模块内复制一份相似的 TaskCommand、TaskEvent、WorkflowViewV2 等公共类型。
 
 第三方依赖由使用模块单独声明。新增或变更前记录准确版本、来源、许可证、编译器/架构、Debug/Release 包、CMake 包名及集成测试结果，并检查根构建影响。禁止提交个人绝对路径、静默下载未知版本或替换已确定的正式 Qt/VTK 版本。目标机现有 VTK 8.2.0 仅有 Debug 导出，禁止将其链接到 Release 模块。nlohmann/json 版本和日志库方案未定前，不得擅自升级/替换技术选型。可用 `Qt5_DIR`、`VTK_DIR`、`SARIBBON_SOURCE_DIR` 等配置变量传入本机位置。
 

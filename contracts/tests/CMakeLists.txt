@@ -19,11 +19,11 @@ target_link_libraries(aerosim_contract_headers_compile PRIVATE aerosim_contracts
 add_test(NAME contracts_public_headers_compile
     COMMAND aerosim_contract_headers_compile)
 
-add_executable(aerosim_contract_legacy_ref_shape_test
-    LegacyReferenceShapeTest.cpp)
-target_link_libraries(aerosim_contract_legacy_ref_shape_test PRIVATE aerosim_contracts)
-add_test(NAME contracts_legacy_ref_shape
-    COMMAND aerosim_contract_legacy_ref_shape_test)
+add_executable(aerosim_contract_reference_shape_test
+    ReferenceShapeTest.cpp)
+target_link_libraries(aerosim_contract_reference_shape_test PRIVATE aerosim_contracts)
+add_test(NAME contracts_reference_shape
+    COMMAND aerosim_contract_reference_shape_test)
 
 add_executable(aerosim_contract_enum_tokens_test
     StableEnumTokenManifestTest.cpp)

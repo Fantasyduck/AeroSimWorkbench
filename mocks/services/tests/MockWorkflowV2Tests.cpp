@@ -88,25 +88,15 @@ int main(int argc, char **argv)
             aerosim::workflow::ValidationOutcome::Passed, stamp(1)).ok());
     }
 
-    int legacySignals = 0;
     int v2Signals = 0;
-    quint64 legacyRevision = 0;
-    quint64 v2Revision = 0;
-    QObject::connect(&mock, &aerosim::IWorkflowService::workflowViewChanged,
-        [&legacySignals, &legacyRevision](const aerosim::WorkflowView &view) {
-            ++legacySignals;
-            legacyRevision = view.viewRevision;
-        });
     QObject::connect(&mock, &aerosim::IWorkflowService::workflowViewV2Changed,
-        [&v2Signals, &v2Revision](const aerosim::WorkflowViewV2 &view) {
+        [&v2Signals](const aerosim::WorkflowViewV2 &) {
             ++v2Signals;
-            v2Revision = view.viewRevision;
         });
 
     CHECK(engine.setCurrentInput(scope(), QStringLiteral("upstream"),
                                  stamp(2)).ok());
-    CHECK(legacySignals == 1 && v2Signals == 1);
-    CHECK(legacyRevision == v2Revision);
+    CHECK(v2Signals == 1);
     aerosim::WorkflowViewV2 view = mock.viewV2(scope()).value();
     CHECK(findStep(view, QStringLiteral("upstream"))->validation
           == aerosim::ValidationState::Stale);
@@ -162,8 +152,7 @@ int main(int argc, char **argv)
     mock.onTaskEvent(event);
     CHECK(observed == 1);
 
-    const aerosim::WorkflowView legacy = mock.view(scope());
     const aerosim::WorkflowViewV2 v2 = mock.viewV2(scope()).value();
-    CHECK(legacy.viewRevision == v2.viewRevision);
+    CHECK(v2.viewRevision > 0);
     return 0;
 }

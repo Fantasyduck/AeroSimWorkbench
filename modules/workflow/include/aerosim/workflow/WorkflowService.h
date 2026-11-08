@@ -20,7 +20,6 @@ public:
     explicit WorkflowService(QObject *parent = nullptr);
     ~WorkflowService() override;
 
-    WorkflowView view(const ScopeRef &scope) const override;
     AccessResult<WorkflowViewV2> viewV2(const ScopeRef &scope) const override;
     ValidationResult requestRun(const RunRequest &request) override;
 

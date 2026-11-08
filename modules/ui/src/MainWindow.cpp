@@ -106,15 +106,21 @@ QString taskStatus(TaskStatus status)
     default: return uiText(u"\u672a\u77e5");
     }
 }
-QString stepStatus(StepState state)
+// User-facing projection of the V2 workflow dimensions. It preserves the
+// historical legacy labels: a dependency blocker dominates, then a stale or
+// invalid validation, then a completed-and-valid step; non-applicable steps and
+// every other combination stay "pending".
+QString stepStatus(const WorkflowStepViewV2 &step)
 {
-    switch (state) {
-    case StepState::Pending: return uiText(u"\u5f85\u914d\u7f6e");
-    case StepState::NeedsValidation: return uiText(u"\u5f85\u6821\u9a8c");
-    case StepState::Complete: return uiText(u"\u5df2\u5b8c\u6210");
-    case StepState::Blocked: return uiText(u"\u88ab\u963b\u585e");
-    }
-    return {};
+    if (!step.blockers.isEmpty()) return uiText(u"\u88ab\u963b\u585e");
+    if (!step.applicable) return uiText(u"\u5f85\u914d\u7f6e");
+    if (step.validation == ValidationState::Stale
+        || step.validation == ValidationState::Invalid)
+        return uiText(u"\u5f85\u6821\u9a8c");
+    if (step.completion == CompletionState::Completed
+        && step.validation == ValidationState::Valid)
+        return uiText(u"\u5df2\u5b8c\u6210");
+    return uiText(u"\u5f85\u914d\u7f6e");
 }
 QLabel *emptyState(const QString &text, QWidget *parent)
 {
@@ -1885,9 +1891,9 @@ void MainWindow::bindServices(const ServiceBindings &services)
     if (!currentPage_.isEmpty()) selectPage(currentPage_);
     registerContractMetaTypes();
     if (workflow_) {
-        serviceConnections_.append(connect(workflow_, &IWorkflowService::workflowViewChanged, this,
+        serviceConnections_.append(connect(workflow_, &IWorkflowService::workflowViewV2Changed, this,
             &MainWindow::displayWorkflow, Qt::QueuedConnection));
-        // view()/requestRun() are synchronous contracts; do not call across threads.
+        // viewV2()/requestRun() are synchronous contracts; do not call across threads.
         serviceConnections_.append(connect(workflow_, &QObject::destroyed, this, [this] {
             runAction_->setEnabled(false);
             suggestion_->setText(uiText(u"\u5de5\u4f5c\u6d41\u670d\u52a1\u5df2\u65ad\u5f00"));
@@ -1899,7 +1905,10 @@ void MainWindow::bindServices(const ServiceBindings &services)
     if (tasks_) serviceConnections_.append(connect(tasks_, &ITaskService::taskEventOccurred, this,
         &MainWindow::displayTaskEvent, Qt::QueuedConnection));
     if (runAction_) runAction_->setEnabled(false);
-    if (workflow_ && workflow_->thread() == thread()) displayWorkflow(workflow_->view(runRequest_.scope));
+    if (workflow_ && workflow_->thread() == thread()) {
+        const auto current = workflow_->viewV2(runRequest_.scope);
+        if (current.ok()) displayWorkflow(current.value());
+    }
 }
 
 void MainWindow::setRunContext(const RunRequest &request)
@@ -1907,10 +1916,13 @@ void MainWindow::setRunContext(const RunRequest &request)
     workflowView_ = {};
     runRequest_ = request;
     hasRunContext_ = !request.inputSnapshot.snapshotId.isEmpty();
-    if (workflow_ && workflow_->thread() == thread()) displayWorkflow(workflow_->view(request.scope));
+    if (workflow_ && workflow_->thread() == thread()) {
+        const auto current = workflow_->viewV2(request.scope);
+        if (current.ok()) displayWorkflow(current.value());
+    }
 }
 
-void MainWindow::displayWorkflow(const WorkflowView &view)
+void MainWindow::displayWorkflow(const WorkflowViewV2 &view)
 {
     if (hasRunContext_ && (view.scope.projectId != runRequest_.scope.projectId || view.scope.caseId != runRequest_.scope.caseId)) return;
     if (view.scope.projectId == workflowView_.scope.projectId && view.scope.caseId == workflowView_.scope.caseId
@@ -1920,7 +1932,7 @@ void MainWindow::displayWorkflow(const WorkflowView &view)
     suggestion_->setText(view.nextSuggestion);
     if (runAction_) runAction_->setEnabled(false);
     for (const auto &step : view.steps) {
-        auto *item = new QTreeWidgetItem(workflowTree_, {step.summary, stepStatus(step.state)});
+        auto *item = new QTreeWidgetItem(workflowTree_, {step.summary, stepStatus(step)});
         item->setData(0, Qt::UserRole, step.targetPageId);
     }
     for (const auto &action : view.actions) {

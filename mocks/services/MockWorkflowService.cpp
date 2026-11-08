@@ -7,15 +7,8 @@ MockWorkflowService::MockWorkflowService(QObject *parent)
 {
     connect(&engine_, &IWorkflowService::taskCommandRequested,
             this, &IWorkflowService::taskCommandRequested);
-    connect(&engine_, &IWorkflowService::workflowViewChanged,
-            this, &IWorkflowService::workflowViewChanged);
     connect(&engine_, &IWorkflowService::workflowViewV2Changed,
             this, &IWorkflowService::workflowViewV2Changed);
-}
-
-WorkflowView MockWorkflowService::view(const ScopeRef &scope) const
-{
-    return engine_.view(scope);
 }
 
 AccessResult<WorkflowViewV2> MockWorkflowService::viewV2(const ScopeRef &scope) const

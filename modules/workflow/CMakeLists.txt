@@ -27,7 +27,6 @@ add_library(aerosim_workflow STATIC
     src/WorkflowService.cpp
     src/ValidationCoordinator.cpp
     src/RegisterWorkflowMetaTypes.cpp
-    src/LegacyWorkflowAdapter.cpp
     src/WorkflowSnapshot.cpp
     include/aerosim/workflow/WorkflowDefinition.h
     include/aerosim/workflow/WorkflowFacts.h
@@ -38,8 +37,7 @@ add_library(aerosim_workflow STATIC
     include/aerosim/workflow/WorkflowService.h)
 target_sources(aerosim_workflow PRIVATE
     include/aerosim/workflow/ValidationCoordinator.h
-    include/aerosim/workflow/ValidationTypes.h
-    include/aerosim/workflow/LegacyWorkflowAdapter.h)
+    include/aerosim/workflow/ValidationTypes.h)
 target_sources(aerosim_workflow PRIVATE
     include/aerosim/workflow/WorkflowSnapshot.h)
 add_library(aerosim::workflow ALIAS aerosim_workflow)

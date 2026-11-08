@@ -1,6 +1,7 @@
 #pragma once
 
 #include "aerosim/contracts/References.h"
+#include "aerosim/contracts/ResourceModels.h"
 #include "aerosim/contracts/WorkflowModels.h"
 
 #include <QString>
@@ -12,7 +13,7 @@ class IProjectAccess {
 public:
     virtual ~IProjectAccess() = default;
     virtual ProjectRef currentProject() const = 0;
-    virtual ResourceRef resource(const QString &resourceId) const = 0;
+    virtual ResourceRefV2 resource(const QString &resourceId) const = 0;
 };
 
 class IParameterAccess {

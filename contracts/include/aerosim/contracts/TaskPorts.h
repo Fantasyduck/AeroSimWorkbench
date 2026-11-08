@@ -15,7 +15,6 @@ class IWorkflowService : public QObject {
 public:
     using QObject::QObject;
     ~IWorkflowService() override = default;
-    virtual WorkflowView view(const ScopeRef &scope) const = 0;
     virtual AccessResult<WorkflowViewV2> viewV2(const ScopeRef &scope) const;
     virtual ValidationResult requestRun(const RunRequest &request) = 0;
 
@@ -24,7 +23,6 @@ public slots:
 
 signals:
     void taskCommandRequested(const aerosim::TaskCommand &command);
-    void workflowViewChanged(const aerosim::WorkflowView &view);
     void workflowViewV2Changed(aerosim::WorkflowViewV2 view);
 };
 

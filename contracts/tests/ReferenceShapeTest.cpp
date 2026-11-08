@@ -22,16 +22,17 @@ int main()
     aerosim_test::TestContext context;
 
     checkValueType<aerosim::ProjectRef>(context);
-    checkValueType<aerosim::ResourceRef>(context);
     checkValueType<aerosim::ScopeRef>(context);
     checkValueType<aerosim::ParameterSnapshotRef>(context);
+    checkValueType<aerosim::ResourceRefV2>(context);
     checkValueType<aerosim::MeshRef>(context);
     checkValueType<aerosim::ResultRef>(context);
     checkValueType<aerosim::DatasetRef>(context);
     checkValueType<aerosim::SceneObjectRef>(context);
 
-    // PR 0 freezes the observable legacy shape only. V2 validity and identity
-    // helpers are deliberately deferred until their public types exist.
+    // References.h now exposes the unified typed ResourceRefV2. The duplicate
+    // legacy kind/filePath ResourceRef shape has been removed, so MeshRef and
+    // ResultRef carry the same resource identity as every other caller.
     aerosim::ProjectRef project;
     AEROSIM_CHECK(context, project.projectId.isEmpty());
     AEROSIM_CHECK(context, project.filePath.isEmpty());
@@ -40,10 +41,6 @@ int main()
     project.projectId = QStringLiteral("project-001");
     project.filePath = QStringLiteral("project.json");
     project.revision = 3;
-    const aerosim::ProjectRef copiedProject = project;
-    AEROSIM_CHECK(context, copiedProject.projectId == project.projectId);
-    AEROSIM_CHECK(context, copiedProject.filePath == project.filePath);
-    AEROSIM_CHECK(context, copiedProject.revision == project.revision);
 
     aerosim::ScopeRef scope;
     scope.projectId = project.projectId;
@@ -60,28 +57,21 @@ int main()
     snapshot.revision = 7;
     AEROSIM_CHECK(context, snapshot.scope.caseId == scope.caseId);
 
-    aerosim::ResourceRef resource;
-    resource.resourceId = QStringLiteral("mesh-resource-001");
+    aerosim::ResourceRefV2 resource;
     resource.projectId = project.projectId;
-    resource.kind = QStringLiteral("mesh");
-    resource.filePath = QStringLiteral("mesh/original/model.cgns");
+    resource.resourceId = QStringLiteral("mesh-resource-001");
     resource.revision = 2;
-    const aerosim::ResourceRef aggregateResource{
-        QStringLiteral("result-resource-001"), project.projectId,
-        QStringLiteral("result"), QStringLiteral("results/result.vtk"), 4};
-    AEROSIM_CHECK(context,
-        aggregateResource.resourceId == QStringLiteral("result-resource-001"));
-    AEROSIM_CHECK(context, aggregateResource.projectId == project.projectId);
-    AEROSIM_CHECK(context, aggregateResource.kind == QStringLiteral("result"));
-    AEROSIM_CHECK(context,
-        aggregateResource.filePath == QStringLiteral("results/result.vtk"));
-    AEROSIM_CHECK(context, aggregateResource.revision == 4);
+    resource.type = aerosim::ResourceType::Mesh;
+    resource.location = aerosim::ResourceLocation::projectRelative(
+        QStringLiteral("mesh/original/model.cgns"));
+    AEROSIM_CHECK(context, resource.isValid());
 
     aerosim::MeshRef mesh;
     mesh.resource = resource;
     mesh.meshVersion = QStringLiteral("mesh-v2");
     AEROSIM_CHECK(context, mesh.resource.resourceId == resource.resourceId);
     AEROSIM_CHECK(context, mesh.resource.revision == 2);
+    AEROSIM_CHECK(context, mesh.resource.sameVersion(resource));
 
     aerosim::ResultRef result;
     result.resource = resource;
@@ -89,6 +79,7 @@ int main()
     result.meshVersion = mesh.meshVersion;
     result.caseId = scope.caseId;
     AEROSIM_CHECK(context, result.taskId == QStringLiteral("task-001"));
+    AEROSIM_CHECK(context, result.resource.sameIdentity(resource));
 
     aerosim::DatasetRef dataset;
     dataset.datasetId = QStringLiteral("dataset-001");

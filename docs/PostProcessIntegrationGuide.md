@@ -4,7 +4,7 @@
 
 ## 盘点与边界
 
-- 已有 `References.h` 的 `ResourceRef`、`MeshRef`、`ResultRef` 和 `ScopeRef`，`DataAccess.h` 的 `IMeshAccess`/`IResultAccess`，以及 `TaskModels.h` 的任务/结果事件。继续用这些类型指代工程、文件、网格版本、任务和工况；不要在后处理再造工程或任务记录。
+- 已有 `References.h` 的 `ResourceRefV2`、`MeshRef`、`ResultRef` 和 `ScopeRef`，`DataAccess.h` 的 `IMeshAccess`/`IResultAccess`，以及 `TaskModels.h` 的任务/结果事件。继续用这些类型指代工程、文件、网格版本、任务和工况；不要在后处理再造工程或任务记录。
 - `IntegrationPorts.h` 的 `IWidgetHost` 可将最终三维控件插入主窗口；`WidgetSlot::Viewport` 已定义。`ValidationResult`、`ErrorInfo` 可承载校验和错误说明。`PostProcessRefs.h` 已提供轻量 `DatasetRef`、`SceneObjectRef`；多文件/时序元信息、字段描述、场景操作、六分量/曲线数据协议仍待评审。
 - `modules/visualization/` 已有 `aerosim_spatial_features`：提供多切面、二维等值线、三维等值面和 VTP 特征导出，且可独立测试。它是无界面的 features 层，不创建 renderer 或场景对象。现有 Mock 窗口的视口仍是占位控件；数据读取、统一场景入口和正式工作区仍待接入。
 - 设计中的 `VTKViewer` + `VisualizationManager` 构成统一显示链路。若各功能独占 `vtkRenderer`、另存完整网格或自行控制主窗口，会造成重复、互相覆盖或版本漂移。建议接入时共用数据目录与场景入口；具体操作协议见[契约草案](PostProcessContracts.md)。

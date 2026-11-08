@@ -35,11 +35,11 @@
 class Workflow final : public aerosim::IWorkflowService {
 public:
     using IWorkflowService::IWorkflowService;
-    aerosim::WorkflowView view(const aerosim::ScopeRef &scope) const override {
-        aerosim::WorkflowView result;
+    aerosim::AccessResult<aerosim::WorkflowViewV2> viewV2(const aerosim::ScopeRef &scope) const override {
+        aerosim::WorkflowViewV2 result;
         result.scope = scope;
         result.actions.append({QStringLiteral("run"), true, {}, {}, {}, {}, {}});
-        return result;
+        return aerosim::AccessResult<aerosim::WorkflowViewV2>::success(result);
     }
     aerosim::ValidationResult requestRun(const aerosim::RunRequest &) override { ++requests; return {true, {}}; }
     void onTaskEvent(const aerosim::TaskEvent &) override {}
@@ -527,10 +527,8 @@ int main(int argc, char **argv)
         if (!check(rejected, "Occupied slot must reject without taking ownership")) return 3;
     }
     Workflow workflow;
-    const auto legacyV2 = workflow.viewV2(aerosim::ScopeRef());
-    if (!check(!legacyV2.ok()
-               && legacyV2.status() == aerosim::AccessStatus::Unsupported,
-               "Legacy workflow replacement must not be required to implement V2")) return 81;
+    const auto initialV2 = workflow.viewV2(aerosim::ScopeRef());
+    if (!check(initialV2.ok(), "Workflow stub must expose a V2 view")) return 81;
     aerosim::ServiceBindings bindings;
     bindings.workflow = &workflow;
     window.bindServices(bindings);
@@ -543,7 +541,7 @@ int main(int argc, char **argv)
     if (!check(run && run->isEnabled(), "Workflow action not reflected")) return 4;
     run->trigger();
     if (!check(workflow.requests == 1, "Repeated binding duplicated run requests")) return 5;
-    auto view = workflow.view(request.scope);
+    aerosim::WorkflowViewV2 view = workflow.viewV2(request.scope).value();
     view.actions[0].enabled = false;
     window.displayWorkflow(view);
     if (!check(!run->isEnabled(), "Blocked action remains enabled")) return 6;

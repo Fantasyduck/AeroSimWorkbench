@@ -26,8 +26,6 @@ struct ValidationResult {
     QVector<ValidationIssue> issues;
 };
 
-enum class StepState { Pending, NeedsValidation, Complete, Blocked };
-
 enum class CompletionState { NotStarted, InProgress, Completed };
 
 enum class ValidationState { NotValidated, Valid, Invalid, Stale };
@@ -39,14 +37,6 @@ struct DependencyBlockerView {
     QString targetPageId;
 };
 
-struct WorkflowStepView {
-    QString stepId;
-    QString scopeId;
-    StepState state = StepState::Pending;
-    QString summary;
-    QString targetPageId;
-};
-
 struct WorkflowActionView {
     QString actionId;
     bool enabled = false;
@@ -55,15 +45,6 @@ struct WorkflowActionView {
     QString scopeId;
     QString objectId;
     QString fieldKey;
-};
-
-struct WorkflowView {
-    ScopeRef scope;
-    quint64 viewRevision = 0;
-    QVector<WorkflowStepView> steps;
-    QVector<WorkflowActionView> actions;
-    QVector<ValidationIssue> issues;
-    QString nextSuggestion;
 };
 
 struct WorkflowStepViewV2 {
@@ -98,5 +79,4 @@ struct RunRequest {
 
 } // namespace aerosim
 
-Q_DECLARE_METATYPE(aerosim::WorkflowView)
 Q_DECLARE_METATYPE(aerosim::WorkflowViewV2)

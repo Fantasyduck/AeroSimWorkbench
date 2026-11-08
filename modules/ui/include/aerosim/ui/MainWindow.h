@@ -41,7 +41,7 @@ public:
     bool insertWidget(WidgetSlot slot, QWidget *widget) override;
     void bindServices(const ServiceBindings &services) override;
     void setRunContext(const RunRequest &request);
-    void displayWorkflow(const WorkflowView &view);
+    void displayWorkflow(const WorkflowViewV2 &view);
     void displayTaskEvent(const TaskEvent &event);
 
 signals:
@@ -106,7 +106,7 @@ private:
     QPointer<ITaskService> tasks_;
     RunRequest runRequest_;
     bool hasRunContext_ = false;
-    WorkflowView workflowView_;
+    WorkflowViewV2 workflowView_;
     QAction *runAction_ = nullptr;
     QAction *restoreUserLayoutAction_ = nullptr;
     QTreeWidget *projectTree_ = nullptr;

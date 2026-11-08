@@ -1,6 +1,6 @@
 # 后处理功能交接表（16 项）
 
-本表按功能与依赖组织，保留原任务编号。它说明待接入能力的输入、输出、接口和测试条件，**不表示接口已经冻结**。`modules/visualization/` 已有正式 C++ 目标 `aerosim_spatial_features`，实现了 ④⑤⑥⑭ 的模块内算法与 VTP 导出；它不含数据读取、场景或 UI。下表的 data/features/scene/analysis/ui 仍用于标示其余能力位置，不表示相应 CMake Target 已存在。复用 `ResourceRef`、`MeshRef`、`ResultRef`、`DatasetRef`、`SceneObjectRef`；三维结果仍须经统一 Viewer/场景入口显示，具体 API 待评审。
+本表按功能与依赖组织，保留原任务编号。它说明待接入能力的输入、输出、接口和测试条件，**不表示接口已经冻结**。`modules/visualization/` 已有正式 C++ 目标 `aerosim_spatial_features`，实现了 ④⑤⑥⑭ 的模块内算法与 VTP 导出；它不含数据读取、场景或 UI。下表的 data/features/scene/analysis/ui 仍用于标示其余能力位置，不表示相应 CMake Target 已存在。复用 `ResourceRefV2`、`MeshRef`、`ResultRef`、`DatasetRef`、`SceneObjectRef`；三维结果仍须经统一 Viewer/场景入口显示，具体 API 待评审。
 
 ## 网格、读取与格式
 
@@ -25,7 +25,7 @@
 
 | 编号与功能 | 输入 | 输出与接口交接 | 依赖 | 建议接入位置与测试 |
 | --- | --- | --- | --- | --- |
-| ⑨ 多文件展示 | 一组 `ResourceRef`/`ResultRef`、加载请求 | fileId/datasetId 索引、列表状态、显隐对应 sceneObjectId | ①、场景入口 | data/catalog + ui；`index.json` 提供同一数据集三个文件；不同 dataset 并列的行为待评审。 |
+| ⑨ 多文件展示 | 一组 `ResourceRefV2`/`ResultRef`、加载请求 | fileId/datasetId 索引、列表状态、显隐对应 sceneObjectId | ①、场景入口 | data/catalog + ui；`index.json` 提供同一数据集三个文件；不同 dataset 并列的行为待评审。 |
 | ⑩ 时序动画 | frameId/物理时间/有效性、显示数据集 | 播放状态、帧切换事件与时间定位 | ⑨、场景入口、字段/网格匹配 | data/timeline + ui/scene；`cube_t00..02.vtk`，0/1/2 s。 |
 | ⑯ 时序动画导出 | ⑩的帧序列、场景/相机快照与编码配置 | 逐帧图像或动画文件、导出进度/错误 | ⑩、统一 Viewer、编解码器 | ui/animation-export + scene；检查三帧顺序和尺寸，视频编码与离屏方案待评审。 |
 

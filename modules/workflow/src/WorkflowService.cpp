@@ -2,7 +2,6 @@
 
 #include "aerosim/workflow/ValidationStampMatcher.h"
 #include "aerosim/workflow/ValidationCoordinator.h"
-#include "aerosim/workflow/LegacyWorkflowAdapter.h"
 
 #include <QThread>
 #include <QUuid>
@@ -223,7 +222,6 @@ public:
         state.cachedView = derive(state, state.viewRevision);
         state.hasCachedView = true;
         emit service->workflowViewV2Changed(state.cachedView);
-        emit service->workflowViewChanged(toLegacyWorkflowView(state.cachedView));
         return true;
     }
 
@@ -245,12 +243,6 @@ WorkflowService::WorkflowService(QObject *parent)
 WorkflowService::~WorkflowService()
 {
     shutdown();
-}
-
-WorkflowView WorkflowService::view(const ScopeRef &scope) const
-{
-    const AccessResult<WorkflowViewV2> result = viewV2(scope);
-    return result.ok() ? toLegacyWorkflowView(result.value()) : WorkflowView();
 }
 
 AccessResult<WorkflowViewV2> WorkflowService::viewV2(

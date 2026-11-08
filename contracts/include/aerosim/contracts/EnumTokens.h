@@ -14,7 +14,6 @@ namespace aerosim {
 // AccessStatus::InvalidArgument and never silently select a default value.
 QString enumToken(AccessStatus value);
 QString enumToken(IssueSeverity value);
-QString enumToken(StepState value);
 QString enumToken(CompletionState value);
 QString enumToken(ValidationState value);
 QString enumToken(TaskCommandType value);
@@ -27,7 +26,6 @@ QString enumToken(FingerprintStatus value);
 
 AccessResult<AccessStatus> accessStatusFromToken(const QString &token);
 AccessResult<IssueSeverity> issueSeverityFromToken(const QString &token);
-AccessResult<StepState> stepStateFromToken(const QString &token);
 AccessResult<CompletionState> completionStateFromToken(const QString &token);
 AccessResult<ValidationState> validationStateFromToken(const QString &token);
 AccessResult<TaskCommandType> taskCommandTypeFromToken(const QString &token);
