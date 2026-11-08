@@ -5,8 +5,8 @@ endif()
 file(READ "${SARIBBON_SOURCE_DIR}/CMakeLists.txt" _saribbon_cmake)
 if(NOT _saribbon_cmake MATCHES "set\\(SARIBBON_VERSION_MAJOR[ \t]+2\\)" OR
    NOT _saribbon_cmake MATCHES "set\\(SARIBBON_VERSION_MINOR[ \t]+9\\)" OR
-   NOT _saribbon_cmake MATCHES "set\\(SARIBBON_VERSION_PATCH[ \t]+2\\)")
-    message(FATAL_ERROR "The UI requires SARibbon 2.9.2 source")
+   NOT _saribbon_cmake MATCHES "set\\(SARIBBON_VERSION_PATCH[ \t]+[23]\\)")
+    message(FATAL_ERROR "The UI requires SARibbon 2.9.3 source")
 endif()
 
 
