@@ -840,6 +840,7 @@ void MainWindow::createWorkspace()
     projectDock_->setMinimumWidth(220);
     projectDock_->setFeatures(QDockWidget::DockWidgetMovable);
     projectDock_->setAllowedAreas(Qt::LeftDockWidgetArea);
+    projectDock_->installEventFilter(this);
     projectTree_ = new QTreeWidget(projectDock_);
     projectTree_->setObjectName(QStringLiteral("workspaceTree"));
     projectTree_->setHeaderHidden(true);
@@ -918,7 +919,9 @@ void MainWindow::createWorkspace()
     });
     propertyDock_ = new QDockWidget(uiText(u"\u5c5e\u6027\u7f16\u8f91\u5668"), this);
     propertyDock_->setObjectName(QStringLiteral("propertyDock"));
-    propertyDock_->setMinimumWidth(300);
+    // Leave enough room for the project tree to grow while keeping the
+    // property editor usable beside it.
+    propertyDock_->setMinimumWidth(180);
     // The property editor is part of the workbench layout.  Keeping it docked
     // prevents a close/float action from making every later selection reopen a
     // floating window and leaves the left dock splitter available for resizing.
@@ -1324,11 +1327,12 @@ void MainWindow::setMeshWorkspaceActive(bool active)
         return;
     }
     if (active) {
-        if (projectDock_) projectDockWidth_ = qMax(220, projectDock_->width());
         propertyDockVisibleBeforeMesh_ = propertyDock_ && propertyDock_->isVisible();
         meshWorkspaceActive_ = true;
         if (propertyDock_) propertyDock_->hide();
+        projectDock_->setMinimumWidth(projectDockWidth_);
         resizeDocks({projectDock_}, {projectDockWidth_}, Qt::Horizontal);
+        projectDock_->setMinimumWidth(220);
         // Collapse the global output once for the initial mesh layout. Later
         // navigation must preserve the user's explicit expand/collapse choice.
         if (!meshOutputInitialCollapseApplied_) {
@@ -1336,12 +1340,13 @@ void MainWindow::setMeshWorkspaceActive(bool active)
             meshOutputInitialCollapseApplied_ = true;
         }
     } else {
-        if (projectDock_) projectDockWidth_ = qMax(220, projectDock_->width());
         meshWorkspaceActive_ = false;
         if (propertyDock_ && propertyDockVisibleBeforeMesh_) {
             propertyDock_->show();
+            projectDock_->setMinimumWidth(projectDockWidth_);
             resizeDocks({projectDock_, propertyDock_},
-                        {projectDockWidth_, qMax(300, propertyDock_->width())}, Qt::Horizontal);
+                        {projectDockWidth_, 180}, Qt::Horizontal);
+            projectDock_->setMinimumWidth(220);
         }
     }
 }
@@ -1678,6 +1683,7 @@ void MainWindow::restoreUserLayout()
         resizeDocks({projectDock_, propertyDock_},
                     {qMax(220, qRound(width() * projectRatio)), qMax(300, qRound(width() * propertyRatio))},
                     Qt::Horizontal);
+        projectDockWidth_ = qMax(220, projectDock_->width());
         if (!outputCollapsed)
             resizeDocks({outputDock_}, {qMax(120, qRound(height() * outputRatio))}, Qt::Vertical);
         constrainToAvailableScreen();
@@ -1705,6 +1711,15 @@ void MainWindow::constrainToAvailableScreen()
     const int targetX = maxX <= available.left() ? available.left() : qBound(available.left(), x(), maxX);
     const int targetY = maxY <= available.top() ? available.top() : qBound(available.top(), y(), maxY);
     setGeometry(targetX, targetY, targetWidth, targetHeight);
+}
+
+bool MainWindow::eventFilter(QObject *watched, QEvent *event)
+{
+    if (watched == projectDock_ && event && event->type() == QEvent::Resize
+        && QApplication::mouseButtons() != Qt::NoButton) {
+        projectDockWidth_ = qMax(220, projectDock_->width());
+    }
+    return SARibbonMainWindow::eventFilter(watched, event);
 }
 
 bool MainWindow::insertWidget(WidgetSlot slot, QWidget *widget)

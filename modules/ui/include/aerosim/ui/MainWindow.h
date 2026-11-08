@@ -27,6 +27,8 @@ class QTreeWidgetItem;
 class QVBoxLayout;
 class QFormLayout;
 class QDockWidget;
+class QEvent;
+class QObject;
 
 namespace aerosim {
 
@@ -95,6 +97,7 @@ private:
     void updateTaskProgressMock(const QString &message);
     QWidget *createSlot(WidgetSlot slot, const QString &text);
     void showOutput(int index);
+    bool eventFilter(QObject *watched, QEvent *event) override;
 
     QHash<int, QVBoxLayout *> slotLayouts_;
     QHash<int, QPointer<QWidget>> insertedWidgets_;
