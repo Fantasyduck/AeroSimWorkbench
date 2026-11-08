@@ -758,6 +758,7 @@ void PostProcessWorkbenchWindow::loadUiExample(bool structured) {
 
     for (int i=0; i<sceneList_->count(); ++i) {
         auto objectContext = context;
+        objectContext["sourceDimension"] = context.value("dimension");
         objectContext["dimension"] = i==2 ? 1 : 2;
         if (i==2) { objectContext["vectors"] = QStringList(); objectContext["integrationField"] = uiText(u"速度矢量 [m/s]"); }
         sceneList_->item(i)->setData(Qt::UserRole+3,objectContext);
@@ -1226,6 +1227,7 @@ void PostProcessWorkbenchWindow::addDerivedLayer(const QString &kind, const QStr
     item->setData(Qt::UserRole+2, name);
     auto context = sourceContext;
     context["draft"] = true;
+    context["sourceDimension"] = sourceContext.value("dimension");
     context["inputObjectId"] = selectedId_;
     if (kind=="stream" || kind=="trace") {
         context["integrationField"] = context.value("field");
@@ -1374,34 +1376,48 @@ void PostProcessWorkbenchWindow::openObjectParameters(bool colorOnly) {
     };
     if (kind == "slice") {
         choice("normal",uiText(u"切面定义"), {"X", "Y", "Z", uiText(u"原点和法向")});
-        number("offset",uiText(u"位置 / m"),0.0);
+        number("offset",uiText(u"位置"),0.0);
         number("originX",uiText(u"原点 X"),0.0); number("originY",uiText(u"原点 Y"),0.0); number("originZ",uiText(u"原点 Z"),0.0);
         number("normalX",uiText(u"法向 X"),1.0); number("normalY",uiText(u"法向 Y"),0.0); number("normalZ",uiText(u"法向 Z"),0.0);
         choice("sliceStyle",uiText(u"切面显示"),{uiText(u"表面"),uiText(u"网格线"),uiText(u"表面和网格线")});
     } else if (kind == "iso" || kind == "isoline") {
+        if (kind == "isoline") choice("levelMode",uiText(u"等值设置"),{uiText(u"指定等值"),uiText(u"范围与数量")});
         number("isoValue",uiText(u"等值"),0.0);
         textInput("additionalValues",uiText(u"其他等值"),uiText(u"用逗号分隔，可留空"));
+        if (kind == "isoline") {
+            number("levelMin",uiText(u"最小等值"),0.0); number("levelMax",uiText(u"最大等值"),1.0);
+            number("levelCount",uiText(u"等值数量"),10); numbers.value("levelCount")->setDecimals(0); numbers.value("levelCount")->setRange(2,5000);
+        }
         choice("featureColor",uiText(u"颜色"),{uiText(u"按字段着色"),uiText(u"蓝色"),uiText(u"白色"),uiText(u"黑色")});
-        if (kind == "iso") number("opacity",uiText(u"不透明度 / %"),100.0);
-        else number("lineWidth",uiText(u"线宽"),1.0);
+        choice("colorField",uiText(u"着色标量"),selectedContext_.value("scalars").toStringList());
+        if (kind == "iso") { number("opacity",uiText(u"不透明度 / %"),100.0); numbers.value("opacity")->setRange(0,100); }
+        else { number("lineWidth",uiText(u"线宽"),1.0); numbers.value("lineWidth")->setMinimum(0.1); }
     } else if (kind == "stream" || kind == "trace") {
-        choice("seedMode",uiText(u"种子方式"),{uiText(u"单点坐标"),uiText(u"线段（待接入）"),uiText(u"视口拾取（待接入）")});
-        number("seedX",uiText(u"种子 X / m"),0.0);
-        number("seedY",uiText(u"种子 Y / m"),0.0);
-        number("seedZ",uiText(u"种子 Z / m"),0.0);
-        choice("direction",uiText(u"积分方向"), {uiText(u"向前"),uiText(u"向后"),uiText(u"双向")});
+        if (kind == "trace") choice("traceType",uiText(u"迹线类型"),{uiText(u"粒子路径"),uiText(u"连续释放迹线")});
+        if (kind == "stream") {
+            choice("streamType",uiText(u"流线类型"),{uiText(u"体流线"),uiText(u"表面流线")});
+            if (!draft.contains("streamType") && selectedContext_.value("sourceDimension", selectedContext_.value("dimension")).toInt() == 2) choices.value("streamType")->setCurrentIndex(1);
+        }
+        choice("seedMode",uiText(u"种子方式"),{uiText(u"单点坐标"),uiText(u"线段")});
+        number("seedX",uiText(u"种子 X"),0.0);
+        number("seedY",uiText(u"种子 Y"),0.0);
+        number("seedZ",uiText(u"种子 Z"),0.0);
+        if (kind == "stream") choice("direction",uiText(u"积分方向"), {uiText(u"向前"),uiText(u"向后"),uiText(u"双向")});
         number("seedEndX",uiText(u"线种子终点 X"),0.0); number("seedEndY",uiText(u"线种子终点 Y"),0.0); number("seedEndZ",uiText(u"线种子终点 Z"),0.0);
-        number("seedCount",uiText(u"种子数量"),1.0);
-        number("stepSize",uiText(u"积分步长"),0.01);
-        if (kind == "trace") { number("releaseTime",uiText(u"释放时间"),0.0); number("endTime",uiText(u"跟踪结束时间"),1.0); }
-        number("maxLength",uiText(u"最大长度"),1.0);
-        number("maxSteps",uiText(u"最大步数"),1000.0);
-        textInput("filter",uiText(u"筛选条件"),uiText(u"可留空，规则待评审"));
+        number("seedCount",uiText(u"种子数量"),2.0);
+        numbers.value("seedCount")->setDecimals(0); numbers.value("seedCount")->setRange(2,1000000);
+        number("stepSize",uiText(u"积分步长"),0.01); numbers.value("stepSize")->setMinimum(0.0001);
+        if (kind == "trace") {
+            number("releaseTime",uiText(u"开始释放时间"),0.0); number("endTime",uiText(u"跟踪结束时间"),1.0);
+            number("releaseCount",uiText(u"每时间单位释放数量"),1.0); numbers.value("releaseCount")->setDecimals(0); numbers.value("releaseCount")->setMinimum(1);
+        }
+        number("maxLength",uiText(u"最大长度"),1.0); numbers.value("maxLength")->setMinimum(0.0001);
+        number("maxSteps",uiText(u"最大步数"),1000.0); numbers.value("maxSteps")->setDecimals(0); numbers.value("maxSteps")->setMinimum(1);
         choice("streamColor",uiText(u"显示着色"),{uiText(u"单色"),uiText(u"按标量字段")});
+        choice("colorField",uiText(u"着色标量"),selectedContext_.value("scalars").toStringList());
     }
     if (kind == "field" || kind == "contour") {
         QStringList fields = selectedContext_.value("scalars").toStringList();
-        fields.append(selectedContext_.value("vectors").toStringList());
         if (fields.isEmpty() && !selectedContext_.value("field").toString().isEmpty())
             fields.append(selectedContext_.value("field").toString());
         choice("displayField", uiText(u"字段"), fields);
@@ -1439,6 +1455,58 @@ void PostProcessWorkbenchWindow::openObjectParameters(bool colorOnly) {
         auto *hint = new QLabel(uiText(u"通用对象尚未指定特征类型，请先创建切面、等值面或流线对象。"),dialog);
         hint->setWordWrap(true); form->addRow(hint);
     }
+    if (kind == "isoline" || kind == "iso") {
+        const auto updateFeatureColor = [form, choices](int mode) {
+            auto *field = choices.value("colorField");
+            field->setVisible(mode == 0); form->labelForField(field)->setVisible(mode == 0);
+        };
+        connect(choices.value("featureColor"), QOverload<int>::of(&QComboBox::currentIndexChanged), dialog, updateFeatureColor);
+        updateFeatureColor(choices.value("featureColor")->currentIndex());
+    }
+    if (kind == "isoline") {
+        const auto updateLevels = [form, numbers, texts](int mode) {
+            for (const QString &key : {QStringLiteral("levelMin"),QStringLiteral("levelMax"),QStringLiteral("levelCount")}) {
+                numbers.value(key)->setVisible(mode == 1); form->labelForField(numbers.value(key))->setVisible(mode == 1);
+            }
+            numbers.value("isoValue")->setVisible(mode == 0); form->labelForField(numbers.value("isoValue"))->setVisible(mode == 0);
+            texts.value("additionalValues")->setVisible(mode == 0); form->labelForField(texts.value("additionalValues"))->setVisible(mode == 0);
+        };
+        connect(choices.value("levelMode"), QOverload<int>::of(&QComboBox::currentIndexChanged), dialog, updateLevels);
+        updateLevels(choices.value("levelMode")->currentIndex());
+    }
+    if (kind == "trace") {
+        const auto updateRelease = [form, numbers](int type) {
+            numbers.value("releaseCount")->setVisible(type == 1); form->labelForField(numbers.value("releaseCount"))->setVisible(type == 1);
+        };
+        connect(choices.value("traceType"), QOverload<int>::of(&QComboBox::currentIndexChanged), dialog, updateRelease);
+        updateRelease(choices.value("traceType")->currentIndex());
+    }
+    if (kind == "slice") {
+        const auto updateSlice = [form, numbers](int index) {
+            const bool arbitrary = index == 3;
+            numbers.value("offset")->setVisible(!arbitrary); form->labelForField(numbers.value("offset"))->setVisible(!arbitrary);
+            for (const QString &key : {QStringLiteral("originX"),QStringLiteral("originY"),QStringLiteral("originZ"),QStringLiteral("normalX"),QStringLiteral("normalY"),QStringLiteral("normalZ")})
+                { numbers.value(key)->setVisible(arbitrary); form->labelForField(numbers.value(key))->setVisible(arbitrary); }
+        };
+        connect(choices.value("normal"), QOverload<int>::of(&QComboBox::currentIndexChanged), dialog, updateSlice);
+        updateSlice(choices.value("normal")->currentIndex());
+    }
+    if (kind == "stream" || kind == "trace") {
+        const auto updateSeed = [form, numbers](int index) {
+            for (const QString &key : {QStringLiteral("seedX"),QStringLiteral("seedY"),QStringLiteral("seedZ")})
+                { numbers.value(key)->setVisible(index != 2); form->labelForField(numbers.value(key))->setVisible(index != 2); }
+            for (const QString &key : {QStringLiteral("seedEndX"),QStringLiteral("seedEndY"),QStringLiteral("seedEndZ"),QStringLiteral("seedCount")})
+                { numbers.value(key)->setVisible(index == 1); form->labelForField(numbers.value(key))->setVisible(index == 1); }
+        };
+        connect(choices.value("seedMode"), QOverload<int>::of(&QComboBox::currentIndexChanged), dialog, updateSeed);
+        updateSeed(choices.value("seedMode")->currentIndex());
+        const auto updateColor = [form, choices](int index) {
+            auto *field = choices.value("colorField");
+            field->setVisible(index == 1); form->labelForField(field)->setVisible(index == 1);
+        };
+        connect(choices.value("streamColor"), QOverload<int>::of(&QComboBox::currentIndexChanged), dialog, updateColor);
+        updateColor(choices.value("streamColor")->currentIndex());
+    }
     auto *formWidget = new QWidget(dialog); formWidget->setLayout(form);
     layout->addWidget(scrollPanel(formWidget), 1);
     auto *hint = new QLabel(uiText(u"仅保存当前对象的参数草稿，不执行数据读取、特征计算或专业参数校验。"),dialog);
@@ -1460,6 +1528,49 @@ void PostProcessWorkbenchWindow::openObjectParameters(bool colorOnly) {
         for (const QString &key : {QStringLiteral("rangeMin"),QStringLiteral("rangeMax")})
             connect(numbers.value(key), QOverload<double>::of(&QDoubleSpinBox::valueChanged), dialog, [validateRange](double) { validateRange(); });
         validateRange();
+    }
+    if (kind == "slice" || kind == "iso" || kind == "isoline" || kind == "trace" || kind == "stream") {
+        const auto validateInputs = [this, kind, choices, numbers, texts, buttons, apply, hint] {
+            QString error;
+            if (kind == "slice" && choices.value("normal")->currentIndex() == 3
+                && numbers.value("normalX")->value() == 0 && numbers.value("normalY")->value() == 0
+                && numbers.value("normalZ")->value() == 0)
+                error = uiText(u"切面法向不能为零向量。");
+            if (kind == "iso" || (kind == "isoline" && choices.value("levelMode")->currentIndex() == 0)) {
+                const QString extra = texts.value("additionalValues")->text().trimmed();
+                if (!extra.isEmpty()) {
+                    const QStringList values = extra.split(',', QString::KeepEmptyParts);
+                    if (kind == "iso" && values.size() > 2) error = uiText(u"等值面最多指定三个等值。");
+                    for (const QString &value : values) {
+                        bool ok = false; value.trimmed().toDouble(&ok);
+                        if (!ok) { error = uiText(u"其他等值请用英文逗号分隔有效数字。"); break; }
+                    }
+                }
+            }
+            if ((kind == "iso" || kind == "isoline") && choices.value("featureColor")->currentIndex() == 0
+                && choices.value("colorField")->count() == 0) error = uiText(u"当前来源没有可用于着色的标量字段。");
+            if (kind == "isoline" && choices.value("levelMode")->currentIndex() == 1
+                && numbers.value("levelMin")->value() >= numbers.value("levelMax")->value())
+                error = uiText(u"最小等值必须小于最大等值。");
+            if ((kind == "stream" || kind == "trace") && choices.value("seedMode")->currentIndex() == 1
+                && numbers.value("seedX")->value() == numbers.value("seedEndX")->value()
+                && numbers.value("seedY")->value() == numbers.value("seedEndY")->value()
+                && numbers.value("seedZ")->value() == numbers.value("seedEndZ")->value())
+                error = uiText(u"线段种子的起点和终点不能相同。");
+            if (kind == "stream" && choices.value("streamType")->currentIndex() == 0 && selectedContext_.value("sourceDimension", selectedContext_.value("dimension")).toInt() != 3)
+                error = uiText(u"体流线需要三维体区域，请选择表面流线。");
+            if (kind == "trace" && numbers.value("endTime")->value() <= numbers.value("releaseTime")->value())
+                error = uiText(u"跟踪结束时间须晚于释放时间。");
+            if ((kind == "stream" || kind == "trace") && choices.value("streamColor")->currentIndex() == 1
+                && choices.value("colorField")->count() == 0)
+                error = uiText(u"当前来源没有可用于着色的标量字段。");
+            buttons->button(QDialogButtonBox::Ok)->setEnabled(error.isEmpty()); apply->setEnabled(error.isEmpty());
+            hint->setText(error.isEmpty() ? uiText(u"仅保存参数草稿，实际计算和渲染待接入。") : error);
+        };
+        for (auto *input : numbers) connect(input, QOverload<double>::of(&QDoubleSpinBox::valueChanged), dialog, [validateInputs](double) { validateInputs(); });
+        for (auto *input : choices) connect(input, QOverload<int>::of(&QComboBox::currentIndexChanged), dialog, [validateInputs](int) { validateInputs(); });
+        for (auto *input : texts) connect(input, &QLineEdit::textChanged, dialog, [validateInputs](const QString &) { validateInputs(); });
+        validateInputs();
     }
     const auto updateDraftField = [this, id, kind, choices] {
         if (!choices.contains("displayField")) return;

@@ -348,6 +348,28 @@ int main(int argc, char *argv[])
         sourceDialog->findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Ok)->click(); flush();
         auto *setup = window.findChild<QDialog *>("postProcessParameterDialog");
         CHECK(setup && setup->isVisible() && layers->count() == before + 1);
+        const QString objectKind = QString::fromLatin1(kind);
+        if (objectKind == "isoline") {
+            auto *mode = setup->findChild<QComboBox *>("levelMode"); CHECK(mode);
+            mode->setCurrentIndex(1); flush();
+            auto *lo = setup->findChild<QDoubleSpinBox *>("levelMin");
+            auto *hi = setup->findChild<QDoubleSpinBox *>("levelMax"); CHECK(lo && hi && lo->isVisible());
+            hi->setValue(lo->value()); CHECK(!setup->findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Ok)->isEnabled());
+            hi->setValue(lo->value()+1); CHECK(setup->findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Ok)->isEnabled());
+        }
+        if (objectKind == "trace") {
+            auto *type = setup->findChild<QComboBox *>("traceType"); CHECK(type);
+            auto *count = setup->findChild<QDoubleSpinBox *>("releaseCount"); CHECK(count && !count->isVisible());
+            type->setCurrentIndex(1); flush(); CHECK(count->isVisible());
+            CHECK(!setup->findChild<QComboBox *>("direction"));
+        }
+        if (objectKind == "stream") {
+            auto *mode = setup->findChild<QComboBox *>("seedMode"); CHECK(mode);
+            mode->setCurrentIndex(1); flush();
+            CHECK(!setup->findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Ok)->isEnabled());
+            setup->findChild<QDoubleSpinBox *>("seedEndX")->setValue(1);
+            CHECK(setup->findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Ok)->isEnabled());
+        }
         setup->reject(); flush(); CHECK(layers->count() == before);
     }
 
@@ -383,6 +405,16 @@ int main(int argc, char *argv[])
     layers->itemDoubleClicked(layers->currentItem()); flush();
     dialog = window.findChild<QDialog *>("postProcessParameterDialog");
     CHECK(dialog && dialog->findChild<QDoubleSpinBox *>("offset"));
+    auto *normalMode = dialog->findChild<QComboBox *>("normal"); CHECK(normalMode);
+    CHECK(dialog->findChild<QDoubleSpinBox *>("offset")->isVisible());
+    CHECK(!dialog->findChild<QDoubleSpinBox *>("normalX")->isVisible());
+    normalMode->setCurrentIndex(3); flush();
+    CHECK(!dialog->findChild<QDoubleSpinBox *>("offset")->isVisible());
+    dialog->findChild<QDoubleSpinBox *>("normalX")->setValue(0);
+    CHECK(!dialog->findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Ok)->isEnabled());
+    dialog->findChild<QDoubleSpinBox *>("normalX")->setValue(1);
+    CHECK(dialog->findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Ok)->isEnabled());
+    normalMode->setCurrentIndex(0);
     CHECK(!dialog->findChild<QSpinBox *>("objectStyleOpacity"));
     CHECK(capture(dialog,"slice-parameters"));
     dialog->findChild<QDoubleSpinBox *>("offset")->setValue(1.25);
@@ -397,6 +429,15 @@ int main(int argc, char *argv[])
         chooseObject(i); parameters->trigger(); flush();
         dialog = window.findChild<QDialog *>("postProcessParameterDialog");
         CHECK(dialog && dialog->findChild<QDoubleSpinBox *>(i==1 ? "isoValue" : "seedX"));
+        if (i==1) {
+            auto *extra = dialog->findChild<QLineEdit *>("additionalValues"); CHECK(extra);
+            extra->setText("1,2,3"); CHECK(!dialog->findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Ok)->isEnabled());
+            extra->setText("1,2"); CHECK(dialog->findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Ok)->isEnabled());
+        } else {
+            auto *seedMode = dialog->findChild<QComboBox *>("seedMode"); CHECK(seedMode);
+            CHECK(!dialog->findChild<QDoubleSpinBox *>("seedEndX")->isVisible());
+            seedMode->setCurrentIndex(1); flush(); CHECK(dialog->findChild<QDoubleSpinBox *>("seedEndX")->isVisible());
+        }
         CHECK(capture(dialog, i==1 ? "iso-parameters" : "stream-parameters"));
         dialog->reject(); flush();
     }
