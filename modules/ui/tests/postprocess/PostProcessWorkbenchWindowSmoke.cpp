@@ -226,7 +226,7 @@ int main(int argc, char *argv[])
     auto *organization = window.findChild<QDialog *>("postProcessImportDataDialog"); CHECK(organization);
     auto *inputFiles = organization->findChild<QListWidget *>("postProcessImportFileList"); CHECK(inputFiles);
     auto *first = new QListWidgetItem(QStringLiteral("result.cgns"), inputFiles); first->setData(Qt::UserRole, QStringLiteral("/example/result.cgns"));
-    auto *second = new QListWidgetItem(QStringLiteral("boundary.vtu"), inputFiles); second->setData(Qt::UserRole, QStringLiteral("/example/boundary.vtu"));
+    auto *secondFile = new QListWidgetItem(QStringLiteral("boundary.vtu"), inputFiles); secondFile->setData(Qt::UserRole, QStringLiteral("/example/boundary.vtu"));
     auto *mode = organization->findChild<QComboBox *>("postProcessImportMode"); CHECK(mode && mode->isVisible());
     organization->findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Ok)->click(); flush();
     CHECK(requestedPaths.size()==2 && tree->topLevelItemCount()==4);
