@@ -62,13 +62,6 @@ int main()
          {aerosim::IssueSeverity::Warning, "warning"},
          {aerosim::IssueSeverity::Error, "error"}});
 
-    checkMapping<aerosim::StepState>(context, &aerosim::enumToken,
-        &aerosim::stepStateFromToken,
-        {{aerosim::StepState::Pending, "pending"},
-         {aerosim::StepState::NeedsValidation, "needs_validation"},
-         {aerosim::StepState::Complete, "complete"},
-         {aerosim::StepState::Blocked, "blocked"}});
-
     checkMapping<aerosim::CompletionState>(context, &aerosim::enumToken,
         &aerosim::completionStateFromToken,
         {{aerosim::CompletionState::NotStarted, "not_started"},

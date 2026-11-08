@@ -54,13 +54,6 @@ const EnumTokenEntry<IssueSeverity> kIssueSeverityTokens[] = {
     {IssueSeverity::Error, "error"}
 };
 
-const EnumTokenEntry<StepState> kStepStateTokens[] = {
-    {StepState::Pending, "pending"},
-    {StepState::NeedsValidation, "needs_validation"},
-    {StepState::Complete, "complete"},
-    {StepState::Blocked, "blocked"}
-};
-
 const EnumTokenEntry<CompletionState> kCompletionStateTokens[] = {
     {CompletionState::NotStarted, "not_started"},
     {CompletionState::InProgress, "in_progress"},
@@ -149,7 +142,6 @@ const EnumTokenEntry<FingerprintStatus> kFingerprintStatusTokens[] = {
 
 AEROSIM_ENUM_TOKEN_FUNCTIONS(AccessStatus, accessStatus, kAccessStatusTokens)
 AEROSIM_ENUM_TOKEN_FUNCTIONS(IssueSeverity, issueSeverity, kIssueSeverityTokens)
-AEROSIM_ENUM_TOKEN_FUNCTIONS(StepState, stepState, kStepStateTokens)
 AEROSIM_ENUM_TOKEN_FUNCTIONS(CompletionState, completionState, kCompletionStateTokens)
 AEROSIM_ENUM_TOKEN_FUNCTIONS(ValidationState, validationState, kValidationStateTokens)
 AEROSIM_ENUM_TOKEN_FUNCTIONS(TaskCommandType, taskCommandType, kTaskCommandTypeTokens)

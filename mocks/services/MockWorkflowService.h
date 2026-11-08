@@ -10,7 +10,6 @@ class MockWorkflowService final : public IWorkflowService {
     Q_OBJECT
 public:
     explicit MockWorkflowService(QObject *parent = nullptr);
-    WorkflowView view(const ScopeRef &scope) const override;
     AccessResult<WorkflowViewV2> viewV2(const ScopeRef &scope) const override;
     ValidationResult requestRun(const RunRequest &request) override;
     workflow::WorkflowService &controlledService()

@@ -6,7 +6,7 @@
 
 | 现有代码 | 后处理用途 | 限制 |
 | --- | --- | --- |
-| `References.h`: `ResourceRef`, `MeshRef`, `ResultRef`, `ScopeRef` | 文件路径/修订、网格版本、结果所属任务和 case | 没有多个加载实例、帧或场景身份；`resourceId` 不等同加载实例 ID。 |
+| `References.h`: `ResourceRefV2`, `MeshRef`, `ResultRef`, `ScopeRef` | 文件路径/修订、网格版本、结果所属任务和 case | 没有多个加载实例、帧或场景身份；`resourceId` 不等同加载实例 ID。 |
 | `DataAccess.h`: `IMeshAccess`, `IResultAccess` | 工程步骤对网格/结果的只读有效性检查 | 不提供节点/拓扑/字段读取，不能冒充完整结果仓库。 |
 | `WorkflowModels.h`: `ValidationResult`；`Telemetry.h`: `ErrorInfo` | 数据版本校验和失败报告 | 算法特有错误码尚未约定。 |
 | `TaskModels.h`: `TaskEvent::ResultGenerated` | 求解结果创建通知 | 结果通知不是读取完成/场景上屏事件。 |
@@ -24,7 +24,7 @@
 | --- | --- | --- |
 | 网格 | meshVersion/坐标系与单位；节点 ID + 三维坐标；单元 ID + 类型 + 有序节点 ID；Zone ID 与单元集合；边界 ID + 面片/所属 Zone | CGNS 多 Zone、混合维度/高阶单元、索引从零或源文件编号、边界法向、非连续 ID、结构化原始拓扑是否保留。 |
 | 物理场 | 稳定变量 key、显示名、单位、分量数/次序、标量/矢量、点或单元关联、所属 meshVersion、缺失值掩码 | 同名不同单位、单位转换、cell↔point 插值由谁负责、张量和面数据。 |
-| 数据集/文件 | datasetId（一次加载实例）、fileId（源文件索引），映射到既有 `ResourceRef`/`ResultRef`/`MeshRef`；状态与失败原因 | ID 生成/持久化、一个文件多 Zone、多文件同一时刻、路径去重、结果与网格版本匹配策略。 |
+| 数据集/文件 | datasetId（一次加载实例）、fileId（源文件索引），映射到既有 `ResourceRefV2`/`ResultRef`/`MeshRef`；状态与失败原因 | ID 生成/持久化、一个文件多 Zone、多文件同一时刻、路径去重、结果与网格版本匹配策略。 |
 | 帧 | datasetId、frameId、稳定顺序索引、物理时间与单位、source fileId、是否完整/有效和错误 | 非均匀时间、重复/缺帧、时钟对齐、增量加载及重试。 |
 | 场景对象 | sceneObjectId、datasetId、类型（原网格、切面、线、面、流线、迹线等）、来源参数版本、可见性、样式版本 | 跨帧对象复用还是重建、样式持久化、父子对象、拾取 ID、二维曲线是否属于三维场景。 |
 | 多工况 | caseId 关联既有 `ScopeRef`/`ResultRef`，工况参数 key/值/单位，Fx/Fy/Fz/Mx/My/Mz 的坐标系、参考点/长度/面积/动压及单位 | 正方向、力矩基点、升阻/舵效定义、缺测值、工况排序及来源追溯。 |
@@ -32,7 +32,7 @@
 
 `contracts/` 只放可跨模块按值传递的标识与元信息，**不放** `vtkDataObject`、`vtkRenderer`、节点大数组或数据缓存。具体 `MeshData`/`FieldData` 格式需结合读取、特征和场景模块的实际输入输出评审；避免和既有 `MeshRef`/`ResultRef` 并行维护两套事实。
 
-功能交接可按三个窄端口讨论：读取端按 `ResourceRef` 请求、异步返回数据集身份/字段目录或错误；特征端按数据集、字段及参数快照返回不可变几何句柄或错误；分析端按 caseId 集合及变量/单位请求返回表格或曲线序列。它们**不是已实现的公共 C++ 接口**，具体参数、取消/重试和结果类型待最小样例验证及接口评审。
+功能交接可按三个窄端口讨论：读取端按 `ResourceRefV2` 请求、异步返回数据集身份/字段目录或错误；特征端按数据集、字段及参数快照返回不可变几何句柄或错误；分析端按 caseId 集合及变量/单位请求返回表格或曲线序列。它们**不是已实现的公共 C++ 接口**，具体参数、取消/重试和结果类型待最小样例验证及接口评审。
 
 ## 场景操作接口草案（伪接口，未加入代码）
 

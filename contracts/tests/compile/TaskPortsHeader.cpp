@@ -2,14 +2,11 @@
 
 namespace {
 
-class LegacyWorkflow final : public aerosim::IWorkflowService {
+// Relies on the default viewV2() contract: an implementation that does not
+// override it must return Unsupported rather than fail to compile.
+class MinimalWorkflow final : public aerosim::IWorkflowService {
 public:
     using aerosim::IWorkflowService::IWorkflowService;
-
-    aerosim::WorkflowView view(const aerosim::ScopeRef &) const override
-    {
-        return aerosim::WorkflowView();
-    }
 
     aerosim::ValidationResult requestRun(const aerosim::RunRequest &) override
     {
@@ -23,7 +20,7 @@ public:
 
 int compileTaskPortsHeader()
 {
-    LegacyWorkflow workflow;
+    MinimalWorkflow workflow;
     return workflow.viewV2(aerosim::ScopeRef()).status()
                 == aerosim::AccessStatus::Unsupported
         ? 0 : 1;

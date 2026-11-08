@@ -51,15 +51,6 @@ add_test(NAME workflow_async_validation
 add_dependencies(aerosim_workflow_tests
     aerosim_workflow_async_validation_test)
 
-add_executable(aerosim_workflow_legacy_adapter_test
-    WorkflowLegacyAdapterTests.cpp)
-target_link_libraries(aerosim_workflow_legacy_adapter_test
-    PRIVATE aerosim::workflow Qt5::Core)
-add_test(NAME workflow_legacy_adapter
-    COMMAND aerosim_workflow_legacy_adapter_test)
-add_dependencies(aerosim_workflow_tests
-    aerosim_workflow_legacy_adapter_test)
-
 add_executable(aerosim_workflow_snapshot_test
     WorkflowSnapshotTests.cpp)
 target_link_libraries(aerosim_workflow_snapshot_test

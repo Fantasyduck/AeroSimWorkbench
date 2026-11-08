@@ -1,5 +1,7 @@
 #pragma once
 
+#include "aerosim/contracts/ResourceModels.h"
+
 #include <QMetaType>
 #include <QString>
 #include <QtGlobal>
@@ -8,15 +10,6 @@ namespace aerosim {
 
 struct ProjectRef {
     QString projectId;
-    QString filePath;
-    quint64 revision = 0;
-};
-
-// IDs and paths are copied across modules. They do not own the referenced data.
-struct ResourceRef {
-    QString resourceId;
-    QString projectId;
-    QString kind;
     QString filePath;
     quint64 revision = 0;
 };
@@ -34,12 +27,12 @@ struct ParameterSnapshotRef {
 };
 
 struct MeshRef {
-    ResourceRef resource;
+    ResourceRefV2 resource;
     QString meshVersion;
 };
 
 struct ResultRef {
-    ResourceRef resource;
+    ResourceRefV2 resource;
     QString taskId;
     QString meshVersion;
     QString caseId;

@@ -11,7 +11,6 @@ void registerContractMetaTypes()
 {
     qRegisterMetaType<TaskCommand>("aerosim::TaskCommand");
     qRegisterMetaType<TaskEvent>("aerosim::TaskEvent");
-    qRegisterMetaType<WorkflowView>("aerosim::WorkflowView");
     qRegisterMetaType<WorkflowViewV2>("aerosim::WorkflowViewV2");
     qRegisterMetaType<LogEntry>("aerosim::LogEntry");
     qRegisterMetaType<ErrorInfo>("aerosim::ErrorInfo");

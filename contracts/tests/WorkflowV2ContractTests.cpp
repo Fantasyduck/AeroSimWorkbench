@@ -12,14 +12,12 @@
 
 namespace {
 
-class LegacyWorkflow final : public aerosim::IWorkflowService {
+// A minimal implementation that relies on the default viewV2() contract. It is
+// used to prove that viewV2() is required and returns Unsupported until a real
+// workflow implementation overrides it.
+class MinimalWorkflow final : public aerosim::IWorkflowService {
 public:
     using aerosim::IWorkflowService::IWorkflowService;
-
-    aerosim::WorkflowView view(const aerosim::ScopeRef &) const override
-    {
-        return aerosim::WorkflowView();
-    }
 
     aerosim::ValidationResult requestRun(const aerosim::RunRequest &) override
     {
@@ -58,9 +56,9 @@ void checkDefaults(aerosim_test::TestContext &context)
         "WorkflowViewV2 must be copy assignable");
 }
 
-void checkLegacyDefault(aerosim_test::TestContext &context)
+void checkUnsupportedDefault(aerosim_test::TestContext &context)
 {
-    LegacyWorkflow workflow;
+    MinimalWorkflow workflow;
     const aerosim::AccessResult<aerosim::WorkflowViewV2> result =
         workflow.viewV2(aerosim::ScopeRef());
     AEROSIM_CHECK(context, !result.ok());
@@ -103,7 +101,7 @@ void checkQueuedDelivery(aerosim_test::TestContext &context)
     AEROSIM_CHECK(context,
         QMetaType::type("aerosim::WorkflowViewV2") != QMetaType::UnknownType);
 
-    LegacyWorkflow workflow;
+    MinimalWorkflow workflow;
     QObject receiver;
     bool delivered = false;
     quint64 deliveredRevision = 0;
@@ -133,7 +131,7 @@ int main(int argc, char **argv)
 
     aerosim_test::TestContext context;
     checkDefaults(context);
-    checkLegacyDefault(context);
+    checkUnsupportedDefault(context);
     checkTokens(context);
     checkQueuedDelivery(context);
     return context.result();

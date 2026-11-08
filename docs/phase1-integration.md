@@ -37,7 +37,7 @@
 ## 公共契约
 
 - `References.h`：工程、资源、作用域、参数快照、网格和结果均用轻量标识或路径引用传递。大网格与流场数组不跨信号槽复制。
-- `WorkflowModels.h`：`ValidationResult`、`WorkflowView`、步骤状态、可用操作、导航标识及视图版本。工作流服务处理规则、失效和恢复；UI 只读取视图。
+- `WorkflowModels.h`：`ValidationResult`、`WorkflowViewV2`、步骤完成/校验/依赖状态、可用操作、导航标识及视图版本。工作流服务处理规则、失效和恢复；UI 只读取视图。
 - `DataAccess.h`：工程、参数、网格及结果的最小只读访问边界。具体业务实现和错误策略随对应模块接入。
 - `TaskModels.h`：命令、事件、显式状态/进度字段以及运行模块保存的 `TaskRecord` 形状。命令被投递不等于执行成功；Mock 的完成事件仅说明消息闭环。
 - `Telemetry.h`：日志、错误和监控样本的公共消息字段，供运行、日志和 UI 模块对接。
@@ -50,7 +50,7 @@
 
 | 模块 | 接入点与当前未实现能力 |
 | --- | --- |
-| `modules/ui/` | `PostProcessWorkbenchWindow` 已实现 `IWidgetHost` 和独立 CMake 目标；SARibbon、`WorkflowView` 展示与业务命令适配仍待接入。 |
+| `modules/ui/` | `PostProcessWorkbenchWindow` 已实现 `IWidgetHost` 和独立 CMake 目标；SARibbon、`WorkflowViewV2` 展示与业务命令适配仍待接入。 |
 | `modules/visualization/` | 最小 VTK 8.2 Viewer 已可通过 `WidgetSlot::Viewport` 插入主窗口；`IMeshAccess`/`IResultAccess`、数据读取和正式场景对象服务仍待实现。 |
 | `modules/configuration/` | 实现 `IParameterAccess`、配置与工况模型、专业校验及 JSON；保持服务层可在 CLI 使用。 |
 | `modules/logging_ui/` | 实现日志与错误 QWidget，通过 `WidgetSlot::Log/Error` 插入，消费公共 `LogEntry`/`ErrorInfo`。 |
