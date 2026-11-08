@@ -5,6 +5,7 @@
 #include <QHash>
 #include <QPointer>
 #include <QPair>
+#include <QStringList>
 #include <QVariantMap>
 #include <QVector>
 
@@ -68,6 +69,11 @@ private:
     void addBatchCase();
     void removeBatchCase();
     void submitBatchCalculation();
+    bool editCalculationParameters(QString &caseId, double &mach, double &aoa,
+                                   double &temperature, int &mpi);
+    void addState();
+    void removeState();
+    void refreshStateModel();
     void appendMessage(const QString &message);
     void appendLog(const QString &level, const QString &source, const QString &message,
                    const QString &scope = QString());
@@ -143,7 +149,14 @@ private:
     QDoubleSpinBox *singleTemperatureSpin_ = nullptr;
     QSpinBox *singleMpiSpin_ = nullptr;
     QLabel *singleGenerationStatus_ = nullptr;
+    QLabel *singleParametersSummary_ = nullptr;
     QLabel *batchGenerationStatus_ = nullptr;
+    QLabel *batchRunSummary_ = nullptr;
+    QProgressBar *batchRunProgress_ = nullptr;
+    QPushButton *addStateButton_ = nullptr;
+    QPushButton *removeStateButton_ = nullptr;
+    QTreeWidgetItem *statesNavigationItem_ = nullptr;
+    QStringList stateIds_ = {QStringLiteral("State_001"), QStringLiteral("State_002"), QStringLiteral("State_003")};
     quint64 batchPlanVersion_ = 0;
     QCheckBox *logAutoScroll_ = nullptr;
     QCheckBox *taskLogAutoScroll_ = nullptr;

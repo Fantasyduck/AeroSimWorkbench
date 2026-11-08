@@ -247,6 +247,8 @@ int main(int argc, char **argv)
     if (!check(window.dockWidgetArea(projectDock) == Qt::LeftDockWidgetArea
                && window.dockWidgetArea(propertyDock) == Qt::LeftDockWidgetArea
                && projectDock->geometry().left() < propertyDock->geometry().left()
+               && !propertyDock->isFloating()
+               && !(propertyDock->features() & QDockWidget::DockWidgetClosable)
                && projectDock->minimumWidth() >= 220 && propertyDock->minimumWidth() >= 300,
                "Default layout must place navigation before properties on the left")) return 42;
     auto *outputDock = window.findChild<QDockWidget *>("outputDock");
@@ -317,6 +319,11 @@ int main(int argc, char **argv)
                "Batch configuration did not locate and open BatchPlan management")) return 38;
     if (!check(window.findChild<QTableWidget *>("batchPlanTable")->columnCount() == 3,
                "BatchPlan page is missing its model-neutral table")) return 39;
+    if (!check(calculationNode->child(0)->child(0)->childCount() == 3
+               && window.findChild<QTableWidget *>("stateTable")->rowCount() == 3
+               && window.findChild<QPushButton *>("addStateButton")
+               && window.findChild<QPushButton *>("removeStateButton"),
+               "State management must expose the same editable state set in the tree and table")) return 76;
     auto *singleCalculationItem = calculationNode->child(0)->child(2);
     auto *batchCalculationItem = calculationNode->child(0)->child(3);
     projectTree->setCurrentItem(singleCalculationItem);
