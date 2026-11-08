@@ -63,9 +63,9 @@ private:
     void openSelectedSettings();
     void updateSelectionActions();
     void openImportDialog();
-    void openCoefficientDialog();
     void openExportDialog(const QString &kind);
     void loadUiExample(bool structured);
+    void loadMultiFileUiExample();
     void openBackgroundSettings();
     void applyBackground(const QColor &bottom, const QColor &top, bool gradient);
     void showNavigationPanel(int panel);

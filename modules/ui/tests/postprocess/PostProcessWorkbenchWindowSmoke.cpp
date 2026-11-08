@@ -17,6 +17,7 @@
 #include <QListWidget>
 #include <QLineEdit>
 #include <QMenu>
+#include <QMouseEvent>
 #include <QPushButton>
 #include <QSlider>
 #include <QSpinBox>
@@ -52,7 +53,8 @@ int main(int argc, char *argv[])
     CHECK(tree && layers && nav && content && style && parameters && probe && results && select && pan);
     CHECK(!action("postProcessPanelsAction"));
     CHECK(content->count() == 2);
-    CHECK(window.findChild<SARibbonCategory *>("postProcessOutputCategory"));
+    CHECK(window.findChild<SARibbonCategory *>("postProcessToolsCategory"));
+    CHECK(!action("postProcessCoefficientAction"));
     CHECK(!window.findChild<SARibbonCategory *>("postProcessAnalysisCategory"));
     CHECK(!action("postProcessMeshAction"));
     CHECK(!window.findChild<QWidget *>("postProcessInspectorTabs"));
@@ -77,12 +79,40 @@ int main(int argc, char *argv[])
     for (auto *dock : window.findChildren<QDockWidget *>()) CHECK(!dock->isVisible());
     for (auto *toolbar : window.findChildren<QToolBar *>()) CHECK(window.toolBarArea(toolbar) == Qt::NoToolBarArea);
 
+    CHECK(window.windowTitle().contains(QString::fromUtf8("可视化分析台")));
+    auto *sphere = window.findChild<QWidget *>("postProcessOrientationControl"); CHECK(sphere && sphere->isVisible());
+    QString orientation;
+    QObject::connect(&window, &aerosim::PostProcessWorkbenchWindow::viewRequested, &window, [&orientation](const QString &value) { orientation = value; });
+    QMouseEvent press(QEvent::MouseButtonPress, QPointF(48,17), Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+    QMouseEvent release(QEvent::MouseButtonRelease, QPointF(48,17), Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+    QApplication::sendEvent(sphere, &press); QApplication::sendEvent(sphere, &release); CHECK(orientation=="top");
+    auto *ruler = action("postProcessRulerAction"); CHECK(ruler && ruler->isCheckable());
+    ruler->trigger(); CHECK(window.findChild<QLabel *>("postProcessRulerPlaceholder")->isVisible());
+    ruler->trigger(); CHECK(!window.findChild<QLabel *>("postProcessRulerPlaceholder")->isVisible());
+
     // Start empty; the example is explicitly requested.
     CHECK(tree->topLevelItemCount()==0 && layers->count()==0);
     CHECK(!action("postProcessContourAction")->isEnabled());
     CHECK(!window.findChild<QSlider *>("postProcessTimeSlider")->isEnabled());
     for (const char *name : {"postProcessFirstFrame", "postProcessPreviousFrame", "postProcessPlayFrame", "postProcessNextFrame", "postProcessLastFrame"})
         CHECK(!window.findChild<QToolButton *>(name)->isEnabled());
+    action("postProcessImportAction")->trigger(); flush();
+    auto *initialImport = window.findChild<QDialog *>("postProcessImportDataDialog"); CHECK(initialImport);
+    CHECK(!initialImport->findChild<QComboBox *>("postProcessImportMode")->isVisible());
+    auto *initialFiles = initialImport->findChild<QListWidget *>("postProcessImportFileList");
+    auto *initialFile = new QListWidgetItem(QStringLiteral("initial.vti"), initialFiles);
+    initialFile->setData(Qt::UserRole, QStringLiteral("/example/initial.vti"));
+    initialImport->findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Ok)->click(); flush();
+    CHECK(tree->topLevelItemCount()==1 && tree->topLevelItem(0)->data(0, Qt::UserRole+4).toString()=="initial");
+    delete tree->takeTopLevelItem(0);
+    action("postProcessMultiFileExampleAction")->trigger(); flush();
+    CHECK(tree->topLevelItemCount()==2 && layers->count()==0);
+    CHECK(tree->topLevelItem(0)->childCount()==2 && tree->topLevelItem(1)->childCount()==2);
+    CHECK(tree->topLevelItem(0)->data(0, Qt::UserRole+3).toMap().value("sourceId") != tree->topLevelItem(1)->data(0, Qt::UserRole+3).toMap().value("sourceId"));
+    CHECK(!window.findChild<QSlider *>("postProcessTimeSlider")->isEnabled());
+    tree->topLevelItem(0)->setCheckState(0, Qt::Unchecked);
+    CHECK(tree->topLevelItem(1)->checkState(0)==Qt::Checked);
+    CHECK(capture(&window,"multi-file-example"));
     action("postProcessUnstructuredExampleAction")->trigger(); flush();
     CHECK(tree->topLevelItemCount()==3 && layers->count()==3);
     auto *play = window.findChild<QToolButton *>("postProcessPlayFrame");
@@ -129,7 +159,7 @@ int main(int argc, char *argv[])
     CHECK(action("postProcessRotationCenterAction"));
 
     // Panel commands must be direct clickable ribbon buttons.
-    window.ribbonBar()->setCurrentIndex(4); flush();
+    window.ribbonBar()->setCurrentIndex(2); flush();
     for (const char *name : {"postProcessShowDataPanel", "postProcessShowObjectPanel", "postProcessProbeResultsAction"}) {
         QToolButton *button = nullptr;
         for (auto *candidate : window.findChildren<QToolButton *>()) {
@@ -193,24 +223,25 @@ int main(int argc, char *argv[])
     QObject::connect(&window, &aerosim::PostProcessWorkbenchWindow::postProcessCommandRequested, &window,
                      [&appliedCommand](const QString &command) { if (command.startsWith("apply:")) appliedCommand = command; });
     action("postProcessImportAction")->trigger(); flush();
-    auto *organization = window.findChild<QDialog *>("postProcessResultSetDialog"); CHECK(organization);
-    organization->findChild<QLineEdit *>("resultSetName")->setText(QStringLiteral("case"));
-    organization->findChild<QLineEdit *>("resultSetPath0")->setText(QStringLiteral("/example/result.cgns"));
-    organization->findChild<QLineEdit *>("resultSetPath1")->setText(QStringLiteral("/example/boundary.tec"));
+    auto *organization = window.findChild<QDialog *>("postProcessImportDataDialog"); CHECK(organization);
+    auto *inputFiles = organization->findChild<QListWidget *>("postProcessImportFileList"); CHECK(inputFiles);
+    auto *first = new QListWidgetItem(QStringLiteral("result.cgns"), inputFiles); first->setData(Qt::UserRole, QStringLiteral("/example/result.cgns"));
+    auto *second = new QListWidgetItem(QStringLiteral("boundary.vtu"), inputFiles); second->setData(Qt::UserRole, QStringLiteral("/example/boundary.vtu"));
+    auto *mode = organization->findChild<QComboBox *>("postProcessImportMode"); CHECK(mode && mode->isVisible());
     organization->findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Ok)->click(); flush();
     CHECK(requestedPaths.size()==2 && tree->topLevelItemCount()==4);
+    CHECK(tree->topLevelItem(3)->data(0, Qt::UserRole+4).toString()=="append");
     CHECK(!action("postProcessContourAction")->isEnabled());
     action("postProcessImportAction")->trigger(); flush();
-    organization = window.findChild<QDialog *>("postProcessResultSetDialog"); CHECK(organization);
-    organization->findChild<QComboBox *>("resultSetTarget")->setCurrentIndex(1);
-    organization->findChild<QLineEdit *>("resultSetPath2")->setText(QStringLiteral("/example/force.csv"));
+    organization = window.findChild<QDialog *>("postProcessImportDataDialog"); CHECK(organization);
+    mode = organization->findChild<QComboBox *>("postProcessImportMode"); mode->setCurrentIndex(1);
+    inputFiles = organization->findChild<QListWidget *>("postProcessImportFileList");
+    auto *replacement = new QListWidgetItem(QStringLiteral("new.vtk"), inputFiles); replacement->setData(Qt::UserRole, QStringLiteral("/example/new.vtk"));
     organization->findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Ok)->click(); flush();
-    CHECK(requestedPaths.size()==1 && tree->topLevelItem(3)->childCount()==3);
-    action("postProcessCoefficientAction")->trigger(); flush();
-    auto *coefficient = window.findChild<QDialog *>("postProcessCoefficientDialog"); CHECK(coefficient);
-    CHECK(coefficient->findChild<QTableWidget *>("postProcessCoefficientTable")->rowCount()==0);
-    coefficient->accept(); flush();
-    delete tree->takeTopLevelItem(3);
+    CHECK(requestedPaths.size()==1 && tree->topLevelItemCount()==5);
+    CHECK(tree->topLevelItem(4)->data(0, Qt::UserRole+4).toString()=="replace");
+    CHECK(tree->topLevelItem(0)->childCount()>0); // Existing data stays until reading succeeds.
+    delete tree->takeTopLevelItem(4); delete tree->takeTopLevelItem(3);
     QFileDialog *fileDialog = nullptr;
     // Each output command opens its own settings dialog, without creating a file.
     chooseZone(0);
@@ -351,7 +382,7 @@ int main(int argc, char *argv[])
 
     for (const QSize size : {QSize(1120,680), QSize(1440,960)}) {
         window.resize(size);
-        for (int category=0; category<5; ++category) {
+        for (int category=0; category<3; ++category) {
             window.ribbonBar()->setCurrentIndex(category); nav->setCurrentIndex(category%2); flush();
             CHECK(window.size() == size);
             for (auto *button : window.findChildren<QToolButton *>()) {
