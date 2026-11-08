@@ -183,7 +183,7 @@ protected:
         p.setBrush(fill); p.setPen(QPen(QColor("#455e78"), 1)); p.drawEllipse(QRectF(8, 8, 80, 80));
         p.setPen(QPen(QColor("#9bb0c5"), 1)); p.drawEllipse(QRectF(24, 8, 48, 80)); p.drawEllipse(QRectF(8, 28, 80, 40));
         const auto dot = [&p](int x, int y, const QColor &color, const QString &text) {
-            p.setBrush(color); p.setPen(Qt::white); p.drawEllipse(QPointF(x, y), 10); p.drawText(QRect(x-10,y-10,20,20), Qt::AlignCenter, text);
+            p.setBrush(color); p.setPen(Qt::white); p.drawEllipse(QPointF(x, y), 10, 10); p.drawText(QRect(x-10,y-10,20,20), Qt::AlignCenter, text);
         };
         dot(48, 17, QColor("#5b9b55"), uiText(u"上")); dot(48, 79, QColor("#5b9b55"), uiText(u"下"));
         dot(17, 48, QColor("#c35b55"), uiText(u"左")); dot(79, 48, QColor("#c35b55"), uiText(u"右"));
