@@ -2,6 +2,7 @@ add_library(aerosim_contracts STATIC
     src/EnumTokens.cpp
     src/RegisterMetaTypes.cpp
     src/ResourceModels.cpp
+    src/TaskPorts.cpp
     include/aerosim/contracts/AccessResult.h
     include/aerosim/contracts/DataAccess.h
     include/aerosim/contracts/EnumTokens.h

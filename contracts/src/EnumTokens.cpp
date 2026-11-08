@@ -61,6 +61,19 @@ const EnumTokenEntry<StepState> kStepStateTokens[] = {
     {StepState::Blocked, "blocked"}
 };
 
+const EnumTokenEntry<CompletionState> kCompletionStateTokens[] = {
+    {CompletionState::NotStarted, "not_started"},
+    {CompletionState::InProgress, "in_progress"},
+    {CompletionState::Completed, "completed"}
+};
+
+const EnumTokenEntry<ValidationState> kValidationStateTokens[] = {
+    {ValidationState::NotValidated, "not_validated"},
+    {ValidationState::Valid, "valid"},
+    {ValidationState::Invalid, "invalid"},
+    {ValidationState::Stale, "stale"}
+};
+
 const EnumTokenEntry<TaskCommandType> kTaskCommandTypeTokens[] = {
     {TaskCommandType::Start, "start"},
     {TaskCommandType::Pause, "pause"},
@@ -137,6 +150,8 @@ const EnumTokenEntry<FingerprintStatus> kFingerprintStatusTokens[] = {
 AEROSIM_ENUM_TOKEN_FUNCTIONS(AccessStatus, accessStatus, kAccessStatusTokens)
 AEROSIM_ENUM_TOKEN_FUNCTIONS(IssueSeverity, issueSeverity, kIssueSeverityTokens)
 AEROSIM_ENUM_TOKEN_FUNCTIONS(StepState, stepState, kStepStateTokens)
+AEROSIM_ENUM_TOKEN_FUNCTIONS(CompletionState, completionState, kCompletionStateTokens)
+AEROSIM_ENUM_TOKEN_FUNCTIONS(ValidationState, validationState, kValidationStateTokens)
 AEROSIM_ENUM_TOKEN_FUNCTIONS(TaskCommandType, taskCommandType, kTaskCommandTypeTokens)
 AEROSIM_ENUM_TOKEN_FUNCTIONS(TaskEventType, taskEventType, kTaskEventTypeTokens)
 AEROSIM_ENUM_TOKEN_FUNCTIONS(TaskStatus, taskStatus, kTaskStatusTokens)

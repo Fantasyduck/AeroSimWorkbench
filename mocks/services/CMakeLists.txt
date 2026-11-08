@@ -6,4 +6,8 @@ add_library(aerosim_mock STATIC
 )
 add_library(aerosim::mock ALIAS aerosim_mock)
 target_include_directories(aerosim_mock PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(aerosim_mock PUBLIC aerosim_contracts Qt5::Core)
+target_link_libraries(aerosim_mock PUBLIC aerosim_contracts aerosim::workflow Qt5::Core)
+
+if(AEROSIM_BUILD_TESTS)
+    add_subdirectory(tests)
+endif()

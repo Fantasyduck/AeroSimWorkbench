@@ -493,6 +493,10 @@ int main(int argc, char **argv)
         if (!check(rejected, "Occupied slot must reject without taking ownership")) return 3;
     }
     Workflow workflow;
+    const auto legacyV2 = workflow.viewV2(aerosim::ScopeRef());
+    if (!check(!legacyV2.ok()
+               && legacyV2.status() == aerosim::AccessStatus::Unsupported,
+               "Legacy workflow replacement must not be required to implement V2")) return 81;
     aerosim::ServiceBindings bindings;
     bindings.workflow = &workflow;
     window.bindServices(bindings);

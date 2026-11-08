@@ -4,7 +4,28 @@
 
 本文是 PR 2 的公共 C++/Qt Core 契约设计，供后续实现和接口评审使用，不是本次 Plan 阶段已修改的生产头文件。
 
-**Review status**: Pending. 本文的修订、提交或合并均不等于公共接口已经批准。实施任务 T001 仍要求维护者人工记录评审人、日期、调用方影响、兼容性、线程、所有权、生命周期和迁移结论；批准前不得修改生产 `contracts/`。
+**Review status**: Approved for PR 2 implementation on 2026-11-07 by the project public-contract authorized maintainer（由用户在实施会话中明确确认授权身份并批准）。批准范围仅限本文件定义的 Workflow V2 PR 2 公共接口；任何新增或改变该范围的重大公共接口仍须重新评审。
+
+### T001 Technical Review Record
+
+| Item | Review result |
+| --- | --- |
+| Review date | 2026-11-07 |
+| Technical reviewer | Codex implementation audit（只读技术核对，不是公共契约维护者批准） |
+| Formal maintainer approver | 项目公共契约授权维护者（用户明确声明并确认） |
+| Formal decision | Approved on 2026-11-07 for PR 2 implementation |
+| Affected callers | `ApplicationController`、GUI/CLI 入口、`MainWindow` legacy 消费、`MockWorkflowService`、UI 测试替身、contracts header/token/metatype tests |
+| Source compatibility | `viewV2()` 为非纯虚并提供 out-of-line 默认 Unsupported；现有派生类无需立即 override，旧方法、信号和槽签名保持不变 |
+| Binary compatibility | 不承诺。新增虚函数和 Qt signal 会改变 QObject vtable/metaobject；本 PR 要求仓库及外部消费者统一重新编译 |
+| Data structure | V2 公共类型只包含 Qt Core 轻量值、`ScopeRef` 和 revision；不含 QWidget、VTK、大型数组、裸指针或实现 facts |
+| Thread semantics | `view()`/`viewV2()` 仅同线程同步查询；worker 结果按值通过 `Qt::QueuedConnection` 返回 facade 所属线程，只有该线程提交 facts 和发布视图 |
+| Metatype | 只注册真实跨线程传递的 `WorkflowViewV2`；同步返回的 `AccessResult<WorkflowViewV2>` 及未独立传递的嵌套类型不注册 |
+| Ownership and lifetime | 公共 V2 view 自包含复制数据；facade/facts 由创建线程拥有；正式服务必须在 shutdown 时使 pending generation 失效并安全丢弃晚到结果 |
+| Connection safety | 复用现有装配前元类型注册、controller 单次初始化和 MainWindow 重绑定先断连规则；正式服务内部连接必须唯一并由接收者上下文管理 |
+| Migration | Legacy view/signal、`requestRun()`、`onTaskEvent()` 和 `actionId == "run"` 继续可用；V2 facts 是唯一权威源，legacy 只由单向 adapter 生成 |
+| Build constraints | `TaskPorts.cpp` 必须与接口变更同批加入 `aerosim_contracts`；公共目标继续仅依赖 Qt5::Core，保持 C++14、Qt 5.12.12、VS2017 v141/CMake 3.18.2 兼容 |
+
+技术审查未发现接口形状、调用方、线程、所有权、生命周期或构建层面的额外阻塞。维护者已明确批准：非纯虚 `viewV2()` 默认 Unsupported、按值 V2 signal、`applicabilityRuleId`、V2 facts 单一权威源，以及上述源码兼容与非二进制 ABI 承诺。Legacy 接口继续保留；依赖模块必须统一重新编译。
 
 设计保留以下现有契约不变：
 

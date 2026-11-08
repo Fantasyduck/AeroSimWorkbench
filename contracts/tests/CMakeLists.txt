@@ -49,6 +49,12 @@ target_link_libraries(aerosim_contract_resource_models_test PRIVATE aerosim_cont
 add_test(NAME contracts_resource_models
     COMMAND aerosim_contract_resource_models_test)
 
+add_executable(aerosim_contract_workflow_v2_test
+    WorkflowV2ContractTests.cpp)
+target_link_libraries(aerosim_contract_workflow_v2_test PRIVATE aerosim_contracts)
+add_test(NAME contracts_workflow_v2
+    COMMAND aerosim_contract_workflow_v2_test)
+
 add_test(NAME contracts_migration_fixture_layout
     COMMAND "${CMAKE_COMMAND}"
             "-DCONTRACT_FIXTURE_ROOT=${CMAKE_CURRENT_SOURCE_DIR}/fixtures"
