@@ -451,9 +451,7 @@ void PostProcessWorkbenchWindow::createActions() {
     connect(isoLineAction, &QAction::triggered, this, [this] {
         addDerivedLayer("isoline", uiText(u"等值线"), uiText(u"已创建物面/切片等值线草稿；请编辑等值。"));
     });
-    connect(streamAction, &QAction::triggered, this, [this] {
-        addDerivedLayer("stream", uiText(u"流线"), uiText(u"已创建流线草稿；积分使用矢量场，不使用速度大小标量。"));
-    });
+    connect(streamAction, &QAction::triggered, this, [this] { openNewFeatureDialog(QStringLiteral("stream")); });
     connect(traceAction, &QAction::triggered, this, [this] {
         addDerivedLayer("trace", uiText(u"迹线"), uiText(u"已创建时序轨迹草稿；追踪服务尚未接入。"));
     });
@@ -982,6 +980,9 @@ void PostProcessWorkbenchWindow::updateSelectionActions() {
     const int components = selectedContext_.value("components").toInt();
     const bool scalar = spatial && components == 1;
     const bool vector = spatial && components == 3 && !selectedContext_.value("vectors").toStringList().isEmpty();
+    const bool sourceObject = selectedKind_ == "volume" || selectedKind_ == "surface" || selectedKind_ == "exampleFile";
+    const bool vectorSource = vector || (spatial && sourceObject &&
+        (!selectedContext_.value("vectors").toStringList().isEmpty() || selectedContext_.value("scalars").toStringList().size() >= 3));
     const bool derived = selectedKind_ == "slice" || selectedKind_ == "iso" || selectedKind_ == "isoline" || selectedKind_ == "stream" || selectedKind_ == "trace" || selectedKind_ == "contour";
     const auto enable = [this](const char *name, bool enabled, const QString &reason) {
         auto *action = findChild<QAction *>(name);
@@ -994,7 +995,7 @@ void PostProcessWorkbenchWindow::updateSelectionActions() {
     enable("postProcessSliceAction",spatial && dimension==3,uiText(u"切片需要三维体网格；不要求存在标量场。"));
     enable("postProcessIsoAction",scalar && dimension==3,uiText(u"等值面需要三维体网格和标量；矢量请先选择模长标量。"));
     enable("postProcessIsoLineAction",scalar && dimension==2,uiText(u"等值线需要物面或切片，以及标量字段。"));
-    enable("postProcessStreamAction",vector && dimension>=2,uiText(u"流线需要矢量场；只有速度大小标量无法积分，请选择速度矢量。"));
+    enable("postProcessStreamAction",vectorSource && dimension>=2,uiText(u"流线需要矢量场；只有速度大小标量无法积分，请选择速度矢量。"));
     enable("postProcessTraceAction",vector && dimension==3 && selectedContext_.value("frames").toInt()>1,uiText(u"轨迹需要三维矢量场和多个有效时间帧。"));
     styleAction_->setEnabled((spatial && selectedKind_!="field") || selectedKind_=="curve");
     parameterAction_->setEnabled(derived || selectedKind_=="field" || selectedKind_=="curve");
@@ -1057,6 +1058,11 @@ void PostProcessWorkbenchWindow::openNewFeatureDialog(const QString &kind) {
     }
     form->addRow(uiText(u"数据源"), sources);
     form->addRow(kind == "stream" || kind == "trace" ? uiText(u"积分矢量") : uiText(u"字段"), fields);
+    const bool integration = kind == "stream" || kind == "trace";
+    auto *u = new QComboBox(dialog); auto *v = new QComboBox(dialog); auto *w = new QComboBox(dialog);
+    u->setObjectName(QStringLiteral("postProcessVectorU")); v->setObjectName(QStringLiteral("postProcessVectorV")); w->setObjectName(QStringLiteral("postProcessVectorW"));
+    if (integration) { form->addRow(uiText(u"U 分量"), u); form->addRow(uiText(u"V 分量"), v); form->addRow(uiText(u"W 分量"), w); }
+    else { u->hide(); v->hide(); w->hide(); }
     layout->addLayout(form);
     auto *hint = new QLabel(dialog);
     hint->setObjectName(QStringLiteral("postProcessFeatureSourceHint"));
@@ -1065,29 +1071,51 @@ void PostProcessWorkbenchWindow::openNewFeatureDialog(const QString &kind) {
     buttons->button(QDialogButtonBox::Ok)->setText(uiText(u"下一步"));
     buttons->button(QDialogButtonBox::Cancel)->setText(uiText(u"取消"));
     layout->addWidget(buttons);
-    const auto updateFields = [sources, fields, buttons, hint, kind](int index) {
-        fields->clear();
+    const auto validate = [sources, fields, u, v, w, buttons, hint, kind, integration] {
+        const bool manual = integration && fields->currentData().toString() == QStringLiteral("__components__");
+        u->setEnabled(manual); v->setEnabled(manual); w->setEnabled(manual);
+        const bool distinct = u->currentIndex() >= 0 && v->currentIndex() >= 0 && w->currentIndex() >= 0 && u->currentText() != v->currentText() && u->currentText() != w->currentText() && v->currentText() != w->currentText();
+        const bool valid = sources->currentIndex() >= 0 && (kind == "slice" || fields->count() > 0) && (!manual || distinct);
+        buttons->button(QDialogButtonBox::Ok)->setEnabled(valid);
+        hint->setText(sources->currentIndex() < 0 ? uiText(u"没有符合要求的数据源，请先导入或选择示例数据。")
+                     : manual ? (distinct ? uiText(u"请确认三个分量属于同一数据位置；当前仅保存界面草稿。") : uiText(u"请选择三个不同的分量。"))
+                     : !valid ? uiText(u"所选数据源缺少此功能所需的字段，请选择其他数据源。") : uiText(u"请选择数据源和字段，下一步设置特征参数。"));
+    };
+    const auto updateFields = [sources, fields, u, v, w, kind, integration, validate](int index) {
+        const QSignalBlocker blockFields(fields), blockU(u), blockV(v), blockW(w);
+        fields->clear(); u->clear(); v->clear(); w->clear();
         const QVariantMap source = sources->itemData(index).toMap();
         if (kind == "slice") fields->addItem(uiText(u"仅切片网格"), QString());
-        QStringList available = source.value(kind == "stream" || kind == "trace" ? "vectors" : "scalars").toStringList();
+        QStringList available = source.value(integration ? "vectors" : "scalars").toStringList();
         if (kind == "contour") available.append(source.value("vectors").toStringList());
         for (const QString &name : available) fields->addItem(name, name);
-        const int preferred = fields->findData(source.value("field"));
-        if (preferred >= 0) fields->setCurrentIndex(preferred);
-        const bool valid = index >= 0 && (kind == "slice" || !available.isEmpty());
-        fields->setEnabled(index >= 0);
-        buttons->button(QDialogButtonBox::Ok)->setEnabled(valid);
-        hint->setText(index < 0 ? uiText(u"没有符合要求的数据源，请先导入或选择示例数据。")
-                     : !valid ? uiText(u"所选数据源缺少此功能所需的字段，请选择其他数据源。")
-                     : uiText(u"请选择数据源和字段，下一步设置特征参数。"));
+        const QStringList scalars = source.value("scalars").toStringList();
+        if (integration && scalars.size() >= 3) fields->addItem(uiText(u"手动组合 U / V / W"), QStringLiteral("__components__"));
+        u->addItems(scalars); v->addItems(scalars); w->addItems(scalars);
+        if (scalars.size() >= 3) { u->setCurrentIndex(0); v->setCurrentIndex(1); w->setCurrentIndex(2); }
+        const int preferred = fields->findData(source.value("field")); if (preferred >= 0) fields->setCurrentIndex(preferred);
+        fields->setEnabled(index >= 0); validate();
     };
     connect(sources, QOverload<int>::of(&QComboBox::currentIndexChanged), dialog, updateFields);
+    for (QComboBox *input : {fields, u, v, w}) connect(input, QOverload<int>::of(&QComboBox::currentIndexChanged), dialog, [validate](int) { validate(); });
+    int preferredSource = -1;
+    for (int i = 0; i < sources->count(); ++i) {
+        const QVariantMap candidate = sources->itemData(i).toMap();
+        if (candidate.value("inputObjectId").toString() == selectedId_) { preferredSource = i; break; }
+        if (preferredSource < 0 && candidate.value("sourceId").toString() == selectedContext_.value("sourceId").toString()) preferredSource = i;
+    }
+    if (preferredSource >= 0) sources->setCurrentIndex(preferredSource);
     updateFields(sources->currentIndex());
     connect(buttons, &QDialogButtonBox::rejected, dialog, &QDialog::reject);
-    connect(buttons, &QDialogButtonBox::accepted, dialog, [this, dialog, sources, fields, kind, title] {
+    connect(buttons, &QDialogButtonBox::accepted, dialog, [this, dialog, sources, fields, u, v, w, kind, title] {
         QVariantMap context = sources->currentData().toMap();
         if (context.isEmpty()) return;
         context["field"] = fields->currentData().toString();
+        if (context.value("field").toString() == QStringLiteral("__components__")) {
+            context["vectorComponents"] = QStringList{u->currentText(), v->currentText(), w->currentText()};
+            context["field"] = uiText(u"组合矢量（%1，%2，%3）").arg(u->currentText(), v->currentText(), w->currentText());
+            QStringList vectors = context.value("vectors").toStringList(); vectors.append(context.value("field").toString()); context["vectors"] = vectors;
+        }
         context["components"] = context.value("field").toString().isEmpty() ? 0
             : (context.value("vectors").toStringList().contains(context.value("field").toString()) ? 3 : 1);
         selectedContext_ = context;

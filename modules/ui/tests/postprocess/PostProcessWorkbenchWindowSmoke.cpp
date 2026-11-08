@@ -186,7 +186,7 @@ int main(int argc, char *argv[])
     for (const char *example : {"postProcessStructuredExampleAction","postProcessUnstructuredExampleAction"}) {
         action(example)->trigger(); flush(); chooseZone(0);
         CHECK(action("postProcessSliceAction")->isEnabled() && action("postProcessIsoAction")->isEnabled());
-        CHECK(!action("postProcessStreamAction")->isEnabled());
+        CHECK(action("postProcessStreamAction")->isEnabled());
         chooseField(4); // Three-component velocity, not speed magnitude.
         CHECK(action("postProcessStreamAction")->isEnabled() && !action("postProcessIsoAction")->isEnabled());
         CHECK(action("postProcessSliceAction")->isEnabled());
@@ -207,6 +207,10 @@ int main(int argc, char *argv[])
     chooseField(4); CHECK(action("postProcessStreamAction")->isEnabled());
     // Integration vector remains fixed when coloring a streamline by another scalar.
     action("postProcessStreamAction")->trigger(); flush();
+    auto *streamSource = window.findChild<QDialog *>("postProcessFeatureSourceDialog"); CHECK(streamSource);
+    auto *streamFields = streamSource->findChild<QComboBox *>("postProcessFeatureField"); CHECK(streamFields);
+    CHECK(streamFields->findData(QStringLiteral("__components__")) >= 0);
+    streamSource->findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Ok)->click(); flush();
     createdDialog = window.findChild<QDialog *>("postProcessParameterDialog"); CHECK(createdDialog);
     createdDialog->findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Ok)->click(); flush();
     CHECK(layers->currentItem()->data(Qt::UserRole+3).toMap().value("integrationField").toString().contains(QString::fromUtf8("速度矢量")));
