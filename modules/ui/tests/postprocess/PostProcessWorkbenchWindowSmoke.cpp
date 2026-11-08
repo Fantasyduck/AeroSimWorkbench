@@ -119,7 +119,9 @@ int main(int argc, char *argv[])
     delete tree->takeTopLevelItem(0);
     action("postProcessMultiFileExampleAction")->trigger(); flush();
     CHECK(tree->topLevelItemCount()==2 && layers->count()==0);
-    CHECK(tree->topLevelItem(0)->childCount()==2 && tree->topLevelItem(1)->childCount()==2);
+    CHECK(tree->topLevelItem(0)->childCount()==1 && tree->topLevelItem(1)->childCount()==1);
+    CHECK(tree->topLevelItem(0)->child(0)->child(0)->childCount()==3);
+    CHECK(tree->topLevelItem(1)->child(0)->child(0)->childCount()==2);
     CHECK(tree->topLevelItem(0)->data(0, Qt::UserRole+3).toMap().value("sourceId") != tree->topLevelItem(1)->data(0, Qt::UserRole+3).toMap().value("sourceId"));
     CHECK(!window.findChild<QSlider *>("postProcessTimeSlider")->isEnabled());
     tree->topLevelItem(0)->setCheckState(0, Qt::Unchecked);
@@ -143,7 +145,7 @@ int main(int argc, char *argv[])
     fileSourceDialog->reject(); flush();
 
     action("postProcessUnstructuredExampleAction")->trigger(); flush();
-    CHECK(tree->topLevelItemCount()==3 && layers->count()==3);
+    CHECK(tree->topLevelItemCount()==2 && layers->count()==3);
     auto *play = window.findChild<QToolButton *>("postProcessPlayFrame");
     auto *playTimer = window.findChild<QTimer *>("postProcessPlayTimer");
     CHECK(play && playTimer && !playTimer->isActive());
@@ -181,7 +183,7 @@ int main(int argc, char *argv[])
     CHECK(!window.findChild<QComboBox *>("postProcessFieldSelector"));
     const auto chooseField = [&] (int index) {
         nav->setCurrentIndex(0);
-        auto *item = tree->topLevelItem(1)->child(index);
+        auto *item = tree->topLevelItem(0)->child(0)->child(0)->child(index);
         tree->setCurrentItem(item); tree->itemClicked(item,0); flush();
     };
     CHECK(!action("postProcessSequenceAction"));
@@ -288,8 +290,8 @@ int main(int argc, char *argv[])
     auto *mode = organization->findChild<QComboBox *>("postProcessImportMode"); CHECK(mode && mode->isVisible());
     CHECK(mode->itemText(0)==QString::fromUtf8("追加显示") && mode->itemText(1)==QString::fromUtf8("替换现有数据"));
     organization->findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Ok)->click(); flush();
-    CHECK(requestedPaths.size()==2 && tree->topLevelItemCount()==4);
-    CHECK(tree->topLevelItem(3)->data(0, Qt::UserRole+4).toString()=="append");
+    CHECK(requestedPaths.size()==2 && tree->topLevelItemCount()==3);
+    CHECK(tree->topLevelItem(2)->data(0, Qt::UserRole+4).toString()=="append");
     CHECK(!action("postProcessContourAction")->isEnabled());
     action("postProcessImportAction")->trigger(); flush();
     organization = window.findChild<QDialog *>("postProcessImportDataDialog"); CHECK(organization);
@@ -297,10 +299,10 @@ int main(int argc, char *argv[])
     inputFiles = organization->findChild<QListWidget *>("postProcessImportFileList");
     auto *replacement = new QListWidgetItem(QStringLiteral("new.vtk"), inputFiles); replacement->setData(Qt::UserRole, QStringLiteral("/example/new.vtk"));
     organization->findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Ok)->click(); flush();
-    CHECK(requestedPaths.size()==1 && tree->topLevelItemCount()==5);
-    CHECK(tree->topLevelItem(4)->data(0, Qt::UserRole+4).toString()=="replace");
+    CHECK(requestedPaths.size()==1 && tree->topLevelItemCount()==4);
+    CHECK(tree->topLevelItem(3)->data(0, Qt::UserRole+4).toString()=="replace");
     CHECK(tree->topLevelItem(0)->childCount()>0); // Existing data stays until reading succeeds.
-    delete tree->takeTopLevelItem(4); delete tree->takeTopLevelItem(3);
+    delete tree->takeTopLevelItem(3); delete tree->takeTopLevelItem(2);
     QFileDialog *fileDialog = nullptr;
     // Each output command opens its own settings dialog, without creating a file.
     chooseZone(0);
@@ -341,6 +343,7 @@ int main(int argc, char *argv[])
         auto *sources = sourceDialog->findChild<QComboBox *>("postProcessFeatureSource");
         auto *fields = sourceDialog->findChild<QComboBox *>("postProcessFeatureField");
         CHECK(sources && sources->count() > 0 && fields);
+        CHECK(fields->isVisible() == (QString::fromLatin1(kind) != QStringLiteral("slice")));
         CHECK(sourceDialog->findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Ok)->isEnabled());
         sourceDialog->findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Ok)->click(); flush();
         auto *setup = window.findChild<QDialog *>("postProcessParameterDialog");
@@ -399,12 +402,12 @@ int main(int argc, char *argv[])
     }
     nav->setCurrentIndex(0);
     for (int group : {1}) {
-        auto *item = tree->topLevelItem(group)->child(0); tree->setCurrentItem(item); tree->itemClicked(item,0);
+        auto *item = tree->topLevelItem(0)->child(0)->child(0)->child(0); tree->setCurrentItem(item); tree->itemClicked(item,0);
         parameters->trigger(); flush(); dialog = window.findChild<QDialog *>("postProcessParameterDialog");
         CHECK(dialog && capture(dialog,group==1 ? "field-settings" : "curve-settings"));
         dialog->reject(); flush();
     }
-    tree->setCurrentItem(tree->topLevelItem(2)->child(2));
+    tree->setCurrentItem(tree->topLevelItem(1)->child(2));
     CHECK(window.findChild<QSlider *>("postProcessTimeSlider")->value() == 2);
     CHECK(!style->isEnabled() && !parameters->isEnabled());
     chooseZone(0);

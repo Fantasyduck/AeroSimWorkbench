@@ -730,6 +730,23 @@ void PostProcessWorkbenchWindow::loadUiExample(bool structured) {
         fieldContext["components"] = i==4 ? 3 : 1;
         fields->child(i)->setData(0,Qt::UserRole+3,fieldContext);
     }
+    // The field list is a view of each zone's own metadata, not a dataset-wide selection.
+    datasetTree_->takeTopLevelItem(datasetTree_->indexOfTopLevelItem(fields));
+    fields->setText(0, uiText(u"可用字段"));
+    volume->addChild(fields);
+    for (int i=1; i<zones->childCount(); ++i) {
+        auto *zone = zones->child(i);
+        auto *zoneFields = fields->clone();
+        zone->addChild(zoneFields);
+        for (int j=0; j<zoneFields->childCount(); ++j) {
+            auto *field = zoneFields->child(j);
+            auto fieldContext = field->data(0,Qt::UserRole+3).toMap();
+            fieldContext["dimension"] = 2;
+            field->setData(0,Qt::UserRole+3,fieldContext);
+            field->setData(0,Qt::UserRole+1,QStringLiteral("zone-%1-field-%2").arg(i).arg(j));
+        }
+    }
+    zones->setText(0, uiText(u"网格数据集 · 示例"));
     sceneList_->addItems({uiText(u"切面 1（X = 0.0）  可见"), uiText(u"等值面 1（压力） 可见"), uiText(u"流线 1           可见")});
     for (int i = 0; i < sceneList_->count(); ++i) {
         auto *item = sceneList_->item(i);
@@ -789,14 +806,14 @@ void PostProcessWorkbenchWindow::loadMultiFileUiExample() {
         auto *zone = new QTreeWidgetItem(file, QStringList(i == 0 ? uiText(u"流场 Zone · 体网格") : uiText(u"翼面 Zone · 表面")));
         zone->setData(0, Qt::UserRole, i == 0 ? "volume" : "surface"); zone->setData(0, Qt::UserRole+1, QStringLiteral("multifile-zone-%1").arg(i)); zone->setData(0, Qt::UserRole+3, ctx); zone->setIcon(0, commandIcon("mesh"));
         if (!firstZone) firstZone = zone;
-        auto *fields = new QTreeWidgetItem(file, QStringList(uiText(u"物理字段"))); fields->setData(0, Qt::UserRole, "group"); fields->setIcon(0, commandIcon("field"));
+        auto *fields = new QTreeWidgetItem(zone, QStringList(uiText(u"可用字段"))); fields->setData(0, Qt::UserRole, "group"); fields->setIcon(0, commandIcon("field"));
         QStringList names = ctx["scalars"].toStringList(); names.append(ctx["vectors"].toStringList());
         for (int j = 0; j < names.size(); ++j) {
             auto *field = new QTreeWidgetItem(fields, QStringList(names.at(j)));
             QVariantMap fc = ctx; fc["field"] = names.at(j); fc["components"] = ctx["vectors"].toStringList().contains(names.at(j)) ? 3 : 1;
             field->setData(0, Qt::UserRole, "field"); field->setData(0, Qt::UserRole+1, QStringLiteral("multifile-field-%1-%2").arg(i).arg(j)); field->setData(0, Qt::UserRole+3, fc); field->setIcon(0, commandIcon("field"));
         }
-        file->setExpanded(true); fields->setExpanded(true);
+        file->setExpanded(true); zone->setExpanded(true); fields->setExpanded(true);
     }
     timeSlider_->setEnabled(false); if (auto *play = findChild<QToolButton *>(QStringLiteral("postProcessPlayFrame"))) play->setChecked(false);
     for (const char *name : {"postProcessFirstFrame", "postProcessPreviousFrame", "postProcessPlayFrame", "postProcessNextFrame", "postProcessLastFrame"}) findChild<QToolButton *>(name)->setEnabled(false);
@@ -1114,9 +1131,10 @@ void PostProcessWorkbenchWindow::openNewFeatureDialog(const QString &kind) {
         if (files->findData(sourceId) < 0)
             files->addItem(context.value("sourceName",sourceId).toString(),sourceId);
     }
-    form->addRow(uiText(u"来源文件 / 数据集"), files);
-    form->addRow(uiText(u"区域 / 已有对象"), sources);
-    form->addRow(kind == "stream" || kind == "trace" ? uiText(u"积分矢量") : uiText(u"字段"), fields);
+    form->addRow(uiText(u"数据集"), files);
+    form->addRow(kind == "slice" || kind == "iso" || kind == "trace" ? uiText(u"体区域") : kind == "isoline" ? uiText(u"物面 / 切面") : uiText(u"区域 / 对象"), sources);
+    if (kind != "slice") form->addRow(kind == "stream" || kind == "trace" ? uiText(u"速度矢量") : kind == "isoline" || kind == "iso" ? uiText(u"等值标量") : uiText(u"着色字段"), fields);
+    else fields->hide();
     const bool integration = kind == "stream" || kind == "trace";
     auto *u = new QComboBox(dialog); auto *v = new QComboBox(dialog); auto *w = new QComboBox(dialog);
     u->setObjectName(QStringLiteral("postProcessVectorU")); v->setObjectName(QStringLiteral("postProcessVectorV")); w->setObjectName(QStringLiteral("postProcessVectorW"));
@@ -1138,15 +1156,14 @@ void PostProcessWorkbenchWindow::openNewFeatureDialog(const QString &kind) {
         buttons->button(QDialogButtonBox::Ok)->setEnabled(valid);
         hint->setText(sources->currentIndex() < 0 ? uiText(u"没有符合要求的数据源，请先导入或选择示例数据。")
                      : manual ? (distinct ? uiText(u"请确认三个分量属于同一数据位置；当前仅保存界面草稿。") : uiText(u"请选择三个不同的分量。"))
-                     : !valid ? uiText(u"所选数据源缺少此功能所需的字段，请选择其他数据源。") : uiText(u"先选择来源文件 / 数据集，再选择区域或已有对象及其可用字段。未读取的文件不能用于分析。"));
+                     : !valid ? uiText(u"所选数据源缺少此功能所需的字段，请选择其他数据源。") : uiText(u"请确认输入区域及可用字段；未读取的文件不能用于分析。"));
     };
     const auto updateFields = [sources, fields, u, v, w, kind, integration, validate](int index) {
         const QSignalBlocker blockFields(fields), blockU(u), blockV(v), blockW(w);
         fields->clear(); u->clear(); v->clear(); w->clear();
         const QVariantMap source = sources->itemData(index).toMap();
-        if (kind == "slice") fields->addItem(uiText(u"仅切片网格"), QString());
+        if (kind == "slice") { fields->addItem(uiText(u"仅切片网格"), QString()); validate(); return; }
         QStringList available = source.value(integration ? "vectors" : "scalars").toStringList();
-        if (kind == "contour") available.append(source.value("vectors").toStringList());
         for (const QString &name : available) fields->addItem(name, name);
         const QStringList scalars = source.value("scalars").toStringList();
         if (integration && scalars.size() >= 3) fields->addItem(uiText(u"手动组合 U / V / W"), QStringLiteral("__components__"));
