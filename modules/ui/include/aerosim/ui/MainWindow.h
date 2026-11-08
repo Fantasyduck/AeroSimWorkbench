@@ -182,6 +182,7 @@ private:
     bool syncingRibbonTree_ = false;
     bool meshWorkspaceActive_ = false;
     bool propertyDockVisibleBeforeMesh_ = true;
+    int projectDockWidth_ = 260;
     bool meshOutputInitialCollapseApplied_ = false;
     QHash<QString, QVariantMap> drafts_;
     QHash<QString, QVector<QPair<QString, QString>>> taskLogEntries_;

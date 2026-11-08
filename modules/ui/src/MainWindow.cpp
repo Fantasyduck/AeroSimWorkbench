@@ -668,7 +668,7 @@ void MainWindow::createWorkspace()
     singleParametersSummary_->setObjectName(QStringLiteral("singleParametersSummary"));
     singleParametersSummary_->setWordWrap(true);
     singleLayout->addWidget(singleParametersSummary_);
-    auto *editSingleParameters = new QPushButton(uiText(u"\u7f16\u8f91\u5355\u6b21\u53c2\u6570"), singleCalculationPage_);
+    auto *editSingleParameters = new QPushButton(uiText(u"\u7f16\u8f91\u672c\u6b21\u53c2\u6570"), singleCalculationPage_);
     editSingleParameters->setObjectName(QStringLiteral("editSingleParameters"));
     connect(editSingleParameters, &QPushButton::clicked, this, [this] {
         QString caseId = singleCaseCombo_->currentText();
@@ -690,7 +690,7 @@ void MainWindow::createWorkspace()
         applyStateToSingleCalculation(id);
     });
     applyStateToSingleCalculation(singleCaseCombo_->currentText());
-    auto *singleHint = new QLabel(uiText(u"\u70b9\u51fb\u63d0\u4ea4\u540e\uff0c\u754c\u9762\u4f1a\u4e3a\u672c\u6b21\u8f93\u5165\u751f\u6210 snapshot ID\uff0c\u5e76\u8c03\u7528 WorkflowService\u3002"), singleCalculationPage_);
+    auto *singleHint = new QLabel(uiText(u"\u9009\u62e9\u5de5\u51b5\u540e\u4f1a\u8f7d\u5165\u5de5\u51b5\u53c2\u6570\uff1b\u8fd9\u91cc\u4fee\u6539\u4ec5\u4f5c\u7528\u4e8e\u672c\u6b21\u4efb\u52a1\uff0c\u4e0d\u4f1a\u6539\u52a8\u5de5\u51b5\u7ba1\u7406\u4e2d\u7684\u5de5\u51b5\u3002\u8981\u4fee\u6539\u5de5\u51b5\u672c\u8eab\u8bf7\u56de\u5230\u5de5\u51b5\u7ba1\u7406\u3002\u70b9\u51fb\u63d0\u4ea4\u540e\u4f1a\u751f\u6210 snapshot ID\u3002"), singleCalculationPage_);
     singleHint->setWordWrap(true); singleLayout->addWidget(singleHint);
     auto *singleSubmit = new QPushButton(uiText(u"\u751f\u6210\u5e76\u63d0\u4ea4\u5355\u6b21\u4efb\u52a1"), singleCalculationPage_);
     singleSubmit->setObjectName(QStringLiteral("submitSingleCalculation"));
@@ -703,7 +703,7 @@ void MainWindow::createWorkspace()
 
     batchCalculationPage_ = createWorkspacePage(
         QStringLiteral("batchCalculationPage"), uiText(u"\u6279\u91cf\u8ba1\u7b97"),
-        uiText(u"\u5148\u7528 + \u6dfb\u52a0\u591a\u7ec4\u5de5\u51b5\u53c2\u6570\uff0c\u518d\u63d0\u4ea4\u6279\u5904\u7406\u8ba1\u5212\u3002\u5f53\u524d\u5b9e\u73b0\u662f UI/Mock \u6d41\u7a0b\uff0c\u4e0d\u58f0\u79f0\u5df2\u6709\u6b63\u5f0f BatchRun \u6301\u4e45\u5316\u3002"));
+        uiText(u"\u5148\u7528 + \u6dfb\u52a0\u591a\u7ec4\u5de5\u51b5\u53c2\u6570\uff0c\u518d\u63d0\u4ea4\u4e00\u6b21\u6279\u5904\u7406\u4efb\u52a1\u3002\u9009\u62e9\u5de5\u51b5\u540e\u4fee\u6539\u7684\u6570\u503c\u53ea\u4f5c\u7528\u4e8e\u8be5\u6279\u6b21\u7684\u5b50\u4efb\u52a1\uff0c\u4e0d\u4f1a\u6539\u52a8\u5de5\u51b5\u7ba1\u7406\u3002\u5f53\u524d\u5b9e\u73b0\u662f UI/Mock \u6d41\u7a0b\u3002"));
     auto *batchCalculationLayout = qobject_cast<QVBoxLayout *>(batchCalculationPage_->layout());
     batchCalculationTable_ = new QTableWidget(0, 6, batchCalculationPage_);
     batchCalculationTable_->setObjectName(QStringLiteral("batchCalculationTable"));
@@ -1324,11 +1324,11 @@ void MainWindow::setMeshWorkspaceActive(bool active)
         return;
     }
     if (active) {
+        if (projectDock_) projectDockWidth_ = qMax(220, projectDock_->width());
         propertyDockVisibleBeforeMesh_ = propertyDock_ && propertyDock_->isVisible();
         meshWorkspaceActive_ = true;
         if (propertyDock_) propertyDock_->hide();
-        if (!meshOutputInitialCollapseApplied_)
-            resizeDocks({projectDock_}, {260}, Qt::Horizontal);
+        resizeDocks({projectDock_}, {projectDockWidth_}, Qt::Horizontal);
         // Collapse the global output once for the initial mesh layout. Later
         // navigation must preserve the user's explicit expand/collapse choice.
         if (!meshOutputInitialCollapseApplied_) {
@@ -1336,9 +1336,12 @@ void MainWindow::setMeshWorkspaceActive(bool active)
             meshOutputInitialCollapseApplied_ = true;
         }
     } else {
+        if (projectDock_) projectDockWidth_ = qMax(220, projectDock_->width());
         meshWorkspaceActive_ = false;
         if (propertyDock_ && propertyDockVisibleBeforeMesh_) {
             propertyDock_->show();
+            resizeDocks({projectDock_, propertyDock_},
+                        {projectDockWidth_, qMax(300, propertyDock_->width())}, Qt::Horizontal);
         }
     }
 }
@@ -1556,6 +1559,7 @@ void MainWindow::restoreLayout()
     if (meshWorkspaceActive_) {
         propertyDock_->hide();
         resizeDocks({projectDock_}, {260}, Qt::Horizontal);
+        projectDockWidth_ = projectDock_->width();
     }
     setOutputCollapsed(true);
     if (status_) statusBar()->showMessage(uiText(u"\u5df2\u6062\u590d\u9ed8\u8ba4\u754c\u9762\u5e03\u5c40\uff1b\u5df2\u4fdd\u5b58\u7684\u7528\u6237\u5e03\u5c40\u672a\u5220\u9664"), 4000);
