@@ -1,4 +1,12 @@
 #include "aerosim/ui/MainWindow.h"
+#include "aerosim/ui/GoverningEquationsPanel.h"
+#include "aerosim/ui/BoundaryConditionsPanel.h"
+#include "aerosim/ui/MeshMotionPanel.h"
+#include "aerosim/ui/ReferenceValuesPanel.h"
+#include "aerosim/ui/CalculationControlPanel.h"
+#include "aerosim/ui/SolutionMethodPanel.h"
+#include "aerosim/ui/OutputControlPanel.h"
+#include "aerosim/ui/InitializationPanel.h"
 #include "aerosim/ui/MeshManagementPage.h"
 
 #include <SARibbonBar.h>
@@ -337,8 +345,8 @@ void MainWindow::createRibbon()
         {"transform", uiText(u"\u7f51\u683c\u8fd0\u52a8"), true, "parameter:mesh-motion"}});
     addGroup(parameters, "solverSettingsGroup", uiText(u"\u6c42\u89e3\u914d\u7f6e"), {
         {"settings", uiText(u"\u6c42\u89e3\u65b9\u6cd5"), true, "parameter:solution-method"},
-        {"atmosphere", uiText(u"\u53c2\u8003\u91cf"), false, "parameter:reference-values"},
-        {"output", uiText(u"\u8f93\u51fa\u63a7\u5236"), false, "parameter:output-control"},
+        {"atmosphere", uiText(u"\u53c2\u8003\u91cf"), true, "parameter:reference-values"},
+        {"output", uiText(u"\u8f93\u51fa\u63a7\u5236"), true, "parameter:output-control"},
         {"initialize", uiText(u"\u521d\u59cb\u5316"), true, "parameter:initialization"}});
 
     auto *calculation = ribbonBar()->addCategoryPage(uiText(u"\u8ba1\u7b97"));
@@ -477,6 +485,47 @@ void MainWindow::applyWindowTheme(const QString &requestedId)
         "QPushButton { background: %1; color: %3; border: 1px solid %4; padding: 6px 12px; }"
         "QPushButton:hover { background: %5; }").arg(bg, base, text, border, selected)
         + wordChrome);
+    // Embedded parameter pages share the active theme, including the scroll
+    // viewport. Child panels must not override these colors independently.
+    setStyleSheet(styleSheet() + QStringLiteral(
+        "QWidget[parameterEditor=\"true\"], QWidget[parameterSurface=\"true\"], QWidget[parameterPanel=\"true\"] { background: %1; color: %3; }"
+        "QWidget[parameterEditor=\"true\"] QLabel { background: transparent; color: %3; font-weight: normal; }"
+        "QWidget[parameterEditor=\"true\"] QLabel[parameterHint=\"true\"] { color: %6; }"
+        "QWidget[parameterEditor=\"true\"] QLabel#parameterHeading { font-size: 18px; font-weight: 600; }"
+        "QWidget[parameterEditor=\"true\"] QScrollArea { background: %1; border: 0; }"
+        "QWidget[parameterEditor=\"true\"] QScrollBar:vertical { background: %1; width: 10px; margin: 0; }"
+        "QWidget[parameterEditor=\"true\"] QScrollBar::handle:vertical { background: %4; min-height: 28px; border-radius: 4px; }"
+        "QWidget[parameterEditor=\"true\"] QScrollBar::add-line:vertical, QWidget[parameterEditor=\"true\"] QScrollBar::sub-line:vertical { height: 0; }"
+        "QWidget[parameterEditor=\"true\"] QScrollBar::add-page:vertical, QWidget[parameterEditor=\"true\"] QScrollBar::sub-page:vertical { background: %1; }"
+        "QWidget[parameterEditor=\"true\"] QGroupBox { background: %2; color: %3; border: 1px solid %4; border-radius: 6px; margin-top: 12px; padding: 20px 16px 16px; font-weight: 600; }"
+        "QWidget[parameterEditor=\"true\"] QGroupBox::title { subcontrol-origin: margin; left: 16px; padding: 0 5px; color: %3; }"
+        "QWidget[parameterEditor=\"true\"] QRadioButton, QWidget[parameterEditor=\"true\"] QCheckBox { background: transparent; color: %3; spacing: 8px; min-height: 26px; font-weight: normal; }"
+        "QWidget[parameterEditor=\"true\"] QLineEdit, QWidget[parameterEditor=\"true\"] QComboBox, QWidget[parameterEditor=\"true\"] QAbstractSpinBox { background: %2; color: %3; border: 1px solid %4; border-radius: 4px; min-height: 28px; padding: 4px 8px; font-weight: normal; selection-background-color: %5; }"
+        "QWidget[parameterEditor=\"true\"] QLineEdit:focus, QWidget[parameterEditor=\"true\"] QComboBox:focus, QWidget[parameterEditor=\"true\"] QAbstractSpinBox:focus { border-color: #638fc6; }"
+        "QWidget[parameterEditor=\"true\"] QLineEdit:disabled, QWidget[parameterEditor=\"true\"] QComboBox:disabled, QWidget[parameterEditor=\"true\"] QAbstractSpinBox:disabled { background: %1; color: %6; }"
+        "QWidget[parameterEditor=\"true\"] QTreeWidget, QWidget[parameterEditor=\"true\"] QTableWidget { background: %2; alternate-background-color: %1; color: %3; border: 1px solid %4; border-radius: 5px; }"
+        "QWidget[parameterEditor=\"true\"] QTreeWidget::item { padding: 7px 8px; }"
+        "QWidget[parameterEditor=\"true\"] QHeaderView::section { background: %1; color: %3; padding: 8px; border: 0; border-bottom: 1px solid %4; }"
+        "QWidget[parameterEditor=\"true\"] QPushButton { border-radius: 4px; }"
+        "QWidget[parameterEditor=\"true\"] QPushButton#applyBoundary { background: #2563b6; border-color: #2563b6; color: white; padding: 7px 24px; }"
+        "QWidget[parameterEditor=\"true\"] QPushButton#applyBoundary:disabled { background: %1; color: %6; border-color: %4; }")
+        .arg(bg, base, text, border, selected, QStringLiteral("#61748a")));
+    setStyleSheet(styleSheet() + QStringLiteral(
+        "QWidget#parameterEditor_control-equations QGroupBox { padding: 16px 18px 14px; }"
+        "QWidget#parameterEditor_reference-values QGroupBox { padding: 16px 18px 14px; }"
+        "QWidget#parameterEditor_calculation-control QGroupBox { padding: 16px 18px 14px; }"
+        "QWidget#parameterEditor_solution-method QGroupBox { padding: 16px 18px 14px; }"
+        "QWidget#parameterEditor_solution-method QAbstractSpinBox, QWidget#parameterEditor_solution-method QComboBox { min-height: 22px; max-height: 22px; padding: 2px 6px; }"
+        "QWidget#parameterEditor_output-control QGroupBox { padding: 16px 18px 14px; }"
+        "QWidget#parameterEditor_output-control QAbstractSpinBox { min-height: 22px; max-height: 22px; padding: 2px 6px; }"
+        "QWidget#parameterEditor_initialization QGroupBox { padding: 16px 18px 14px; }"
+        "QWidget#parameterEditor_initialization QAbstractSpinBox, QWidget#parameterEditor_initialization QComboBox { min-height: 22px; max-height: 22px; padding: 2px 6px; }"
+        "QWidget#parameterEditor_boundary-conditions QGroupBox { padding: 16px 18px 14px; }"
+        "QWidget#parameterEditor_boundary-conditions QAbstractSpinBox, QWidget#parameterEditor_boundary-conditions QComboBox, QWidget#parameterEditor_boundary-conditions QLineEdit { min-height: 22px; max-height: 22px; padding: 2px 6px; }"
+        "QWidget#parameterEditor_calculation-control QAbstractSpinBox, QWidget#parameterEditor_calculation-control QComboBox { min-height: 22px; max-height: 22px; padding: 2px 6px; }"
+        "QWidget#parameterEditor_reference-values QAbstractSpinBox, QWidget#parameterEditor_reference-values QComboBox { min-height: 22px; max-height: 22px; padding: 2px 6px; }"
+        "QWidget#parameterEditor_control-equations QAbstractSpinBox { min-height: 22px; max-height: 22px; padding: 2px 6px; }"
+        "QWidget#parameterEditor_control-equations QRadioButton, QWidget#parameterEditor_control-equations QCheckBox { min-height: 28px; }"));
     const QString editorStyle = QStringLiteral(
         "QPlainTextEdit { background: %1; color: %2; border: 1px solid %3; }")
         .arg(base, text, border);
@@ -861,7 +910,7 @@ void MainWindow::createWorkspace()
         {"control-equations", u"\u63a7\u5236\u65b9\u7a0b"}, {"boundary-conditions", u"\u8fb9\u754c\u6761\u4ef6"},
         {"mesh-motion", u"\u7f51\u683c\u8fd0\u52a8"}, {"solution-method", u"\u6c42\u89e3\u65b9\u6cd5"},
         {"reference-values", u"\u53c2\u8003\u91cf"}, {"output-control", u"\u8f93\u51fa\u63a7\u5236"},
-        {"initialization", u"\u521d\u59cb\u5316"}
+        {"initialization", u"\u521d\u59cb\u5316"}, {"calculation-control", u"\u8ba1\u7b97\u63a7\u5236"}
     };
     for (const auto &definition : parameterNodes) {
         addNavigationItem(parameterModule,
@@ -1305,6 +1354,21 @@ void MainWindow::showWorkspacePage(const QString &pageId)
         const QString moduleId = workspacePageModules_.value(pageId);
         if (!moduleId.isEmpty()) moduleLastPages_.insert(moduleId, pageId);
         setMeshWorkspaceActive(target == viewportPage_);
+        // Embedded parameter editors fill the central area, so hide the shared
+        // property dock while editing and keep the workspace tree at a stable
+        // width. Leaving the parameter pages restores main's dock state.
+        if (pageId.startsWith(QStringLiteral("parameter-"))) {
+            if (!parameterDockHidden_) {
+                propertyDockVisibleBeforeParameter_ = propertyDock_ && propertyDock_->isVisible();
+                parameterDockHidden_ = true;
+            }
+            propertyDock_->hide();
+            resizeDocks({projectDock_}, {260}, Qt::Horizontal);
+        } else if (parameterDockHidden_) {
+            parameterDockHidden_ = false;
+            if (propertyDockVisibleBeforeParameter_ && !meshWorkspaceActive_)
+                propertyDock_->show();
+        }
     }
 }
 
@@ -1353,24 +1417,34 @@ void MainWindow::setMeshWorkspaceActive(bool active)
 
 void MainWindow::showParameterDialog(const QString &pageId, const QString &title)
 {
+    const QString draftKey = pageId == "control-equations" ? QStringLiteral("physics")
+        : pageId == "boundary-conditions" ? QStringLiteral("boundary")
+        : pageId == "mesh-motion" ? QStringLiteral("motion") : pageId;
     selectPage(QStringLiteral("parameter-dialog|") + pageId);
     if (parameterWorkspaceTitle_)
         parameterWorkspaceTitle_->setText(title + uiText(u" \u00b7 \u53c2\u6570\u8bbe\u7f6e\uff08Mock\uff09"));
     showWorkspacePage(QStringLiteral("parameters"));
-    const QString objectName = QStringLiteral("parameterDialog_") + pageId;
-    if (auto *existing = findChild<QDialog *>(objectName)) {
-        existing->show();
-        existing->raise();
-        existing->activateWindow();
+    const QString workspaceId = QStringLiteral("parameter-") + pageId;
+    if (workspacePages_.contains(workspaceId)) {
+        if (pageId == "solution-method") {
+            auto *panel = workspacePages_.value(workspaceId)->findChild<SolutionMethodPanel *>();
+            if (panel) panel->setUnsteady(drafts_.value("physics").value("calculationType", "steady") == "unsteady");
+        }
+        showWorkspacePage(workspaceId);
         return;
     }
-    auto *dialog = new QDialog(this);
-    dialog->setObjectName(objectName);
-    dialog->setAttribute(Qt::WA_DeleteOnClose);
-    dialog->setWindowTitle(title + uiText(u" \u00b7 \u53c2\u6570\u8bbe\u7f6e"));
-    dialog->resize(560, 430);
+    auto *dialog = new QWidget(workspaceStack_);
+    dialog->setObjectName(QStringLiteral("parameterEditor_") + pageId);
+    dialog->setProperty("parameterEditor", true);
+    dialog->setAttribute(Qt::WA_StyledBackground, true);
+    workspaceStack_->addWidget(dialog);
+    workspacePages_.insert(workspaceId, dialog);
+    workspacePageModules_.insert(workspaceId, QStringLiteral("module-parameters"));
     auto *layout = new QVBoxLayout(dialog);
+    layout->setContentsMargins(24, 20, 24, 20);
+    layout->setSpacing(12);
     auto *heading = new QLabel(title, dialog);
+    heading->setObjectName(QStringLiteral("parameterHeading"));
     QFont headingFont = heading->font();
     headingFont.setPointSize(headingFont.pointSize() + 2);
     headingFont.setBold(true);
@@ -1378,11 +1452,21 @@ void MainWindow::showParameterDialog(const QString &pageId, const QString &title
     layout->addWidget(heading);
     auto *note = new QLabel(uiText(u"\u524d\u7aef\u914d\u7f6e\u5360\u4f4d\uff1a\u5f53\u524d\u4e0d\u6267\u884c\u4e1a\u52a1\u6821\u9a8c\u3001\u6301\u4e45\u5316\u6216\u6c42\u89e3\u5668\u66f4\u65b0\u3002"), dialog);
     note->setWordWrap(true);
+    note->setProperty("parameterHint", true);
     layout->addWidget(note);
     auto *scroll = new QScrollArea(dialog);
+    scroll->setObjectName(QStringLiteral("parameterScroll"));
+    scroll->setFrameShape(QFrame::NoFrame);
     scroll->setWidgetResizable(true);
+    scroll->viewport()->setProperty("parameterSurface", true);
+    scroll->viewport()->setAttribute(Qt::WA_StyledBackground, true);
     auto *content = new QWidget(scroll);
+    content->setObjectName(QStringLiteral("parameterContent"));
+    content->setProperty("parameterSurface", true);
+    content->setAttribute(Qt::WA_StyledBackground, true);
     auto *contentLayout = new QVBoxLayout(content);
+    contentLayout->setContentsMargins(0, 0, 0, 0);
+    contentLayout->setSpacing(16);
     auto *group = new QGroupBox(title + uiText(u"\u9009\u9879"), content);
     auto *form = new QFormLayout(group);
     const auto addChoice = [form, group](const QString &label, const QStringList &choices) {
@@ -1398,44 +1482,92 @@ void MainWindow::showParameterDialog(const QString &pageId, const QString &title
         editor->setSuffix(suffix);
         form->addRow(label, editor);
     };
+    const auto bindPanel = [contentLayout](QWidget *panel) {
+        contentLayout->addWidget(panel);
+    };
     if (pageId == QStringLiteral("control-equations")) {
-        addChoice(uiText(u"\u65b9\u7a0b\u7c7b\u578b"), {uiText(u"\u53ef\u538b\u7f29 Navier-Stokes"), uiText(u"Euler\uff08\u5360\u4f4d\uff09")});
-        addChoice(uiText(u"\u7269\u7406\u6a21\u578b"), {uiText(u"\u5c42\u6d41"), uiText(u"\u6e4d\u6d41\uff08\u5360\u4f4d\uff09")});
+        auto *panel = new GoverningEquationsPanel(drafts_.value(draftKey), content);
+        connect(panel, &GoverningEquationsPanel::draftChanged, this, [this, draftKey](const QVariantMap &draft) {
+            drafts_[draftKey] = draft; emit parameterDraftChanged(draftKey, draft);
+        });
+        bindPanel(panel);
     } else if (pageId == QStringLiteral("boundary-conditions")) {
-        addChoice(uiText(u"\u8fb9\u754c\u7c7b\u578b"), {uiText(u"\u538b\u529b\u8fdc\u573a"), uiText(u"\u58c1\u9762"), uiText(u"\u5165\u53e3 / \u51fa\u53e3")});
-        addValue(uiText(u"\u538b\u529b"), 101325.0, QStringLiteral(" Pa"));
+        auto *panel = new BoundaryConditionsPanel(drafts_.value(draftKey), content);
+        connect(panel, &BoundaryConditionsPanel::draftChanged, this, [this, draftKey](const QVariantMap &draft) {
+            drafts_[draftKey] = draft; emit parameterDraftChanged(draftKey, draft);
+        });
+        bindPanel(panel);
     } else if (pageId == QStringLiteral("mesh-motion")) {
-        addChoice(uiText(u"\u8fd0\u52a8\u6a21\u5f0f"), {uiText(u"\u56fa\u5b9a\u7f51\u683c"), uiText(u"\u5f3a\u8feb\u8fd0\u52a8"), uiText(u"\u516d\u81ea\u7531\u5ea6\uff08\u5360\u4f4d\uff09")});
-        addValue(uiText(u"\u65f6\u95f4\u6b65\u957f"), 0.001, QStringLiteral(" s"));
+        auto *panel = new MeshMotionPanel(drafts_.value(draftKey), content);
+        connect(panel, &MeshMotionPanel::draftChanged, this, [this, draftKey](const QVariantMap &draft) {
+            drafts_[draftKey] = draft; emit parameterDraftChanged(draftKey, draft);
+        });
+        bindPanel(panel);
+    } else if (pageId == QStringLiteral("calculation-control")) {
+        auto *panel = new CalculationControlPanel(drafts_.value(draftKey), content);
+        connect(panel, &CalculationControlPanel::draftChanged, this, [this, draftKey](const QVariantMap &draft) {
+            drafts_[draftKey] = draft; emit parameterDraftChanged(draftKey, draft);
+        });
+        bindPanel(panel);
     } else if (pageId == QStringLiteral("solution-method")) {
-        addChoice(uiText(u"\u7a7a\u95f4\u79bb\u6563"), {uiText(u"\u4e8c\u9636\u8fce\u98ce"), uiText(u"\u4e2d\u5fc3\u683c\u5f0f\uff08\u5360\u4f4d\uff09")});
-        addChoice(uiText(u"\u65f6\u95f4\u79bb\u6563"), {uiText(u"\u9690\u5f0f"), uiText(u"\u663e\u5f0f")});
-        addValue(uiText(u"\u6700\u5927\u8fed\u4ee3\u6b65"), 10000, {});
+        auto *panel = new SolutionMethodPanel(drafts_.value(draftKey), content);
+        panel->setUnsteady(drafts_.value("physics").value("calculationType", "steady") == "unsteady");
+        connect(panel, &SolutionMethodPanel::draftChanged, this, [this, draftKey](const QVariantMap &draft) {
+            drafts_[draftKey] = draft; emit parameterDraftChanged(draftKey, draft);
+        });
+        connect(this, &MainWindow::parameterDraftChanged, panel, [panel](const QString &key, const QVariantMap &draft) {
+            if (key == "physics") panel->setUnsteady(draft.value("calculationType", "steady") == "unsteady");
+        });
+        bindPanel(panel);
     } else if (pageId == QStringLiteral("reference-values")) {
-        addValue(uiText(u"\u53c2\u8003\u957f\u5ea6"), 1.0, QStringLiteral(" m"));
-        addValue(uiText(u"\u53c2\u8003\u9762\u79ef"), 1.0, QStringLiteral(" m\u00b2"));
+        auto *panel = new ReferenceValuesPanel(drafts_.value(draftKey), content);
+        connect(panel, &ReferenceValuesPanel::draftChanged, this, [this, draftKey](const QVariantMap &draft) {
+            drafts_[draftKey] = draft; emit parameterDraftChanged(draftKey, draft);
+        });
+        bindPanel(panel);
     } else if (pageId == QStringLiteral("output-control")) {
-        addValue(uiText(u"\u6587\u4ef6\u8f93\u51fa\u95f4\u9694"), 100, {});
-        addChoice(uiText(u"\u8f93\u51fa\u7cbe\u5ea6"), {uiText(u"\u5355\u7cbe\u5ea6"), uiText(u"\u53cc\u7cbe\u5ea6")});
+        auto *panel = new OutputControlPanel(drafts_.value(draftKey), content);
+        connect(panel, &OutputControlPanel::draftChanged, this, [this, draftKey](const QVariantMap &draft) {
+            drafts_[draftKey] = draft; emit parameterDraftChanged(draftKey, draft);
+        });
+        bindPanel(panel);
+    } else if (pageId == "initialization") {
+        auto *panel = new InitializationPanel(drafts_.value(draftKey), content);
+        panel->setSources(drafts_.value("boundary"), drafts_.value("reference-values"));
+        connect(panel, &InitializationPanel::draftChanged, this, [this, draftKey](const QVariantMap &draft) {
+            drafts_[draftKey] = draft; emit parameterDraftChanged(draftKey, draft);
+        });
+        connect(this, &MainWindow::parameterDraftChanged, panel, [this, panel](const QString &key, const QVariantMap &) {
+            if (key == "boundary" || key == "reference-values")
+                panel->setSources(drafts_.value("boundary"), drafts_.value("reference-values"));
+        });
+        bindPanel(panel);
     } else {
         addChoice(uiText(u"\u521d\u59cb\u5316\u65b9\u5f0f"), {uiText(u"\u81ea\u7531\u6d41\u521d\u59cb\u5316"), uiText(u"\u4ece\u7ed3\u679c\u6062\u590d\uff08\u5360\u4f4d\uff09")});
         addValue(uiText(u"\u521d\u59cb\u6e29\u5ea6"), 300, QStringLiteral(" K"));
     }
-    contentLayout->addWidget(group);
+    if (form->rowCount()) contentLayout->addWidget(group);
+    else delete group;
     contentLayout->addStretch();
     scroll->setWidget(content);
     layout->addWidget(scroll, 1);
-    auto *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Apply | QDialogButtonBox::Cancel, dialog);
-    buttons->setObjectName(QStringLiteral("parameterDialogButtons"));
-    connect(buttons, &QDialogButtonBox::accepted, dialog, &QDialog::accept);
-    connect(buttons, &QDialogButtonBox::rejected, dialog, &QDialog::reject);
-    connect(buttons->button(QDialogButtonBox::Apply), &QPushButton::clicked, this, [this, title] {
-        appendLog(QStringLiteral("INFO"), QStringLiteral("UI"),
-                  uiText(u"Mock\uff1a%1 \u53c2\u6570\u5df2\u5e94\u7528\u5230\u5f53\u524d\u754c\u9762\u8349\u7a3f\uff08\u672a\u6301\u4e45\u5316\uff09").arg(title),
-                  QStringLiteral("current-project"));
+    auto *back = new QPushButton(uiText(u"\u8fd4\u56de\u4e09\u7ef4\u5de5\u4f5c\u533a"), dialog);
+    connect(back, &QPushButton::clicked, this, [this] { showWorkspacePage(QStringLiteral("viewport")); });
+    auto *footer = new QHBoxLayout;
+    footer->addWidget(back);
+    footer->addStretch();
+    auto *reset = new QPushButton(uiText(u"\u6e05\u9664\u672c\u9875\u8349\u7a3f"), dialog);
+    reset->setObjectName(QStringLiteral("resetParameterDraft"));
+    connect(reset, &QPushButton::clicked, this, [this, pageId, draftKey, title, workspaceId, dialog] {
+        drafts_.remove(draftKey);
+        workspacePages_.remove(workspaceId);
+        workspaceStack_->removeWidget(dialog);
+        dialog->deleteLater();
+        showParameterDialog(pageId, title);
     });
-    layout->addWidget(buttons);
-    dialog->open();
+    footer->addWidget(reset);
+    layout->addLayout(footer);
+    showWorkspacePage(workspaceId);
 }
 
 void MainWindow::selectNavigationNode(QTreeWidget *tree, const QString &objectId)
@@ -1474,6 +1606,7 @@ void MainWindow::selectPage(const QString &pageId)
         {"state-extraction", uiText(u"\u72b6\u6001\u63d0\u53d6")}, {"single-calculation", uiText(u"\u5355\u6b21\u8ba1\u7b97")},
         {"batch-calculation", uiText(u"\u6279\u91cf\u8ba1\u7b97")}};
     const QHash<QString, QString> parameterTitles = {
+        {"calculation-control", uiText(u"\u8ba1\u7b97\u63a7\u5236")},
         {"control-equations", uiText(u"\u63a7\u5236\u65b9\u7a0b")}, {"boundary-conditions", uiText(u"\u8fb9\u754c\u6761\u4ef6")},
         {"mesh-motion", uiText(u"\u7f51\u683c\u8fd0\u52a8")}, {"solution-method", uiText(u"\u6c42\u89e3\u65b9\u6cd5")},
         {"reference-values", uiText(u"\u53c2\u8003\u91cf")}, {"output-control", uiText(u"\u8f93\u51fa\u63a7\u5236")},

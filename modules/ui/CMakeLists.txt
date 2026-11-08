@@ -22,6 +22,18 @@ add_library(aerosim_ui STATIC
     src/MainWindow.cpp include/aerosim/ui/MainWindow.h resources/RibbonIcons.qrc
     src/MeshManagementPage.cpp include/aerosim/ui/MeshManagementPage.h
     src/StartupLandingPage.cpp include/aerosim/ui/StartupLandingPage.h
+    src/GoverningEquationsPanel.cpp include/aerosim/ui/GoverningEquationsPanel.h
+    src/BoundaryConditionsPanel.cpp include/aerosim/ui/BoundaryConditionsPanel.h
+    src/FarfieldParametersPanel.cpp include/aerosim/ui/FarfieldParametersPanel.h
+    src/MeshMotionPanel.cpp include/aerosim/ui/MeshMotionPanel.h
+    src/ForcedMotionDialog.cpp include/aerosim/ui/ForcedMotionDialog.h
+    src/FixedAxisMotionDialog.cpp include/aerosim/ui/FixedAxisMotionDialog.h
+    src/SixDofMotionDialog.cpp include/aerosim/ui/SixDofMotionDialog.h
+    src/ReferenceValuesPanel.cpp include/aerosim/ui/ReferenceValuesPanel.h
+    src/CalculationControlPanel.cpp include/aerosim/ui/CalculationControlPanel.h
+    src/SolutionMethodPanel.cpp include/aerosim/ui/SolutionMethodPanel.h
+    src/OutputControlPanel.cpp include/aerosim/ui/OutputControlPanel.h
+    src/InitializationPanel.cpp include/aerosim/ui/InitializationPanel.h
     src/postprocess/PostProcessWorkbenchWindow.cpp
     include/aerosim/ui/postprocess/PostProcessWorkbenchWindow.h)
 set_target_properties(aerosim_ui PROPERTIES AUTORCC ON)

@@ -186,6 +186,10 @@ private:
     bool meshWorkspaceActive_ = false;
     bool propertyDockVisibleBeforeMesh_ = true;
     int projectDockWidth_ = 260;
+    // Embedded parameter editors hide the shared property dock; remember the
+    // previous visibility so main's non-mesh pages restore it afterwards.
+    bool parameterDockHidden_ = false;
+    bool propertyDockVisibleBeforeParameter_ = true;
     bool meshOutputInitialCollapseApplied_ = false;
     QHash<QString, QVariantMap> drafts_;
     QHash<QString, QVector<QPair<QString, QString>>> taskLogEntries_;

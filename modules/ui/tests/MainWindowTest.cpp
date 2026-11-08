@@ -21,6 +21,7 @@
 #include <QDoubleSpinBox>
 #include <QPlainTextEdit>
 #include <QPushButton>
+#include <QRadioButton>
 #include <QSlider>
 #include <QSplitter>
 #include <QStackedWidget>
@@ -105,7 +106,7 @@ int main(int argc, char **argv)
     auto *calculationNode = root->child(2);
     auto *intelligentDataNode = root->child(3);
     auto *postprocessNode = root->child(4);
-    if (!check(preprocessNode->childCount() == 2 && parameterNode->childCount() == 7
+    if (!check(preprocessNode->childCount() == 2 && parameterNode->childCount() == 8
                && calculationNode->childCount() == 2
                && intelligentDataNode->childCount() == 0 && postprocessNode->childCount() == 0,
                "Unified tree module hierarchy is incorrect")) return 54;
@@ -179,19 +180,20 @@ int main(int argc, char **argv)
                && workspace->currentWidget() != retainedPage
                && !workspace->currentWidget()->findChild<QWidget *>("viewportSlot"),
                "Parameter Ribbon did not switch the central module page")) return 34;
-    if (!check(parameterNode->childCount() == 7 && parameterNode->child(0)->childCount() == 0,
-               "Parameter tree must contain seven leaf pages")) return 41;
+    if (!check(parameterNode->childCount() == 8 && parameterNode->child(0)->childCount() == 0,
+               "Parameter tree must contain eight leaf pages")) return 41;
     projectTree->setCurrentItem(parameterNode->child(0));
     app.processEvents();
-    auto *parameterDialog = window.findChild<QDialog *>("parameterDialog_control-equations");
-    if (!check(parameterDialog && parameterDialog->isVisible()
-               && workspace->currentWidget()->objectName() == "parameterWorkspacePage"
+    auto *parameterEditor = window.findChild<QWidget *>("parameterEditor_control-equations");
+    if (!check(parameterEditor && !parameterEditor->isHidden()
+               && workspace->currentWidget()->objectName() == "parameterEditor_control-equations"
+               && !parameterEditor->isWindow()
+               && window.findChild<QRadioButton *>("calculationType_steady")
                && window.findChild<QLabel *>("parameterWorkspaceTitle")->text().contains(
                     text(u"\u63a7\u5236\u65b9\u7a0b"))
                && window.ribbonBar()->currentIndex() == window.ribbonBar()->categoryIndex(
                    window.findChild<SARibbonCategory *>("parametersCategory")),
-               "Parameter node did not open its dialog or reverse-sync Ribbon")) return 52;
-    parameterDialog->close();
+               "Parameter node did not embed its editor or reverse-sync Ribbon")) return 52;
     window.ribbonBar()->raiseCategory(window.findChild<SARibbonCategory *>("calculationCategory"));
     app.processEvents();
     if (!check(projectTree->currentItem() == calculationNode && calculationNode->isExpanded()
