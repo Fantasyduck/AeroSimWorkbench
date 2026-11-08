@@ -36,6 +36,7 @@ void MockTaskService::handleTaskCommand(const TaskCommand &command)
 
     TaskRecord record;
     record.taskId = taskId;
+    record.batchId = command.batchPlanId;
     record.attemptId = event.attemptId;
     record.caseId = command.caseId;
     record.inputSnapshot.snapshotId = command.inputSnapshotId;
