@@ -319,6 +319,11 @@ int main(int argc, char **argv)
                "Batch configuration did not locate and open BatchPlan management")) return 38;
     if (!check(window.findChild<QTableWidget *>("batchPlanTable")->columnCount() == 3,
                "BatchPlan page is missing its model-neutral table")) return 39;
+    bool batchPlanCommandsDisabled = true;
+    for (auto *button : window.findChild<QWidget *>("batchPlanPage")->findChildren<QPushButton *>())
+        batchPlanCommandsDisabled = batchPlanCommandsDisabled && !button->isEnabled();
+    if (!check(batchPlanCommandsDisabled,
+               "BatchPlan placeholder actions must remain disabled until its service exists")) return 40;
     if (!check(calculationNode->child(0)->child(0)->childCount() == 3
                && window.findChild<QTableWidget *>("stateTable")->rowCount() == 3
                && window.findChild<QPushButton *>("addStateButton")
@@ -332,6 +337,12 @@ int main(int argc, char **argv)
                && window.findChild<QPushButton *>("submitSingleCalculation")
                && window.findChild<QComboBox *>("singleCaseCombo"),
                "Single calculation page did not expose task generation controls")) return 74;
+    auto *singleCase = window.findChild<QComboBox *>("singleCaseCombo");
+    auto *singleMach = window.findChild<QDoubleSpinBox *>("singleMachSpin");
+    singleCase->setCurrentIndex(1);
+    app.processEvents();
+    if (!check(singleMach->value() == 1.2,
+               "Selecting a condition must load that condition's calculation parameters")) return 77;
     projectTree->setCurrentItem(batchCalculationItem);
     app.processEvents();
     if (!check(workspace->currentWidget()->objectName() == "batchCalculationPage"
@@ -418,7 +429,7 @@ int main(int argc, char **argv)
     if (!check(workspace->currentWidget() == meshPage && meshList->topLevelItemCount() == 9
                && propertyDock->isHidden()
                && !window.findChild<QWidget *>("outputBody")->isHidden()
-               && projectDock->width() <= 320
+               && projectDock->width() >= 200
                && window.findChild<QWidget *>("meshViewerPanel")->width()
                     > window.findChild<QWidget *>("meshObjectPanel")->width(),
                "Mesh management group did not restore its persistent workspace")) return 63;

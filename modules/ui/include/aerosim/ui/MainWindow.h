@@ -76,6 +76,7 @@ private:
     void addBatchCase();
     void removeBatchCase();
     void submitBatchCalculation();
+    void applyStateToSingleCalculation(const QString &stateId);
     bool editCalculationParameters(QString &caseId, double &mach, double &aoa,
                                    double &temperature, int &mpi);
     void addState();

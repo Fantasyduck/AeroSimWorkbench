@@ -595,16 +595,14 @@ void MainWindow::createWorkspace()
     refreshStateModel();
 
     batchPlanPage_ = createWorkspacePage(QStringLiteral("batchPlanPage"), uiText(u"\u6279\u5904\u7406\u8ba1\u5212"),
-        uiText(u"BatchPlan \u53ea\u7ec4\u7ec7\u5de5\u51b5\u5f15\u7528\u4e0e\u6267\u884c\u987a\u5e8f\uff0c\u4e0d\u4ee3\u8868\u8ba1\u7b97\u5df2\u542f\u52a8\u3002\u793a\u4f8b\u5217\u4e0d\u4f5c\u4e3a\u6b63\u5f0f\u5de5\u51b5\u5b57\u6bb5\u7ea6\u5b9a\u3002"));
+        uiText(u"\u6279\u5904\u7406\u8ba1\u5212\u662f\u672a\u6765\u7528\u4e8e\u4fdd\u5b58\u548c\u590d\u7528\u6279\u91cf\u8ba1\u7b97\u6a21\u677f\u7684\u5165\u53e3\u3002\u5f53\u524d\u7248\u672c\u8bf7\u4f7f\u7528\u201c\u6279\u91cf\u8ba1\u7b97\u201d\u914d\u7f6e\u5e76\u63d0\u4ea4\u4e00\u6b21\u6027\u6279\u5904\u7406\u4efb\u52a1\uff1b\u672c\u9875\u4ec5\u4f5c\u8bf4\u660e\u548c\u53ea\u8bfb\u5360\u4f4d\u3002"));
     auto *batchLayout = qobject_cast<QVBoxLayout *>(batchPlanPage_->layout());
-    batchPlanTable_ = new QTableWidget(3, 3, batchPlanPage_);
+    batchPlanTable_ = new QTableWidget(1, 3, batchPlanPage_);
     batchPlanTable_->setObjectName(QStringLiteral("batchPlanTable"));
-    batchPlanTable_->setHorizontalHeaderLabels({uiText(u"\u5de5\u51b5"), uiText(u"\u53c2\u6570\u6458\u8981"), uiText(u"\u6821\u9a8c\u72b6\u6001")});
-    for (int row = 0; row < stateIds_.size(); ++row) {
-        batchPlanTable_->setItem(row, 0, new QTableWidgetItem(stateIds_.at(row)));
-        batchPlanTable_->setItem(row, 1, new QTableWidgetItem(uiText(u"\u7531\u5de5\u51b5\u6570\u636e\u6a21\u578b\u52a8\u6001\u751f\u6210")));
-        batchPlanTable_->setItem(row, 2, new QTableWidgetItem(row < 2 ? uiText(u"\u793a\u4f8b\uff1a\u5df2\u901a\u8fc7") : uiText(u"\u793a\u4f8b\uff1a\u5f85\u6821\u9a8c")));
-    }
+    batchPlanTable_->setHorizontalHeaderLabels({uiText(u"\u5f53\u524d\u72b6\u6001"), uiText(u"\u4f5c\u7528"), uiText(u"\u64cd\u4f5c\u8bf4\u660e")});
+    batchPlanTable_->setItem(0, 0, new QTableWidgetItem(uiText(u"\u672a\u521b\u5efa\u6b63\u5f0f BatchPlan")));
+    batchPlanTable_->setItem(0, 1, new QTableWidgetItem(uiText(u"\u4fdd\u5b58\u53ef\u91cd\u7528\u7684\u6279\u91cf\u6a21\u677f")));
+    batchPlanTable_->setItem(0, 2, new QTableWidgetItem(uiText(u"\u8bf7\u4ece\u201c\u6279\u91cf\u8ba1\u7b97\u201d\u914d\u7f6e\u548c\u63d0\u4ea4")));
     batchPlanTable_->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
     batchPlanTable_->setSelectionBehavior(QAbstractItemView::SelectRows);
     batchPlanTable_->setSelectionMode(QAbstractItemView::SingleSelection);
@@ -615,51 +613,16 @@ void MainWindow::createWorkspace()
     int batchCommandIndex = 0;
     for (const auto &label : batchCommandLabels) {
         auto *button = new QPushButton(label, batchPlanPage_);
-        button->setEnabled(true);
-        button->setToolTip(uiText(u"\u754c\u9762\u8349\u7a3f\uff1a\u64cd\u4f5c\u540e\u8fdb\u5165\u6279\u91cf\u8ba1\u7b97\u9875\u9762"));
-        if (batchCommandIndex == 0) {
-            connect(button, &QPushButton::clicked, this, [this] {
-                showWorkspacePage(QStringLiteral("batch-calculation"));
-                addBatchCase();
-            });
-        } else if (batchCommandIndex == 1) {
-            connect(button, &QPushButton::clicked, this, [this] {
-                showWorkspacePage(QStringLiteral("batch-calculation"));
-                removeBatchCase();
-            });
-        } else if (batchCommandIndex == 2 || batchCommandIndex == 3) {
-            connect(button, &QPushButton::clicked, this, [this, batchCommandIndex] {
-                showWorkspacePage(QStringLiteral("batch-calculation"));
-                if (!batchCalculationTable_ || batchCalculationTable_->currentRow() < 0) return;
-                const int row = batchCalculationTable_->currentRow();
-                const int target = batchCommandIndex == 2 ? row - 1 : row + 1;
-                if (target < 0 || target >= batchCalculationTable_->rowCount()) return;
-                for (int column = 0; column < batchCalculationTable_->columnCount(); ++column) {
-                    auto *source = batchCalculationTable_->takeItem(row, column);
-                    auto *destination = batchCalculationTable_->takeItem(target, column);
-                    batchCalculationTable_->setItem(row, column, destination);
-                    batchCalculationTable_->setItem(target, column, source);
-                }
-                batchCalculationTable_->selectRow(target);
-            });
-        } else {
-            connect(button, &QPushButton::clicked, this, [this] {
-                showWorkspacePage(QStringLiteral("batch-calculation"));
-                if (batchGenerationStatus_)
-                    batchGenerationStatus_->setText(uiText(u"\u5df2\u8fdb\u5165\u6279\u91cf\u8ba1\u7b97\u9875\u9762\uff0c\u53ef\u68c0\u67e5\u5de5\u51b5\u548c\u53c2\u6570\u3002"));
-            });
-        }
+        button->setEnabled(false);
+        button->setToolTip(uiText(u"\u6279\u5904\u7406\u8ba1\u5212\u670d\u52a1\u5c1a\u672a\u63a5\u5165\uff1b\u8bf7\u4f7f\u7528\u201c\u6279\u91cf\u8ba1\u7b97\u201d"));
         batchCommands->addWidget(button);
         ++batchCommandIndex;
     }
     batchCommands->addStretch();
     batchLayout->addLayout(batchCommands);
     auto *newPlan = new QPushButton(uiText(u"\u65b0\u5efa\u6279\u5904\u7406\u8ba1\u5212"), batchPlanPage_);
-    newPlan->setEnabled(true);
-    newPlan->setToolTip(uiText(u"\u6253\u5f00\u6279\u91cf\u8ba1\u7b97\u9875\u9762\u5e76\u7f16\u8f91\u8ba1\u5212"));
-    connect(newPlan, &QPushButton::clicked, this, [this] {
-        showWorkspacePage(QStringLiteral("batch-calculation"));
-    });
+    newPlan->setEnabled(false);
+    newPlan->setToolTip(uiText(u"\u6b63\u5f0f BatchPlan \u670d\u52a1\u5c1a\u672a\u63a5\u5165\uff1b\u8bf7\u4f7f\u7528\u201c\u6279\u91cf\u8ba1\u7b97\u201d"));
     batchLayout->addWidget(newPlan, 0, Qt::AlignLeft);
 
     // These two pages are the user-facing entry points for creating execution
@@ -697,13 +660,10 @@ void MainWindow::createWorkspace()
     singleForm->addRow(uiText(u"\u6e29\u5ea6"), singleTemperatureSpin_);
     singleForm->addRow(uiText(u"MPI \u8fdb\u7a0b\u6570"), singleMpiSpin_);
     singleForm->addRow(uiText(u"\u8f93\u51fa\u65b9\u5f0f"), singleOutputModeCombo_);
-    singleGroup->hide();
-    auto *singleOutputLayout = new QHBoxLayout;
-    singleOutputLayout->addWidget(new QLabel(uiText(u"\u8f93\u51fa\u65b9\u5f0f"), singleCalculationPage_));
-    singleOutputModeCombo_->setParent(singleCalculationPage_);
-    singleOutputLayout->addWidget(singleOutputModeCombo_);
-    singleOutputLayout->addStretch();
-    singleLayout->addLayout(singleOutputLayout);
+    // Keep the same condition data visible in the single-task form.  The
+    // selected state is the source of truth; the dialog remains available for
+    // a one-off run override.
+    singleGroup->show();
     singleParametersSummary_ = new QLabel(singleCalculationPage_);
     singleParametersSummary_->setObjectName(QStringLiteral("singleParametersSummary"));
     singleParametersSummary_->setWordWrap(true);
@@ -727,12 +687,9 @@ void MainWindow::createWorkspace()
     singleLayout->addWidget(editSingleParameters, 0, Qt::AlignLeft);
     singleParametersSummary_->setText(uiText(u"\u5f53\u524d\u5355\u6b21\u5de5\u51b5\uff1a%1\n\u9a6c\u8d6b\u6570 %2\uff0c\u653b\u89d2 %3\uff0c\u6e29\u5ea6 %4 K\uff0cMPI %5").arg(singleCaseCombo_->currentText()).arg(singleMachSpin_->value()).arg(singleAoASpin_->value()).arg(singleTemperatureSpin_->value()).arg(singleMpiSpin_->value()));
     connect(singleCaseCombo_, &QComboBox::currentTextChanged, this, [this](const QString &id) {
-        const auto draft = stateDrafts_.value(id);
-        singleMachSpin_->setValue(draft.mach);
-        singleAoASpin_->setValue(draft.angleOfAttack);
-        singleTemperatureSpin_->setValue(draft.temperature);
-        singleParametersSummary_->setText(uiText(u"\u5f53\u524d\u5355\u6b21\u5de5\u51b5\uff1a%1\n\u9a6c\u8d6b\u6570 %2\uff0c\u653b\u89d2 %3\uff0c\u6e29\u5ea6 %4 K\uff0cMPI %5").arg(id).arg(draft.mach).arg(draft.angleOfAttack).arg(draft.temperature).arg(singleMpiSpin_->value()));
+        applyStateToSingleCalculation(id);
     });
+    applyStateToSingleCalculation(singleCaseCombo_->currentText());
     auto *singleHint = new QLabel(uiText(u"\u70b9\u51fb\u63d0\u4ea4\u540e\uff0c\u754c\u9762\u4f1a\u4e3a\u672c\u6b21\u8f93\u5165\u751f\u6210 snapshot ID\uff0c\u5e76\u8c03\u7528 WorkflowService\u3002"), singleCalculationPage_);
     singleHint->setWordWrap(true); singleLayout->addWidget(singleHint);
     auto *singleSubmit = new QPushButton(uiText(u"\u751f\u6210\u5e76\u63d0\u4ea4\u5355\u6b21\u4efb\u52a1"), singleCalculationPage_);
@@ -917,10 +874,7 @@ void MainWindow::createWorkspace()
         addNavigationItem(statesNavigationItem_, id + uiText(u"\uff08Mock \u754c\u9762\u793a\u4f8b\uff09"), QStringLiteral("state"), id, QStringLiteral("state"));
     }
     auto *plans = addNavigationItem(startCalculation, uiText(u"\u6279\u5904\u7406\u8ba1\u5212"), QStringLiteral("batch-plans"), QStringLiteral("batch-plans"), QStringLiteral("batch-plans"));
-    for (int i = 1; i <= 2; ++i) {
-        const QString id = QStringLiteral("Plan_%1").arg(i, 3, 10, QLatin1Char('0'));
-        addNavigationItem(plans, id + uiText(u"\uff08Mock \u754c\u9762\u793a\u4f8b\uff09"), QStringLiteral("batch-plan"), id, QStringLiteral("batch-plan"));
-    }
+    plans->setToolTip(0, uiText(u"\u53ea\u8bfb\u9884\u7559\uff1a\u5f53\u524d\u8bf7\u4f7f\u7528\u6279\u91cf\u8ba1\u7b97\u76f4\u63a5\u7ec4\u7ec7\u5e76\u63d0\u4ea4\u4efb\u52a1"));
     addNavigationItem(startCalculation, uiText(u"\u5355\u6b21\u8ba1\u7b97"), QStringLiteral("single-calculation"), QStringLiteral("single-calculation"), QStringLiteral("feature"));
     addNavigationItem(startCalculation, uiText(u"\u6279\u91cf\u8ba1\u7b97"), QStringLiteral("batch-calculation"), QStringLiteral("batch-calculation"), QStringLiteral("feature"));
     auto *calculationMonitor = addNavigationItem(calculationModule, uiText(u"\u8ba1\u7b97\u76d1\u63a7"), QStringLiteral("task-monitor"), QStringLiteral("calculation-monitor"), QStringLiteral("group"));
@@ -1373,10 +1327,8 @@ void MainWindow::setMeshWorkspaceActive(bool active)
         propertyDockVisibleBeforeMesh_ = propertyDock_ && propertyDock_->isVisible();
         meshWorkspaceActive_ = true;
         if (propertyDock_) propertyDock_->hide();
-        resizeDocks({projectDock_}, {260}, Qt::Horizontal);
-        QTimer::singleShot(0, this, [this] {
-            if (meshWorkspaceActive_) resizeDocks({projectDock_}, {260}, Qt::Horizontal);
-        });
+        if (!meshOutputInitialCollapseApplied_)
+            resizeDocks({projectDock_}, {260}, Qt::Horizontal);
         // Collapse the global output once for the initial mesh layout. Later
         // navigation must preserve the user's explicit expand/collapse choice.
         if (!meshOutputInitialCollapseApplied_) {
@@ -1387,7 +1339,6 @@ void MainWindow::setMeshWorkspaceActive(bool active)
         meshWorkspaceActive_ = false;
         if (propertyDock_ && propertyDockVisibleBeforeMesh_) {
             propertyDock_->show();
-            resizeDocks({projectDock_, propertyDock_}, {250, 330}, Qt::Horizontal);
         }
     }
 }
@@ -1859,7 +1810,11 @@ void MainWindow::submitSingleCalculation()
     }
 
     const QString caseId = singleCaseCombo_->currentText();
-    const QString snapshotId = QStringLiteral("ui-%1-rev-1").arg(caseId);
+    const QString snapshotId = QStringLiteral("ui-%1-m%2-a%3-t%4-rev-1")
+        .arg(caseId)
+        .arg(singleMachSpin_->value(), 0, 'f', 3)
+        .arg(singleAoASpin_->value(), 0, 'f', 3)
+        .arg(singleTemperatureSpin_->value(), 0, 'f', 2);
     RunRequest request;
     request.scope.projectId = QStringLiteral("mock-project");
     request.scope.caseId = caseId;
@@ -1898,6 +1853,12 @@ bool MainWindow::editCalculationParameters(QString &caseId, double &mach, double
     form->addRow(uiText(u"\u653b\u89d2"), aoaEditor);
     form->addRow(uiText(u"\u6e29\u5ea6"), temperatureEditor);
     form->addRow(QStringLiteral("MPI"), mpiEditor);
+    connect(caseCombo, &QComboBox::currentTextChanged, &dialog, [this, machEditor, aoaEditor, temperatureEditor](const QString &id) {
+        const auto draft = stateDrafts_.value(id);
+        machEditor->setValue(draft.mach);
+        aoaEditor->setValue(draft.angleOfAttack);
+        temperatureEditor->setValue(draft.temperature);
+    });
     auto *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
     form->addRow(buttons);
     connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
@@ -1961,7 +1922,11 @@ void MainWindow::submitBatchCalculation()
         request.scope.caseId = batchCalculationTable_->item(row, 0)->text();
         request.batchPlanId = planId;
         request.batchPlanVersion = version;
-        request.inputSnapshot.snapshotId = QStringLiteral("%1-row-%2").arg(planId).arg(row + 1);
+        request.inputSnapshot.snapshotId = QStringLiteral("%1-row-%2-m%3-a%4-t%5")
+            .arg(planId).arg(row + 1)
+            .arg(batchCalculationTable_->item(row, 1)->text())
+            .arg(batchCalculationTable_->item(row, 2)->text())
+            .arg(batchCalculationTable_->item(row, 3)->text());
         request.inputSnapshot.scope = request.scope;
         request.inputSnapshot.revision = 1;
         const auto result = workflow_->requestRun(request);
@@ -1981,8 +1946,25 @@ void MainWindow::submitBatchCalculation()
 
 void MainWindow::refreshStateModel()
 {
-    for (const QString &id : stateIds_)
-        if (!stateDrafts_.contains(id)) stateDrafts_.insert(id, StateDraft());
+    for (int index = 0; index < stateIds_.size(); ++index) {
+        const QString &id = stateIds_.at(index);
+        if (stateDrafts_.contains(id)) continue;
+        StateDraft draft;
+        // Give the built-in examples distinct values so selecting a state
+        // visibly proves that the calculation form follows the state model.
+        if (index == 1) {
+            draft.mach = 1.2;
+            draft.angleOfAttack = 3.5;
+            draft.temperature = 300.0;
+            draft.altitude = 8000.0;
+        } else if (index == 2) {
+            draft.mach = 0.6;
+            draft.angleOfAttack = -1.0;
+            draft.temperature = 280.0;
+            draft.altitude = 2000.0;
+        }
+        stateDrafts_.insert(id, draft);
+    }
     if (stateTable_) {
         const QSignalBlocker blocker(stateTable_);
         stateTable_->setRowCount(stateIds_.size());
@@ -1993,15 +1975,6 @@ void MainWindow::refreshStateModel()
                 uiText(u"\u9a6c\u8d6b\u6570 %1\uff0c\u653b\u89d2 %2\uff0c\u6e29\u5ea6 %3 K\uff0c\u9ad8\u5ea6 %4 m")
                     .arg(draft.mach).arg(draft.angleOfAttack).arg(draft.temperature).arg(draft.altitude)));
             stateTable_->setItem(row, 2, new QTableWidgetItem(uiText(u"\u754c\u9762 Mock\uff1a\u5df2\u914d\u7f6e")));
-        }
-    }
-    if (batchPlanTable_) {
-        const QSignalBlocker blocker(batchPlanTable_);
-        batchPlanTable_->setRowCount(stateIds_.size());
-        for (int row = 0; row < stateIds_.size(); ++row) {
-            batchPlanTable_->setItem(row, 0, new QTableWidgetItem(stateIds_.at(row)));
-            batchPlanTable_->setItem(row, 1, new QTableWidgetItem(uiText(u"\u5de5\u51b5\u5df2\u914d\u7f6e\uff0c\u53ef\u52a0\u5165\u6279\u5904\u7406\u8ba1\u5212")));
-            batchPlanTable_->setItem(row, 2, new QTableWidgetItem(uiText(u"\u754c\u9762 Mock\uff1a\u5f85\u52a0\u5165\u8ba1\u5212")));
         }
     }
     if (statesNavigationItem_) {
@@ -2017,7 +1990,26 @@ void MainWindow::refreshStateModel()
         singleCaseCombo_->addItems(stateIds_);
         const int index = singleCaseCombo_->findText(current);
         singleCaseCombo_->setCurrentIndex(index >= 0 ? index : 0);
+        applyStateToSingleCalculation(singleCaseCombo_->currentText());
     }
+}
+
+void MainWindow::applyStateToSingleCalculation(const QString &stateId)
+{
+    if (!singleMachSpin_ || stateId.isEmpty()) return;
+    const auto draft = stateDrafts_.value(stateId);
+    {
+        const QSignalBlocker machBlocker(singleMachSpin_);
+        const QSignalBlocker aoaBlocker(singleAoASpin_);
+        const QSignalBlocker temperatureBlocker(singleTemperatureSpin_);
+        singleMachSpin_->setValue(draft.mach);
+        singleAoASpin_->setValue(draft.angleOfAttack);
+        singleTemperatureSpin_->setValue(draft.temperature);
+    }
+    if (singleParametersSummary_)
+        singleParametersSummary_->setText(uiText(u"\u5f53\u524d\u5355\u6b21\u5de5\u51b5\uff1a%1\n\u9a6c\u8d6b\u6570 %2\uff0c\u653b\u89d2 %3\uff0c\u6e29\u5ea6 %4 K\uff0c\u9ad8\u5ea6 %5 m\uff0cMPI %6")
+            .arg(stateId).arg(draft.mach).arg(draft.angleOfAttack)
+            .arg(draft.temperature).arg(draft.altitude).arg(singleMpiSpin_->value()));
 }
 
 void MainWindow::addState()
