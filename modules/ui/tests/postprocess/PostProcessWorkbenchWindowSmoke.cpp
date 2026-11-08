@@ -14,6 +14,7 @@
 #include <QFile>
 #include <QFileDialog>
 #include <QLabel>
+#include <QImage>
 #include <QListWidget>
 #include <QLineEdit>
 #include <QMenu>
@@ -83,9 +84,20 @@ int main(int argc, char *argv[])
     auto *sphere = window.findChild<QWidget *>("postProcessOrientationControl"); CHECK(sphere && sphere->isVisible());
     QString orientation;
     QObject::connect(&window, &aerosim::PostProcessWorkbenchWindow::viewRequested, &window, [&orientation](const QString &value) { orientation = value; });
-    QMouseEvent press(QEvent::MouseButtonPress, QPointF(48,17), Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
-    QMouseEvent release(QEvent::MouseButtonRelease, QPointF(48,17), Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+    window.viewRequested(QStringLiteral("front")); flush();
+    QMouseEvent press(QEvent::MouseButtonPress, QPointF(56,21), Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+    QMouseEvent release(QEvent::MouseButtonRelease, QPointF(56,21), Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
     QApplication::sendEvent(sphere, &press); QApplication::sendEvent(sphere, &release); CHECK(orientation=="top");
+    flush(); const QImage beforeDrag = sphere->grab().toImage();
+    QString dragCommand;
+    QObject::connect(&window, &aerosim::PostProcessWorkbenchWindow::postProcessCommandRequested, &window, [&dragCommand](const QString &value) { dragCommand=value; });
+    QMouseEvent dragPress(QEvent::MouseButtonPress, QPointF(56,56), Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+    QMouseEvent dragMove(QEvent::MouseMove, QPointF(81,68), Qt::NoButton, Qt::LeftButton, Qt::NoModifier);
+    QMouseEvent dragRelease(QEvent::MouseButtonRelease, QPointF(81,68), Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+    QApplication::sendEvent(sphere,&dragPress); QApplication::sendEvent(sphere,&dragMove); QApplication::sendEvent(sphere,&dragRelease); flush();
+    CHECK(dragCommand.startsWith("orientationDrag:") && sphere->grab().toImage()!=beforeDrag);
+    CHECK(capture(sphere,"orientation-after-drag"));
+
     auto *ruler = action("postProcessRulerAction"); CHECK(ruler && ruler->isCheckable());
     ruler->trigger(); CHECK(window.findChild<QLabel *>("postProcessRulerPlaceholder")->isVisible());
     ruler->trigger(); CHECK(!window.findChild<QLabel *>("postProcessRulerPlaceholder")->isVisible());
@@ -113,6 +125,23 @@ int main(int argc, char *argv[])
     tree->topLevelItem(0)->setCheckState(0, Qt::Unchecked);
     CHECK(tree->topLevelItem(1)->checkState(0)==Qt::Checked);
     CHECK(capture(&window,"multi-file-example"));
+    // A file change must replace the available regions and fields together.
+    auto *fileSourceAction = window.findChild<QAction *>("postProcessNew_contour"); CHECK(fileSourceAction);
+    fileSourceAction->trigger(); flush();
+    auto *fileSourceDialog = window.findChild<QDialog *>("postProcessFeatureSourceDialog"); CHECK(fileSourceDialog);
+    auto *sourceFiles = fileSourceDialog->findChild<QComboBox *>("postProcessFeatureFile");
+    auto *sourceRegions = fileSourceDialog->findChild<QComboBox *>("postProcessFeatureSource");
+    auto *sourceFields = fileSourceDialog->findChild<QComboBox *>("postProcessFeatureField");
+    CHECK(sourceFiles && sourceFiles->count()==2 && sourceRegions && sourceRegions->count()==1);
+    CHECK(sourceFiles->currentText().contains("flowfield.cgns"));
+    CHECK(sourceFields->findText(QString::fromUtf8("温度 [K]"))>=0);
+    sourceFiles->setCurrentIndex(1); flush();
+    CHECK(sourceRegions->count()==1 && sourceFiles->currentText().contains("surface.vtu"));
+    CHECK(sourceFields->findText(QString::fromUtf8("温度 [K]"))<0);
+    CHECK(sourceFields->findText(QString::fromUtf8("马赫数 [-]"))>=0);
+    CHECK(capture(fileSourceDialog,"file-region-field-selection"));
+    fileSourceDialog->reject(); flush();
+
     action("postProcessUnstructuredExampleAction")->trigger(); flush();
     CHECK(tree->topLevelItemCount()==3 && layers->count()==3);
     auto *play = window.findChild<QToolButton *>("postProcessPlayFrame");
@@ -201,6 +230,18 @@ int main(int argc, char *argv[])
     chooseZone(0); action("postProcessContourAction")->trigger(); flush();
     CHECK(nav->currentIndex()==1 && parameters->isEnabled());
     auto *createdDialog = window.findChild<QDialog *>("postProcessParameterDialog"); CHECK(createdDialog);
+    auto *rangeMode = createdDialog->findChild<QComboBox *>("rangeMode"); CHECK(rangeMode);
+    auto *rangeMin = createdDialog->findChild<QDoubleSpinBox *>("rangeMin");
+    auto *rangeMax = createdDialog->findChild<QDoubleSpinBox *>("rangeMax");
+    CHECK(rangeMin && rangeMax && !rangeMin->isEnabled() && !rangeMax->isEnabled());
+    rangeMode->setCurrentIndex(1); CHECK(rangeMin->isEnabled() && rangeMax->isEnabled());
+    rangeMin->setValue(2); rangeMax->setValue(1);
+    CHECK(!createdDialog->findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Ok)->isEnabled());
+    CHECK(!createdDialog->findChild<QPushButton *>("postProcessApplyDraft")->isEnabled());
+    rangeMax->setValue(3);
+    CHECK(createdDialog->findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Ok)->isEnabled());
+    CHECK(capture(createdDialog,"color-range-settings"));
+
     createdDialog->findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Ok)->click(); flush();
     CHECK(action("postProcessSliceAction")->isEnabled() && action("postProcessIsoAction")->isEnabled());
     CHECK(!action("postProcessStreamAction")->isEnabled());
@@ -245,6 +286,7 @@ int main(int argc, char *argv[])
     auto *first = new QListWidgetItem(QStringLiteral("result.cgns"), inputFiles); first->setData(Qt::UserRole, QStringLiteral("/example/result.cgns"));
     auto *secondFile = new QListWidgetItem(QStringLiteral("boundary.vtu"), inputFiles); secondFile->setData(Qt::UserRole, QStringLiteral("/example/boundary.vtu"));
     auto *mode = organization->findChild<QComboBox *>("postProcessImportMode"); CHECK(mode && mode->isVisible());
+    CHECK(mode->itemText(0)==QString::fromUtf8("追加显示") && mode->itemText(1)==QString::fromUtf8("替换现有数据"));
     organization->findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Ok)->click(); flush();
     CHECK(requestedPaths.size()==2 && tree->topLevelItemCount()==4);
     CHECK(tree->topLevelItem(3)->data(0, Qt::UserRole+4).toString()=="append");
