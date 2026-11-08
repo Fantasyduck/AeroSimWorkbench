@@ -31,7 +31,7 @@ bool isValidProjectRelativePath(const QString &path)
         || path.contains(QLatin1Char(':')) || path.contains(QChar(0)))
         return false;
 
-    const QStringList segments = path.split(QLatin1Char('/'), Qt::KeepEmptyParts);
+    const QStringList segments = path.split(QLatin1Char('/'), QString::KeepEmptyParts);
     for (const QString &segment : segments) {
         if (segment.isEmpty() || segment == QStringLiteral(".")
             || segment == QStringLiteral(".."))
