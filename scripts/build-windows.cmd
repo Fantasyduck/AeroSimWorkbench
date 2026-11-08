@@ -5,6 +5,10 @@ if not defined AEROSIM_QT_ROOT (
     echo Set AEROSIM_QT_ROOT to the Qt 5.12.12 msvc2017_64 directory.
     exit /b 2
 )
+if not defined AEROSIM_SARIBBON_SOURCE_DIR (
+    echo Set AEROSIM_SARIBBON_SOURCE_DIR to the SARibbon 2.9.3 source directory.
+    exit /b 2
+)
 if not defined AEROSIM_BUILD_DIR set "AEROSIM_BUILD_DIR=%ROOT%\build-windows"
 if not defined AEROSIM_BUILD_GUI set "AEROSIM_BUILD_GUI=ON"
 if not defined AEROSIM_BUILD_VISUALIZATION set "AEROSIM_BUILD_VISUALIZATION=OFF"
