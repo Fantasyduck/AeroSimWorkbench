@@ -158,5 +158,27 @@ int main()
          {aerosim::ParameterValueKind::Text, "text"},
          {aerosim::ParameterValueKind::Enumeration, "enumeration"}});
 
+    checkMapping<aerosim::ExecutionState>(context, &aerosim::enumToken,
+        &aerosim::executionStateFromToken,
+        {{aerosim::ExecutionState::Unknown, "unknown"},
+         {aerosim::ExecutionState::Created, "created"},
+         {aerosim::ExecutionState::Queued, "queued"},
+         {aerosim::ExecutionState::Preparing, "preparing"},
+         {aerosim::ExecutionState::Running, "running"},
+         {aerosim::ExecutionState::PauseRequested, "pause_requested"},
+         {aerosim::ExecutionState::Paused, "paused"},
+         {aerosim::ExecutionState::StopRequested, "stop_requested"},
+         {aerosim::ExecutionState::Cancelling, "cancelling"},
+         {aerosim::ExecutionState::Reconciling, "reconciling"},
+         {aerosim::ExecutionState::Finished, "finished"},
+         {aerosim::ExecutionState::Failed, "failed"},
+         {aerosim::ExecutionState::Stopped, "stopped"},
+         {aerosim::ExecutionState::Cancelled, "cancelled"}});
+
+    checkMapping<aerosim::TaskOrigin>(context, &aerosim::enumToken,
+        &aerosim::taskOriginFromToken,
+        {{aerosim::TaskOrigin::Single, "single"},
+         {aerosim::TaskOrigin::Batch, "batch"}});
+
     return context.result();
 }

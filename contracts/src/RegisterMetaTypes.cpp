@@ -34,6 +34,10 @@ void registerContractMetaTypes()
     qRegisterMetaType<BatchPlan>("aerosim::BatchPlan");
     qRegisterMetaType<BatchPlanExecutionSnapshot>(
         "aerosim::BatchPlanExecutionSnapshot");
+    qRegisterMetaType<TaskInputManifest>("aerosim::TaskInputManifest");
+    qRegisterMetaType<TaskAttempt>("aerosim::TaskAttempt");
+    qRegisterMetaType<BatchRun>("aerosim::BatchRun");
+    qRegisterMetaType<TaskSnapshot>("aerosim::TaskSnapshot");
 }
 
 } // namespace aerosim

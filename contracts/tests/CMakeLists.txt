@@ -4,6 +4,7 @@ set(AEROSIM_CONTRACT_HEADER_COMPILE_SOURCES
     compile/ConfigurationModelsHeader.cpp
     compile/DataAccessHeader.cpp
     compile/EnumTokensHeader.cpp
+    compile/ExecutionModelsHeader.cpp
     compile/IntegrationPortsHeader.cpp
     compile/MeshModelsHeader.cpp
     compile/PostProcessRefsHeader.cpp
@@ -62,6 +63,12 @@ add_executable(aerosim_contract_configuration_models_test
 target_link_libraries(aerosim_contract_configuration_models_test PRIVATE aerosim_contracts)
 add_test(NAME contracts_configuration_models
     COMMAND aerosim_contract_configuration_models_test)
+
+add_executable(aerosim_contract_execution_models_test
+    ExecutionModelsTest.cpp)
+target_link_libraries(aerosim_contract_execution_models_test PRIVATE aerosim_contracts)
+add_test(NAME contracts_execution_models
+    COMMAND aerosim_contract_execution_models_test)
 
 add_test(NAME contracts_migration_fixture_layout
     COMMAND "${CMAKE_COMMAND}"

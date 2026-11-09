@@ -2,6 +2,7 @@ int compileAccessResultHeader();
 int compileConfigurationModelsHeader();
 int compileDataAccessHeader();
 int compileEnumTokensHeader();
+int compileExecutionModelsHeader();
 int compileIntegrationPortsHeader();
 int compileMeshModelsHeader();
 int compilePostProcessRefsHeader();
@@ -18,6 +19,7 @@ int main()
         + compileConfigurationModelsHeader()
         + compileDataAccessHeader()
         + compileEnumTokensHeader()
+        + compileExecutionModelsHeader()
         + compileIntegrationPortsHeader()
         + compileMeshModelsHeader()
         + compilePostProcessRefsHeader()
@@ -28,3 +30,4 @@ int main()
         + compileTelemetryHeader()
         + compileWorkflowModelsHeader();
 }
+

@@ -150,6 +150,28 @@ const EnumTokenEntry<ParameterValueKind> kParameterValueKindTokens[] = {
     {ParameterValueKind::Enumeration, "enumeration"}
 };
 
+const EnumTokenEntry<ExecutionState> kExecutionStateTokens[] = {
+    {ExecutionState::Unknown, "unknown"},
+    {ExecutionState::Created, "created"},
+    {ExecutionState::Queued, "queued"},
+    {ExecutionState::Preparing, "preparing"},
+    {ExecutionState::Running, "running"},
+    {ExecutionState::PauseRequested, "pause_requested"},
+    {ExecutionState::Paused, "paused"},
+    {ExecutionState::StopRequested, "stop_requested"},
+    {ExecutionState::Cancelling, "cancelling"},
+    {ExecutionState::Reconciling, "reconciling"},
+    {ExecutionState::Finished, "finished"},
+    {ExecutionState::Failed, "failed"},
+    {ExecutionState::Stopped, "stopped"},
+    {ExecutionState::Cancelled, "cancelled"}
+};
+
+const EnumTokenEntry<TaskOrigin> kTaskOriginTokens[] = {
+    {TaskOrigin::Single, "single"},
+    {TaskOrigin::Batch, "batch"}
+};
+
 } // namespace
 
 #define AEROSIM_ENUM_TOKEN_FUNCTIONS(EnumType, functionStem, entries) \
@@ -172,6 +194,8 @@ AEROSIM_ENUM_TOKEN_FUNCTIONS(LocationKind, locationKind, kLocationKindTokens)
 AEROSIM_ENUM_TOKEN_FUNCTIONS(FingerprintStatus, fingerprintStatus, kFingerprintStatusTokens)
 AEROSIM_ENUM_TOKEN_FUNCTIONS(ParameterCategory, parameterCategory, kParameterCategoryTokens)
 AEROSIM_ENUM_TOKEN_FUNCTIONS(ParameterValueKind, parameterValueKind, kParameterValueKindTokens)
+AEROSIM_ENUM_TOKEN_FUNCTIONS(ExecutionState, executionState, kExecutionStateTokens)
+AEROSIM_ENUM_TOKEN_FUNCTIONS(TaskOrigin, taskOrigin, kTaskOriginTokens)
 
 #undef AEROSIM_ENUM_TOKEN_FUNCTIONS
 

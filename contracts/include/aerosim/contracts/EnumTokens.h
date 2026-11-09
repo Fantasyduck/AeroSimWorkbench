@@ -2,6 +2,7 @@
 
 #include "aerosim/contracts/AccessResult.h"
 #include "aerosim/contracts/ConfigurationModels.h"
+#include "aerosim/contracts/ExecutionModels.h"
 #include "aerosim/contracts/MeshModels.h"
 #include "aerosim/contracts/ResourceModels.h"
 #include "aerosim/contracts/TaskModels.h"
@@ -27,6 +28,8 @@ QString enumToken(LocationKind value);
 QString enumToken(FingerprintStatus value);
 QString enumToken(ParameterCategory value);
 QString enumToken(ParameterValueKind value);
+QString enumToken(ExecutionState value);
+QString enumToken(TaskOrigin value);
 
 AccessResult<AccessStatus> accessStatusFromToken(const QString &token);
 AccessResult<IssueSeverity> issueSeverityFromToken(const QString &token);
@@ -41,5 +44,7 @@ AccessResult<LocationKind> locationKindFromToken(const QString &token);
 AccessResult<FingerprintStatus> fingerprintStatusFromToken(const QString &token);
 AccessResult<ParameterCategory> parameterCategoryFromToken(const QString &token);
 AccessResult<ParameterValueKind> parameterValueKindFromToken(const QString &token);
+AccessResult<ExecutionState> executionStateFromToken(const QString &token);
+AccessResult<TaskOrigin> taskOriginFromToken(const QString &token);
 
 } // namespace aerosim
