@@ -8,6 +8,16 @@
 
 namespace aerosim {
 
+// Revision rule shared by every versioned V2 aggregate: revision starts at 1 and
+// a revision of zero means "unspecified/legacy" data that must not be used to
+// start a formal calculation. An edit creates a new revision instead of
+// overwriting the revision a run already pinned.
+constexpr quint64 kInitialRevision = 1;
+inline quint64 nextRevision(quint64 revision)
+{
+    return revision == 0 ? kInitialRevision : revision + 1;
+}
+
 struct ProjectRef {
     QString projectId;
     QString filePath;

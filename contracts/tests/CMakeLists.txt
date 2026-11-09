@@ -1,9 +1,11 @@
 set(AEROSIM_CONTRACT_HEADER_COMPILE_SOURCES
     PublicHeadersCompileMain.cpp
     compile/AccessResultHeader.cpp
+    compile/ConfigurationModelsHeader.cpp
     compile/DataAccessHeader.cpp
     compile/EnumTokensHeader.cpp
     compile/IntegrationPortsHeader.cpp
+    compile/MeshModelsHeader.cpp
     compile/PostProcessRefsHeader.cpp
     compile/ReferencesHeader.cpp
     compile/ResourceModelsHeader.cpp
@@ -54,6 +56,12 @@ add_executable(aerosim_contract_workflow_v2_test
 target_link_libraries(aerosim_contract_workflow_v2_test PRIVATE aerosim_contracts)
 add_test(NAME contracts_workflow_v2
     COMMAND aerosim_contract_workflow_v2_test)
+
+add_executable(aerosim_contract_configuration_models_test
+    ConfigurationModelsTest.cpp)
+target_link_libraries(aerosim_contract_configuration_models_test PRIVATE aerosim_contracts)
+add_test(NAME contracts_configuration_models
+    COMMAND aerosim_contract_configuration_models_test)
 
 add_test(NAME contracts_migration_fixture_layout
     COMMAND "${CMAKE_COMMAND}"

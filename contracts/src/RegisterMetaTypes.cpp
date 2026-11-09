@@ -1,6 +1,8 @@
 #include "aerosim/contracts/TaskPorts.h"
 #include "aerosim/contracts/Telemetry.h"
 #include "aerosim/contracts/PostProcessRefs.h"
+#include "aerosim/contracts/ConfigurationModels.h"
+#include "aerosim/contracts/MeshModels.h"
 #include "aerosim/contracts/ResourceModels.h"
 
 #include <QMetaType>
@@ -25,6 +27,13 @@ void registerContractMetaTypes()
     qRegisterMetaType<ResourceLocation>("aerosim::ResourceLocation");
     qRegisterMetaType<ContentFingerprint>("aerosim::ContentFingerprint");
     qRegisterMetaType<ResourceRefV2>("aerosim::ResourceRefV2");
+    qRegisterMetaType<MeshRefV2>("aerosim::MeshRefV2");
+    qRegisterMetaType<ParameterSnapshot>("aerosim::ParameterSnapshot");
+    qRegisterMetaType<StateConfig>("aerosim::StateConfig");
+    qRegisterMetaType<BatchPlanItem>("aerosim::BatchPlanItem");
+    qRegisterMetaType<BatchPlan>("aerosim::BatchPlan");
+    qRegisterMetaType<BatchPlanExecutionSnapshot>(
+        "aerosim::BatchPlanExecutionSnapshot");
 }
 
 } // namespace aerosim

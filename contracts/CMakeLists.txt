@@ -1,11 +1,14 @@
 add_library(aerosim_contracts STATIC
+    src/ConfigurationModels.cpp
     src/EnumTokens.cpp
     src/RegisterMetaTypes.cpp
     src/ResourceModels.cpp
     src/TaskPorts.cpp
     include/aerosim/contracts/AccessResult.h
+    include/aerosim/contracts/ConfigurationModels.h
     include/aerosim/contracts/DataAccess.h
     include/aerosim/contracts/EnumTokens.h
+    include/aerosim/contracts/MeshModels.h
     include/aerosim/contracts/PostProcessRefs.h
     include/aerosim/contracts/References.h
     include/aerosim/contracts/ResourceModels.h

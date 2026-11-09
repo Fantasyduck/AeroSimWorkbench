@@ -131,6 +131,25 @@ const EnumTokenEntry<FingerprintStatus> kFingerprintStatusTokens[] = {
     {FingerprintStatus::Verified, "verified"}
 };
 
+const EnumTokenEntry<ParameterCategory> kParameterCategoryTokens[] = {
+    {ParameterCategory::GoverningEquations, "governing_equations"},
+    {ParameterCategory::BoundaryConditions, "boundary_conditions"},
+    {ParameterCategory::MeshMotion, "mesh_motion"},
+    {ParameterCategory::SolutionMethod, "solution_method"},
+    {ParameterCategory::ReferenceValues, "reference_values"},
+    {ParameterCategory::OutputControl, "output_control"},
+    {ParameterCategory::Initialization, "initialization"}
+};
+
+const EnumTokenEntry<ParameterValueKind> kParameterValueKindTokens[] = {
+    {ParameterValueKind::Unspecified, "unspecified"},
+    {ParameterValueKind::Boolean, "boolean"},
+    {ParameterValueKind::Integer, "integer"},
+    {ParameterValueKind::Real, "real"},
+    {ParameterValueKind::Text, "text"},
+    {ParameterValueKind::Enumeration, "enumeration"}
+};
+
 } // namespace
 
 #define AEROSIM_ENUM_TOKEN_FUNCTIONS(EnumType, functionStem, entries) \
@@ -151,6 +170,8 @@ AEROSIM_ENUM_TOKEN_FUNCTIONS(LogLevel, logLevel, kLogLevelTokens)
 AEROSIM_ENUM_TOKEN_FUNCTIONS(ResourceType, resourceType, kResourceTypeTokens)
 AEROSIM_ENUM_TOKEN_FUNCTIONS(LocationKind, locationKind, kLocationKindTokens)
 AEROSIM_ENUM_TOKEN_FUNCTIONS(FingerprintStatus, fingerprintStatus, kFingerprintStatusTokens)
+AEROSIM_ENUM_TOKEN_FUNCTIONS(ParameterCategory, parameterCategory, kParameterCategoryTokens)
+AEROSIM_ENUM_TOKEN_FUNCTIONS(ParameterValueKind, parameterValueKind, kParameterValueKindTokens)
 
 #undef AEROSIM_ENUM_TOKEN_FUNCTIONS
 

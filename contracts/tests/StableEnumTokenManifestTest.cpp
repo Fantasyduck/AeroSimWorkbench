@@ -139,5 +139,24 @@ int main()
          {aerosim::FingerprintStatus::Computed, "computed"},
          {aerosim::FingerprintStatus::Verified, "verified"}});
 
+    checkMapping<aerosim::ParameterCategory>(context, &aerosim::enumToken,
+        &aerosim::parameterCategoryFromToken,
+        {{aerosim::ParameterCategory::GoverningEquations, "governing_equations"},
+         {aerosim::ParameterCategory::BoundaryConditions, "boundary_conditions"},
+         {aerosim::ParameterCategory::MeshMotion, "mesh_motion"},
+         {aerosim::ParameterCategory::SolutionMethod, "solution_method"},
+         {aerosim::ParameterCategory::ReferenceValues, "reference_values"},
+         {aerosim::ParameterCategory::OutputControl, "output_control"},
+         {aerosim::ParameterCategory::Initialization, "initialization"}});
+
+    checkMapping<aerosim::ParameterValueKind>(context, &aerosim::enumToken,
+        &aerosim::parameterValueKindFromToken,
+        {{aerosim::ParameterValueKind::Unspecified, "unspecified"},
+         {aerosim::ParameterValueKind::Boolean, "boolean"},
+         {aerosim::ParameterValueKind::Integer, "integer"},
+         {aerosim::ParameterValueKind::Real, "real"},
+         {aerosim::ParameterValueKind::Text, "text"},
+         {aerosim::ParameterValueKind::Enumeration, "enumeration"}});
+
     return context.result();
 }
