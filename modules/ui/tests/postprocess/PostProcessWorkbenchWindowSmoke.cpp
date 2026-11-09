@@ -1,5 +1,6 @@
 #include "aerosim/ui/postprocess/PostProcessWorkbenchWindow.h"
 #include <SARibbonBar.h>
+#include <SARibbonCategory.h>
 #include <QAction>
 #include <QApplication>
 #include <QCheckBox>
@@ -13,13 +14,16 @@
 #include <QFile>
 #include <QFileDialog>
 #include <QLabel>
+#include <QImage>
 #include <QListWidget>
 #include <QLineEdit>
 #include <QMenu>
+#include <QMouseEvent>
 #include <QPushButton>
 #include <QSlider>
 #include <QSpinBox>
 #include <QSplitter>
+#include <QStandardPaths>
 #include <QTabWidget>
 #include <QTableWidget>
 #include <QTextEdit>
@@ -47,9 +51,13 @@ int main(int argc, char *argv[])
     auto *results = action("postProcessProbeResultsAction");
     auto *select = action("postProcessSelectAction");
     auto *pan = action("postProcessPanAction");
-    auto *tasks = action("postProcessTasksAction");
-    CHECK(tree && layers && nav && content && style && parameters && probe && results && select && pan && tasks);
+    CHECK(tree && layers && nav && content && style && parameters && probe && results && select && pan);
+    CHECK(!action("postProcessPanelsAction"));
     CHECK(content->count() == 2);
+    CHECK(window.findChild<SARibbonCategory *>("postProcessToolsCategory"));
+    CHECK(!action("postProcessCoefficientAction"));
+    CHECK(!window.findChild<SARibbonCategory *>("postProcessAnalysisCategory"));
+    CHECK(!action("postProcessMeshAction"));
     CHECK(!window.findChild<QWidget *>("postProcessInspectorTabs"));
     CHECK(!window.findChild<QDockWidget *>("postProcessProbeDock"));
     CHECK(QFile::exists(":/SARibbonTheme/resource/palettes/office2013-default.json"));
@@ -61,29 +69,93 @@ int main(int argc, char *argv[])
         return captureDir.isEmpty() || widget->grab().save(captureDir + "/" + name + ".png");
     };
     const auto chooseZone = [&] (int index) {
-        nav->setCurrentIndex(1);
+        nav->setCurrentIndex(0);
         auto *item = tree->topLevelItem(0)->child(index);
         tree->setCurrentItem(item); tree->itemClicked(item,0); flush();
     };
     const auto chooseObject = [&] (int index) {
-        nav->setCurrentIndex(2); layers->setCurrentRow(index); layers->itemClicked(layers->currentItem()); flush();
+        nav->setCurrentIndex(1); layers->setCurrentRow(index); layers->itemClicked(layers->currentItem()); flush();
     };
     window.show(); flush();
     for (auto *dock : window.findChildren<QDockWidget *>()) CHECK(!dock->isVisible());
     for (auto *toolbar : window.findChildren<QToolBar *>()) CHECK(window.toolBarArea(toolbar) == Qt::NoToolBarArea);
 
-    // The startup sample is explicitly illustrative, not a reader result.
-    CHECK(tree->topLevelItemCount()==4 && layers->count()==3);
+    CHECK(window.windowTitle().contains(QString::fromUtf8("可视化分析台")));
+    auto *sphere = window.findChild<QWidget *>("postProcessOrientationControl"); CHECK(sphere && sphere->isVisible());
+    QString orientation;
+    QObject::connect(&window, &aerosim::PostProcessWorkbenchWindow::viewRequested, &window, [&orientation](const QString &value) { orientation = value; });
+    window.viewRequested(QStringLiteral("front")); flush();
+    QMouseEvent press(QEvent::MouseButtonPress, QPointF(56,21), Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+    QMouseEvent release(QEvent::MouseButtonRelease, QPointF(56,21), Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+    QApplication::sendEvent(sphere, &press); QApplication::sendEvent(sphere, &release); CHECK(orientation=="top");
+    flush(); const QImage beforeDrag = sphere->grab().toImage();
+    QString dragCommand;
+    QObject::connect(&window, &aerosim::PostProcessWorkbenchWindow::postProcessCommandRequested, &window, [&dragCommand](const QString &value) { dragCommand=value; });
+    QMouseEvent dragPress(QEvent::MouseButtonPress, QPointF(56,56), Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+    QMouseEvent dragMove(QEvent::MouseMove, QPointF(81,68), Qt::NoButton, Qt::LeftButton, Qt::NoModifier);
+    QMouseEvent dragRelease(QEvent::MouseButtonRelease, QPointF(81,68), Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+    QApplication::sendEvent(sphere,&dragPress); QApplication::sendEvent(sphere,&dragMove); QApplication::sendEvent(sphere,&dragRelease); flush();
+    CHECK(dragCommand.startsWith("orientationDrag:") && sphere->grab().toImage()!=beforeDrag);
+    CHECK(capture(sphere,"orientation-after-drag"));
+
+    auto *ruler = action("postProcessRulerAction"); CHECK(ruler && ruler->isCheckable());
+    ruler->trigger(); CHECK(window.findChild<QLabel *>("postProcessRulerPlaceholder")->isVisible());
+    ruler->trigger(); CHECK(!window.findChild<QLabel *>("postProcessRulerPlaceholder")->isVisible());
+
+    // Start empty; the example is explicitly requested.
+    CHECK(tree->topLevelItemCount()==0 && layers->count()==0);
+    CHECK(!action("postProcessContourAction")->isEnabled());
+    CHECK(!window.findChild<QSlider *>("postProcessTimeSlider")->isEnabled());
+    for (const char *name : {"postProcessFirstFrame", "postProcessPreviousFrame", "postProcessPlayFrame", "postProcessNextFrame", "postProcessLastFrame"})
+        CHECK(!window.findChild<QToolButton *>(name)->isEnabled());
+    action("postProcessImportAction")->trigger(); flush();
+    auto *initialImport = window.findChild<QDialog *>("postProcessImportDataDialog"); CHECK(initialImport);
+    CHECK(!initialImport->findChild<QComboBox *>("postProcessImportMode")->isVisible());
+    auto *initialFiles = initialImport->findChild<QListWidget *>("postProcessImportFileList");
+    auto *initialFile = new QListWidgetItem(QStringLiteral("initial.vti"), initialFiles);
+    initialFile->setData(Qt::UserRole, QStringLiteral("/example/initial.vti"));
+    initialImport->findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Ok)->click(); flush();
+    CHECK(tree->topLevelItemCount()==1 && tree->topLevelItem(0)->data(0, Qt::UserRole+4).toString()=="initial");
+    delete tree->takeTopLevelItem(0);
+    action("postProcessMultiFileExampleAction")->trigger(); flush();
+    CHECK(tree->topLevelItemCount()==2 && layers->count()==0);
+    CHECK(tree->topLevelItem(0)->childCount()==1 && tree->topLevelItem(1)->childCount()==1);
+    CHECK(tree->topLevelItem(0)->child(0)->child(0)->childCount()==3);
+    CHECK(tree->topLevelItem(1)->child(0)->child(0)->childCount()==2);
+    CHECK(tree->topLevelItem(0)->data(0, Qt::UserRole+3).toMap().value("sourceId") != tree->topLevelItem(1)->data(0, Qt::UserRole+3).toMap().value("sourceId"));
+    CHECK(!window.findChild<QSlider *>("postProcessTimeSlider")->isEnabled());
+    tree->topLevelItem(0)->setCheckState(0, Qt::Unchecked);
+    CHECK(tree->topLevelItem(1)->checkState(0)==Qt::Checked);
+    CHECK(capture(&window,"multi-file-example"));
+    // A file change must replace the available regions and fields together.
+    auto *fileSourceAction = window.findChild<QAction *>("postProcessNew_contour"); CHECK(fileSourceAction);
+    fileSourceAction->trigger(); flush();
+    auto *fileSourceDialog = window.findChild<QDialog *>("postProcessFeatureSourceDialog"); CHECK(fileSourceDialog);
+    auto *sourceFiles = fileSourceDialog->findChild<QComboBox *>("postProcessFeatureFile");
+    auto *sourceRegions = fileSourceDialog->findChild<QComboBox *>("postProcessFeatureSource");
+    auto *sourceFields = fileSourceDialog->findChild<QComboBox *>("postProcessFeatureField");
+    CHECK(sourceFiles && sourceFiles->count()==2 && sourceRegions && sourceRegions->count()==1);
+    CHECK(sourceFiles->currentText().contains("flowfield.cgns"));
+    CHECK(sourceFields->findText(QString::fromUtf8("温度 [K]"))>=0);
+    sourceFiles->setCurrentIndex(1); flush();
+    CHECK(sourceRegions->count()==1 && sourceFiles->currentText().contains("surface.vtu"));
+    CHECK(sourceFields->findText(QString::fromUtf8("温度 [K]"))<0);
+    CHECK(sourceFields->findText(QString::fromUtf8("马赫数 [-]"))>=0);
+    CHECK(capture(fileSourceDialog,"file-region-field-selection"));
+    fileSourceDialog->reject(); flush();
+
+    action("postProcessUnstructuredExampleAction")->trigger(); flush();
+    CHECK(tree->topLevelItemCount()==2 && layers->count()==3);
     auto *play = window.findChild<QToolButton *>("postProcessPlayFrame");
     auto *playTimer = window.findChild<QTimer *>("postProcessPlayTimer");
     CHECK(play && playTimer && !playTimer->isActive());
     play->click(); CHECK(playTimer->isActive());
     play->click(); CHECK(!playTimer->isActive());
     CHECK(action("postProcessContourAction")->isEnabled());
-    CHECK(action("postProcessExportAction")->isEnabled());
+    CHECK(!action("postProcessExportAction") && !action("postProcessGeometryExportAction"));
     CHECK(!action("postProcessConvertAction") && !action("postProcessExcelAction"));
     auto *host = window.findChild<QWidget *>("postProcessViewportHost");
-    CHECK(host->property("backgroundBottom").value<QColor>()==QColor(98,93,90));
+    CHECK(host->property("backgroundBottom").value<QColor>()==QColor(255,255,255));
     CHECK(capture(&window,"empty-session"));
     const auto backgroundDialog = [&] {
         action("postProcessBackgroundAction")->trigger(); flush();
@@ -92,7 +164,7 @@ int main(int argc, char *argv[])
     auto *bg = backgroundDialog(); CHECK(bg);
     bg->findChild<QComboBox *>("postProcessBackgroundPreset")->setCurrentIndex(4);
     bg->reject(); flush();
-    CHECK(host->property("backgroundBottom").value<QColor>()==QColor(98,93,90));
+    CHECK(host->property("backgroundBottom").value<QColor>()==QColor(255,255,255));
     bg=backgroundDialog();
     bg->findChild<QComboBox *>("postProcessBackgroundPreset")->setCurrentIndex(3);
     bg->findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Ok)->click(); flush();
@@ -105,28 +177,47 @@ int main(int argc, char *argv[])
     bg->findChild<QDialogButtonBox *>()->button(QDialogButtonBox::RestoreDefaults)->click();
     CHECK(capture(bg,"background-settings"));
     bg->findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Ok)->click(); flush();
-    CHECK(!host->property("gradientBackground").toBool());
-    CHECK(host->property("backgroundBottom").value<QColor>()==QColor(98,93,90));
+    CHECK(host->property("gradientBackground").toBool());
+    CHECK(host->property("backgroundBottom").value<QColor>()==QColor(255,255,255));
 
     CHECK(!window.findChild<QComboBox *>("postProcessFieldSelector"));
     const auto chooseField = [&] (int index) {
-        nav->setCurrentIndex(1);
-        auto *item = tree->topLevelItem(1)->child(index);
+        nav->setCurrentIndex(0);
+        auto *item = tree->topLevelItem(0)->child(0)->child(0)->child(index);
         tree->setCurrentItem(item); tree->itemClicked(item,0); flush();
     };
-    // Close independently; menu actions reopen each panel in its original order.
-    emit nav->tabCloseRequested(1); CHECK(nav->count()==2);
-    action("postProcessShowDataPanel")->trigger(); CHECK(nav->count()==3 && nav->currentIndex()==1);
-    emit nav->tabCloseRequested(2); emit nav->tabCloseRequested(1); emit nav->tabCloseRequested(0);
+    CHECK(!action("postProcessSequenceAction"));
+    CHECK(action("postProcessRotationCenterAction"));
+
+    // Panel commands must be direct clickable ribbon buttons.
+    window.ribbonBar()->setCurrentIndex(2); flush();
+    for (const char *name : {"postProcessShowDataPanel", "postProcessShowObjectPanel", "postProcessProbeResultsAction"}) {
+        QToolButton *button = nullptr;
+        for (auto *candidate : window.findChildren<QToolButton *>()) {
+            if (candidate->defaultAction() == action(name) && candidate->isVisible()) { button = candidate; break; }
+        }
+        CHECK(button && button->isEnabled());
+        button->click(); flush();
+    }
+    auto *directProbe = window.findChild<QDockWidget *>("postProcessProbeDock");
+    CHECK(directProbe && directProbe->isVisible()); directProbe->hide();
+    CHECK(!action("postProcessTasksAction"));
+    CHECK(!window.findChild<QDockWidget *>("postProcessMessageDock"));
+
+    // Data and object panels can be closed and reopened independently.
+    CHECK(nav->count()==2 && !action("postProcessShowViewPanel"));
+    emit nav->tabCloseRequested(0); CHECK(nav->count()==1);
+    action("postProcessShowDataPanel")->trigger(); CHECK(nav->count()==2 && nav->currentIndex()==0);
+    emit nav->tabCloseRequested(1); emit nav->tabCloseRequested(0);
     CHECK(nav->count()==0 && !nav->isVisible());
     action("postProcessShowObjectPanel")->trigger(); CHECK(nav->count()==1 && nav->isVisible());
-    action("postProcessShowViewPanel")->trigger(); action("postProcessShowDataPanel")->trigger();
-    CHECK(nav->count()==3 && nav->currentIndex()==1);
+    action("postProcessShowDataPanel")->trigger();
+    CHECK(nav->count()==2 && nav->currentIndex()==0);
     // Same UI capabilities for structured and unstructured topology.
     for (const char *example : {"postProcessStructuredExampleAction","postProcessUnstructuredExampleAction"}) {
         action(example)->trigger(); flush(); chooseZone(0);
         CHECK(action("postProcessSliceAction")->isEnabled() && action("postProcessIsoAction")->isEnabled());
-        CHECK(!action("postProcessStreamAction")->isEnabled());
+        CHECK(action("postProcessStreamAction")->isEnabled());
         chooseField(4); // Three-component velocity, not speed magnitude.
         CHECK(action("postProcessStreamAction")->isEnabled() && !action("postProcessIsoAction")->isEnabled());
         CHECK(action("postProcessSliceAction")->isEnabled());
@@ -137,17 +228,45 @@ int main(int argc, char *argv[])
         CHECK(!action("postProcessSliceAction")->isEnabled());
         chooseObject(0); // A slice retains its source fields but has surface dimension.
         CHECK(action("postProcessIsoLineAction")->isEnabled() && !action("postProcessIsoAction")->isEnabled());
-        CHECK(action("postProcessGeometryExportAction")->isEnabled()); // Request only; no file is written.
     }
     chooseZone(0); action("postProcessContourAction")->trigger(); flush();
-    CHECK(nav->currentIndex()==2 && parameters->isEnabled());
+    CHECK(nav->currentIndex()==1 && parameters->isEnabled());
     auto *createdDialog = window.findChild<QDialog *>("postProcessParameterDialog"); CHECK(createdDialog);
+    auto *rangeMode = createdDialog->findChild<QComboBox *>("rangeMode"); CHECK(rangeMode);
+    auto *rangeMin = createdDialog->findChild<QDoubleSpinBox *>("rangeMin");
+    auto *rangeMax = createdDialog->findChild<QDoubleSpinBox *>("rangeMax");
+    CHECK(rangeMin && rangeMax && !rangeMin->isEnabled() && !rangeMax->isEnabled());
+    rangeMode->setCurrentIndex(1); CHECK(rangeMin->isEnabled() && rangeMax->isEnabled());
+    rangeMin->setValue(2); rangeMax->setValue(1);
+    CHECK(!createdDialog->findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Ok)->isEnabled());
+    CHECK(!createdDialog->findChild<QPushButton *>("postProcessApplyDraft")->isEnabled());
+    rangeMax->setValue(3);
+    CHECK(createdDialog->findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Ok)->isEnabled());
+    CHECK(capture(createdDialog,"color-range-settings"));
+
     createdDialog->findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Ok)->click(); flush();
     CHECK(action("postProcessSliceAction")->isEnabled() && action("postProcessIsoAction")->isEnabled());
     CHECK(!action("postProcessStreamAction")->isEnabled());
     chooseField(4); CHECK(action("postProcessStreamAction")->isEnabled());
     // Integration vector remains fixed when coloring a streamline by another scalar.
     action("postProcessStreamAction")->trigger(); flush();
+    auto *streamSource = window.findChild<QDialog *>("postProcessFeatureSourceDialog"); CHECK(streamSource);
+    auto *streamFields = streamSource->findChild<QComboBox *>("postProcessFeatureField"); CHECK(streamFields);
+    CHECK(streamFields->findData(QStringLiteral("__components__")) >= 0);
+    streamFields->setCurrentIndex(streamFields->findData(QStringLiteral("__components__")));
+    auto *componentU = streamSource->findChild<QComboBox *>("postProcessVectorU");
+    auto *componentV = streamSource->findChild<QComboBox *>("postProcessVectorV");
+    auto *componentW = streamSource->findChild<QComboBox *>("postProcessVectorW");
+    CHECK(componentU && componentV && componentW && componentU->isEnabled());
+    auto *next = streamSource->findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Ok);
+    componentV->setCurrentIndex(componentU->currentIndex()); CHECK(!next->isEnabled());
+    componentV->setCurrentIndex(1); CHECK(next->isEnabled()); next->click(); flush();
+    createdDialog = window.findChild<QDialog *>("postProcessParameterDialog"); CHECK(createdDialog);
+    CHECK(layers->currentItem()->data(Qt::UserRole+3).toMap().value("vectorComponents").toStringList().size()==3);
+    createdDialog->reject(); flush();
+    chooseField(4); action("postProcessStreamAction")->trigger(); flush();
+    streamSource = window.findChild<QDialog *>("postProcessFeatureSourceDialog"); CHECK(streamSource);
+    streamSource->findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Ok)->click(); flush();
     createdDialog = window.findChild<QDialog *>("postProcessParameterDialog"); CHECK(createdDialog);
     createdDialog->findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Ok)->click(); flush();
     CHECK(layers->currentItem()->data(Qt::UserRole+3).toMap().value("integrationField").toString().contains(QString::fromUtf8("速度矢量")));
@@ -164,35 +283,43 @@ int main(int argc, char *argv[])
     QObject::connect(&window, &aerosim::PostProcessWorkbenchWindow::postProcessCommandRequested, &window,
                      [&appliedCommand](const QString &command) { if (command.startsWith("apply:")) appliedCommand = command; });
     action("postProcessImportAction")->trigger(); flush();
-    auto *fileDialog = window.findChild<QFileDialog *>("postProcessImportDialog");
-    CHECK(fileDialog); fileDialog->reject(); flush(); CHECK(requestedPaths.isEmpty());
-    action("postProcessImportAction")->trigger(); flush();
-    fileDialog = window.findChild<QFileDialog *>("postProcessImportDialog"); CHECK(fileDialog);
-    fileDialog->filesSelected(QStringList{QStringLiteral("/example/result.vtk")});
-    CHECK(requestedPaths.size()==1 && tree->topLevelItemCount()==5);
-    CHECK(!action("postProcessContourAction")->isEnabled()); // pending file is not a dataset
-    fileDialog->reject(); flush();
-    action("postProcessImportAction")->trigger(); flush();
-    fileDialog = window.findChild<QFileDialog *>("postProcessImportDialog"); CHECK(fileDialog);
-    fileDialog->filesSelected(QStringList{QStringLiteral("/example/a.vtk"), QStringLiteral("/example/b.vtk")});
-    fileDialog->reject(); flush();
-    auto *organization = window.findChild<QDialog *>("postProcessImportOrganizationDialog"); CHECK(organization);
-    CHECK(capture(organization,"import-organization"));
-    auto *importMode = organization->findChild<QComboBox *>("postProcessImportMode"); CHECK(importMode);
-    importMode->setCurrentIndex(2);
-    auto *fileTable = organization->findChild<QTableWidget *>("postProcessImportFiles"); CHECK(fileTable && fileTable->rowCount()==2);
-    CHECK(fileTable->item(0,1)->text().isEmpty()); // File order is not a physical time.
-    fileTable->item(0,1)->setText(QStringLiteral("1.5"));
+    auto *organization = window.findChild<QDialog *>("postProcessImportDataDialog"); CHECK(organization);
+    auto *inputFiles = organization->findChild<QListWidget *>("postProcessImportFileList"); CHECK(inputFiles);
+    auto *first = new QListWidgetItem(QStringLiteral("result.cgns"), inputFiles); first->setData(Qt::UserRole, QStringLiteral("/example/result.cgns"));
+    auto *secondFile = new QListWidgetItem(QStringLiteral("boundary.vtu"), inputFiles); secondFile->setData(Qt::UserRole, QStringLiteral("/example/boundary.vtu"));
+    auto *mode = organization->findChild<QComboBox *>("postProcessImportMode"); CHECK(mode && mode->isVisible());
+    CHECK(mode->itemText(0)==QString::fromUtf8("追加显示") && mode->itemText(1)==QString::fromUtf8("替换现有数据"));
     organization->findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Ok)->click(); flush();
-    CHECK(requestedPaths.size()==2 && tree->topLevelItemCount()==6);
-    chooseZone(0); action("postProcessExportAction")->trigger(); flush();
+    CHECK(requestedPaths.size()==2 && tree->topLevelItemCount()==3);
+    CHECK(tree->topLevelItem(2)->data(0, Qt::UserRole+4).toString()=="append");
+    CHECK(!action("postProcessContourAction")->isEnabled());
+    action("postProcessImportAction")->trigger(); flush();
+    organization = window.findChild<QDialog *>("postProcessImportDataDialog"); CHECK(organization);
+    mode = organization->findChild<QComboBox *>("postProcessImportMode"); mode->setCurrentIndex(1);
+    inputFiles = organization->findChild<QListWidget *>("postProcessImportFileList");
+    auto *replacement = new QListWidgetItem(QStringLiteral("new.vtk"), inputFiles); replacement->setData(Qt::UserRole, QStringLiteral("/example/new.vtk"));
+    organization->findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Ok)->click(); flush();
+    CHECK(requestedPaths.size()==1 && tree->topLevelItemCount()==4);
+    CHECK(tree->topLevelItem(3)->data(0, Qt::UserRole+4).toString()=="replace");
+    CHECK(tree->topLevelItem(0)->childCount()>0); // Existing data stays until reading succeeds.
+    delete tree->takeTopLevelItem(3); delete tree->takeTopLevelItem(2);
+    QFileDialog *fileDialog = nullptr;
+    // Each output command opens its own settings dialog, without creating a file.
+    chooseZone(0);
+    for (const char *name : {"postProcessImageExportAction", "postProcessAnimationExportAction"}) {
+        CHECK(action(name)->isEnabled()); action(name)->trigger(); flush();
+        auto *output = window.findChild<QDialog *>("postProcessExportSetupDialog"); CHECK(output);
+        CHECK(output->findChild<QComboBox *>("postProcessExportFormat")); output->reject(); flush();
+    }
+    chooseZone(0); action("postProcessImageExportAction")->trigger(); flush();
     auto *exportSetup = window.findChild<QDialog *>("postProcessExportSetupDialog"); CHECK(exportSetup);
-    CHECK(capture(exportSetup,"data-export-setup"));
-    exportSetup->findChild<QComboBox *>("postProcessExportFormat")->setCurrentIndex(1);
+    CHECK(capture(exportSetup,"image-export-setup"));
     exportSetup->findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Ok)->click(); flush();
     fileDialog = window.findChild<QFileDialog *>("postProcessExportDialog"); CHECK(fileDialog);
-    fileDialog->fileSelected(QStringLiteral("/example/output.cgns"));
-    CHECK(exportKind=="data" && exportPath=="/example/output.cgns");
+    const QString outputDir = QDir(QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation)).filePath(QString::fromUtf8("AeroSimWorkbench/后处理"));
+    CHECK(QDir::cleanPath(fileDialog->directory().absolutePath()) == QDir::cleanPath(outputDir));
+    fileDialog->fileSelected(QStringLiteral("/example/output.png"));
+    CHECK(exportKind=="image" && exportPath=="/example/output.png");
     flush();
     chooseObject(0); parameters->trigger(); flush();
     auto *applyDialog = window.findChild<QDialog *>("postProcessParameterDialog"); CHECK(applyDialog);
@@ -200,20 +327,6 @@ int main(int argc, char *argv[])
     CHECK(applyButton); applyButton->click(); CHECK(appliedCommand=="apply:slice");
     applyDialog->reject(); flush();
     action("postProcessUnstructuredExampleAction")->trigger(); flush();
-
-    // Each analysis entry opens its own form and an explicitly empty result panel.
-    for (int i=0; i<5; ++i) {
-        auto *analysisAction = action(QStringLiteral("postProcessAnalysisAction%1").arg(i).toLatin1().constData());
-        CHECK(analysisAction); analysisAction->trigger(); flush();
-        auto *analysisDialog = window.findChild<QDialog *>("postProcessAnalysisDialog");
-        CHECK(analysisDialog && analysisDialog->findChild<QLineEdit *>("analysisDataPath"));
-        CHECK(capture(analysisDialog,QString("analysis-%1").arg(i)));
-        analysisDialog->findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Ok)->click(); flush();
-        auto *resultDock = window.findChild<QDockWidget *>("postProcessAnalysisResultDock");
-        CHECK(resultDock && resultDock->isVisible());
-        CHECK(!resultDock->findChild<QTextEdit *>("postProcessAnalysisResult")->toPlainText().isEmpty());
-        resultDock->hide();
-    }
 
     // New-object commands choose a source independently of the current object.
     chooseObject(2); // A one-dimensional streamline cannot itself supply these operations.
@@ -230,10 +343,33 @@ int main(int argc, char *argv[])
         auto *sources = sourceDialog->findChild<QComboBox *>("postProcessFeatureSource");
         auto *fields = sourceDialog->findChild<QComboBox *>("postProcessFeatureField");
         CHECK(sources && sources->count() > 0 && fields);
+        CHECK(fields->isVisible() == (QString::fromLatin1(kind) != QStringLiteral("slice")));
         CHECK(sourceDialog->findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Ok)->isEnabled());
         sourceDialog->findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Ok)->click(); flush();
         auto *setup = window.findChild<QDialog *>("postProcessParameterDialog");
         CHECK(setup && setup->isVisible() && layers->count() == before + 1);
+        const QString objectKind = QString::fromLatin1(kind);
+        if (objectKind == "isoline") {
+            auto *mode = setup->findChild<QComboBox *>("levelMode"); CHECK(mode);
+            mode->setCurrentIndex(1); flush();
+            auto *lo = setup->findChild<QDoubleSpinBox *>("levelMin");
+            auto *hi = setup->findChild<QDoubleSpinBox *>("levelMax"); CHECK(lo && hi && lo->isVisible());
+            hi->setValue(lo->value()); CHECK(!setup->findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Ok)->isEnabled());
+            hi->setValue(lo->value()+1); CHECK(setup->findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Ok)->isEnabled());
+        }
+        if (objectKind == "trace") {
+            auto *type = setup->findChild<QComboBox *>("traceType"); CHECK(type);
+            auto *count = setup->findChild<QDoubleSpinBox *>("releaseCount"); CHECK(count && !count->isVisible());
+            type->setCurrentIndex(1); flush(); CHECK(count->isVisible());
+            CHECK(!setup->findChild<QComboBox *>("direction"));
+        }
+        if (objectKind == "stream") {
+            auto *mode = setup->findChild<QComboBox *>("seedMode"); CHECK(mode);
+            mode->setCurrentIndex(1); flush();
+            CHECK(!setup->findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Ok)->isEnabled());
+            setup->findChild<QDoubleSpinBox *>("seedEndX")->setValue(1);
+            CHECK(setup->findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Ok)->isEnabled());
+        }
         setup->reject(); flush(); CHECK(layers->count() == before);
     }
 
@@ -246,6 +382,7 @@ int main(int argc, char *argv[])
     style->trigger(); flush();
     auto *dialog = window.findChild<QDialog *>("postProcessObjectStyleDialog");
     CHECK(dialog && dialog->isVisible());
+    CHECK(dialog->findChild<QComboBox *>("objectStyleRepresentation"));
     CHECK(capture(dialog,"object-style"));
     auto *opacity = dialog->findChild<QSpinBox *>("objectStyleOpacity");
     CHECK(opacity && opacity->value() == 100);
@@ -268,6 +405,16 @@ int main(int argc, char *argv[])
     layers->itemDoubleClicked(layers->currentItem()); flush();
     dialog = window.findChild<QDialog *>("postProcessParameterDialog");
     CHECK(dialog && dialog->findChild<QDoubleSpinBox *>("offset"));
+    auto *normalMode = dialog->findChild<QComboBox *>("normal"); CHECK(normalMode);
+    CHECK(dialog->findChild<QDoubleSpinBox *>("offset")->isVisible());
+    CHECK(!dialog->findChild<QDoubleSpinBox *>("normalX")->isVisible());
+    normalMode->setCurrentIndex(3); flush();
+    CHECK(!dialog->findChild<QDoubleSpinBox *>("offset")->isVisible());
+    dialog->findChild<QDoubleSpinBox *>("normalX")->setValue(0);
+    CHECK(!dialog->findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Ok)->isEnabled());
+    dialog->findChild<QDoubleSpinBox *>("normalX")->setValue(1);
+    CHECK(dialog->findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Ok)->isEnabled());
+    normalMode->setCurrentIndex(0);
     CHECK(!dialog->findChild<QSpinBox *>("objectStyleOpacity"));
     CHECK(capture(dialog,"slice-parameters"));
     dialog->findChild<QDoubleSpinBox *>("offset")->setValue(1.25);
@@ -282,17 +429,26 @@ int main(int argc, char *argv[])
         chooseObject(i); parameters->trigger(); flush();
         dialog = window.findChild<QDialog *>("postProcessParameterDialog");
         CHECK(dialog && dialog->findChild<QDoubleSpinBox *>(i==1 ? "isoValue" : "seedX"));
+        if (i==1) {
+            auto *extra = dialog->findChild<QLineEdit *>("additionalValues"); CHECK(extra);
+            extra->setText("1,2,3"); CHECK(!dialog->findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Ok)->isEnabled());
+            extra->setText("1,2"); CHECK(dialog->findChild<QDialogButtonBox *>()->button(QDialogButtonBox::Ok)->isEnabled());
+        } else {
+            auto *seedMode = dialog->findChild<QComboBox *>("seedMode"); CHECK(seedMode);
+            CHECK(!dialog->findChild<QDoubleSpinBox *>("seedEndX")->isVisible());
+            seedMode->setCurrentIndex(1); flush(); CHECK(dialog->findChild<QDoubleSpinBox *>("seedEndX")->isVisible());
+        }
         CHECK(capture(dialog, i==1 ? "iso-parameters" : "stream-parameters"));
         dialog->reject(); flush();
     }
-    nav->setCurrentIndex(1);
-    for (int group : {1,3}) {
-        auto *item = tree->topLevelItem(group)->child(0); tree->setCurrentItem(item); tree->itemClicked(item,0);
+    nav->setCurrentIndex(0);
+    for (int group : {1}) {
+        auto *item = tree->topLevelItem(0)->child(0)->child(0)->child(0); tree->setCurrentItem(item); tree->itemClicked(item,0);
         parameters->trigger(); flush(); dialog = window.findChild<QDialog *>("postProcessParameterDialog");
         CHECK(dialog && capture(dialog,group==1 ? "field-settings" : "curve-settings"));
         dialog->reject(); flush();
     }
-    tree->setCurrentItem(tree->topLevelItem(2)->child(2));
+    tree->setCurrentItem(tree->topLevelItem(1)->child(2));
     CHECK(window.findChild<QSlider *>("postProcessTimeSlider")->value() == 2);
     CHECK(!style->isEnabled() && !parameters->isEnabled());
     chooseZone(0);
@@ -308,7 +464,7 @@ int main(int argc, char *argv[])
     // Probe is an exclusive mouse mode; results visibility is a separate action.
     pan->trigger(); CHECK(pan->isChecked());
     probe->trigger(); CHECK(probe->isChecked() && !pan->isChecked());
-    CHECK(!window.findChild<QDockWidget *>("postProcessProbeDock"));
+    CHECK(!window.findChild<QDockWidget *>("postProcessProbeDock")->isVisible());
     CHECK(window.findChild<QWidget *>("postProcessViewportHost")->cursor().shape() == Qt::CrossCursor);
     results->trigger(); flush();
     auto *probeDock = window.findChild<QDockWidget *>("postProcessProbeDock");
@@ -326,14 +482,11 @@ int main(int argc, char *argv[])
     probeDock->hide(); results->trigger();
     CHECK(window.findChild<QTextEdit *>("postProcessProbeResult")->toPlainText().contains("node 7"));
     probeDock->hide();
-    tasks->trigger(); flush();
-    auto *taskDock = window.findChild<QDockWidget *>("postProcessMessageDock");
-    CHECK(taskDock && taskDock->isVisible() && capture(&window,"tasks")); taskDock->hide();
 
     for (const QSize size : {QSize(1120,680), QSize(1440,960)}) {
         window.resize(size);
-        for (int category=0; category<5; ++category) {
-            window.ribbonBar()->setCurrentIndex(category); nav->setCurrentIndex(category%3); flush();
+        for (int category=0; category<3; ++category) {
+            window.ribbonBar()->setCurrentIndex(category); nav->setCurrentIndex(category%2); flush();
             CHECK(window.size() == size);
             for (auto *button : window.findChildren<QToolButton *>()) {
                 if (button->isVisible() && button->objectName().startsWith("postProcess"))

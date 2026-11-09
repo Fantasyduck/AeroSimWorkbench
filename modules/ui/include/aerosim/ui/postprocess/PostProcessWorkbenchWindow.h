@@ -52,7 +52,6 @@ signals:
 
 private:
     QWidget *createDataPanel();
-    QWidget *createViewPanel();
     QWidget *createObjectPanel();
     QWidget *createViewportPanel();
     QWidget *createTimeline();
@@ -63,13 +62,10 @@ private:
     void openObjectParameters(bool colorOnly = false);
     void openSelectedSettings();
     void updateSelectionActions();
-    void showTaskPanel();
     void openImportDialog();
-    void organizeImportedFiles(const QStringList &paths);
-    void recordPendingImport(const QStringList &paths, const QString &mode, const QStringList &times);
     void openExportDialog(const QString &kind);
-    void openAnalysisDialog(int analysis);
     void loadUiExample(bool structured);
+    void loadMultiFileUiExample();
     void openBackgroundSettings();
     void applyBackground(const QColor &bottom, const QColor &top, bool gradient);
     void showNavigationPanel(int panel);
@@ -90,17 +86,15 @@ private:
     QPointer<QDialog> sourceDialog_;
     QPointer<QDialog> importOrganizationDialog_;
     QPointer<QDialog> exportSetupDialog_;
-    QPointer<QDialog> analysisDialog_;
-    QPointer<QFileDialog> importDialog_;
     QPointer<QFileDialog> exportDialog_;
     QString selectedId_;
     QString selectedKind_;
     QString selectedName_;
     QVariantMap selectedContext_;
     QWidget *navigationPanels_[3] = {nullptr, nullptr, nullptr};
-    QColor backgroundBottom_ = QColor(98, 93, 90);
-    QColor backgroundTop_ = QColor(98, 93, 90);
-    bool gradientBackground_ = false;
+    QColor backgroundBottom_ = QColor(255, 255, 255);
+    QColor backgroundTop_ = QColor(82, 87, 110);
+    bool gradientBackground_ = true;
     QHash<QString, QVariantMap> styleDrafts_;
     QHash<QString, QVariantMap> parameterDrafts_;
     int nextObjectId_ = 0;
@@ -112,8 +106,6 @@ private:
     QLabel *selectionSummary_ = nullptr;
     QTextEdit *probeResult_ = nullptr;
     QDockWidget *probeDock_ = nullptr;
-    QDockWidget *taskDock_ = nullptr;
-    QTextEdit *events_ = nullptr;
     QDockWidget *deepSeekHarnessDock_ = nullptr;
     ServiceBindings services_;
     bool bound_ = false;

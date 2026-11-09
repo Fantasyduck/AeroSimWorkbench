@@ -20,10 +20,22 @@ if not exist "%AEROSIM_SARIBBON_SOURCE_DIR%\src\SARibbonBar\SARibbonBar.h" (
     exit /b 2
 )
 
+rem Only close instances of the executable that this build will overwrite.
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0stop-postprocess-instance.ps1" "%AEROSIM_BUILD_DIR%\postprocess\Debug\aerosim_postprocess.exe"
+if errorlevel 1 exit /b %errorlevel%
+
 call scripts\build-windows.cmd aerosim_postprocess Debug
 if errorlevel 1 exit /b %errorlevel%
 
 "%AEROSIM_QT_ROOT%\bin\windeployqt.exe" --debug --compiler-runtime "%AEROSIM_BUILD_DIR%\postprocess\Debug\aerosim_postprocess.exe"
 if errorlevel 1 exit /b %errorlevel%
+
+rem SSH runs in session 0: a GUI started there is invisible on the desktop and
+rem can prevent the desktop user from rebuilding it due to process permissions.
+powershell.exe -NoProfile -Command "if ((Get-Process -Id $PID).SessionId -eq 0) { exit 1 }"
+if errorlevel 1 (
+    echo [INFO] Build succeeded. No interactive desktop in this session; run this script on the Windows desktop to open the window.
+    exit /b 0
+)
 
 start "AeroSimWorkbench Postprocess" /d "%AEROSIM_BUILD_DIR%\postprocess\Debug" aerosim_postprocess.exe
