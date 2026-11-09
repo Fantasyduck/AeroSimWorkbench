@@ -1,10 +1,13 @@
 #pragma once
 
+#include "aerosim/contracts/ExecutionModels.h"
+#include "aerosim/contracts/MeshModels.h"
 #include "aerosim/contracts/References.h"
 
 #include <QDateTime>
 #include <QMetaType>
 #include <QString>
+#include <QVector>
 #include <QtGlobal>
 
 namespace aerosim {
@@ -67,7 +70,52 @@ struct TaskRecord {
     QString errorMessage;
 };
 
+// Command-to-state mapping. Requested and confirmed states are distinct so Pause,
+// Resume, Stop and Cancel can never collapse into one status; the runtime only
+// publishes a terminal state after the execution backend confirms it.
+ExecutionState requestedStateFor(TaskCommandType command);
+ExecutionState confirmedTerminalStateFor(TaskCommandType command);
+bool canAcceptCommand(ExecutionState state, TaskCommandType command);
+
+// Read-only aggregate view of one task. F/runtime owns persistence and status
+// transitions; this is the shared shape for queries, restoration and reports.
+struct TaskSnapshot {
+    TaskRef ref;
+    TaskOrigin origin = TaskOrigin::Single;
+    StateRef state;                    // the exact State revision consumed
+    BatchRunRef batchRun;              // used only when origin is Batch
+    QString currentAttemptId;
+    TaskInputManifest inputManifest;
+    QVector<TaskAttempt> attempts;
+    ExecutionState executionState = ExecutionState::Created;
+    QDateTime createdAt;
+    QDateTime startedAt;
+    QDateTime finishedAt;
+    QVector<ResourceRefV2> logRefs;
+    QVector<ResourceRefV2> monitorRefs;
+    QVector<ResourceRefV2> resultRefs;
+    QVector<ResourceRefV2> checkpointRefs;
+    QString errorCode;
+    QString errorMessage;
+    quint64 recordRevision = 0;
+    quint64 schemaVersion = 0;
+
+    bool isValid() const;
+    bool isTerminal() const;
+    bool isBatchTask() const;
+    bool hasUniqueAttemptIds() const;
+    quint32 nextAttemptSequence() const;
+    const TaskAttempt *currentAttempt() const;
+    const TaskAttempt *findAttempt(const QString &attemptId) const;
+
+    // A finished task needs a new taskId; only Failed/Stopped/Cancelled retries
+    // with unchanged input may reuse this taskId.
+    bool canRetry() const;
+    bool canPauseResume() const;
+};
+
 } // namespace aerosim
 
 Q_DECLARE_METATYPE(aerosim::TaskCommand)
 Q_DECLARE_METATYPE(aerosim::TaskEvent)
+Q_DECLARE_METATYPE(aerosim::TaskSnapshot)
