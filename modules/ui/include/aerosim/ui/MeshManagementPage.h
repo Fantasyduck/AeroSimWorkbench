@@ -102,7 +102,10 @@ private:
     QPushButton *historyCollapseButton_ = nullptr;
     int expandedHistoryHeight_ = 145;
     bool historyCollapsed_ = false;
-    bool updatingEditor_ = false;
+    // Nesting-aware guard: helpers such as refreshEditor() call refreshTableRow(),
+    // so a plain bool would clear the flag while the outer update is still running.
+    int editorUpdateDepth_ = 0;
+    bool isUpdatingEditor() const { return editorUpdateDepth_ > 0; }
 };
 
 } // namespace aerosim

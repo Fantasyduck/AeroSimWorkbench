@@ -154,6 +154,17 @@ int main(int argc, char **argv)
                && meshTable->horizontalHeaderItem(1)->text() == text(u"\u7f51\u683c\u540d\u79f0")
                && meshTable->horizontalHeaderItem(2)->text() == text(u"\u662f\u5426\u53ef\u89c1"),
                "Mesh information table does not match the reference layout")) return 86;
+    // Initial visibility must mirror the seeded state (the first two meshes are
+    // visible, the third is hidden). Assigning a checkable cell emits
+    // itemChanged before its state is set, which used to be read back as the
+    // user hiding every mesh.
+    if (!check(meshTable->item(0, 2)->checkState() == Qt::Checked
+               && meshTable->item(1, 2)->checkState() == Qt::Checked
+               && meshTable->item(2, 2)->checkState() == Qt::Unchecked,
+               "Initial mesh visibility was not preserved in the table")) return 87;
+    if (!check(!history->count() || !history->item(history->count() - 1)->text()
+                   .contains(text(u"\u9690\u85c5 Mesh_001")),
+               "Seeding the table must not log a spurious hide")) return 88;
     meshTable->setCurrentCell(1, 1);
     scaleEditor->setValue(2.5);
     meshTable->item(1, 2)->setCheckState(Qt::Unchecked);

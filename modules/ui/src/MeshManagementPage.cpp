@@ -36,6 +36,18 @@
 
 namespace aerosim {
 namespace {
+// Raises the page's update guard for the enclosing scope and restores the
+// previous depth on exit, so nested refresh helpers never clear it early.
+class EditorUpdateScope {
+public:
+    explicit EditorUpdateScope(int &depth) : depth_(depth) { ++depth_; }
+    ~EditorUpdateScope() { --depth_; }
+    EditorUpdateScope(const EditorUpdateScope &) = delete;
+    EditorUpdateScope &operator=(const EditorUpdateScope &) = delete;
+private:
+    int &depth_;
+};
+
 template <std::size_t N>
 QString uiText(const char16_t (&value)[N])
 {
@@ -491,7 +503,7 @@ MeshManagementPage::MeshManagementPage(QWidget *viewportHost, QWidget *parent)
     connect(meshTable_, &QTableWidget::currentCellChanged, this,
         [this](int row, int, int, int) { selectMesh(row); });
     connect(meshTable_, &QTableWidget::itemChanged, this, [this](QTableWidgetItem *item) {
-        if (updatingEditor_ || !item || item->column() != 2) return;
+        if (isUpdatingEditor() || !item || item->column() != 2) return;
         const int row = item->row();
         if (row < 0 || row >= meshes_.size()) return;
         meshes_[row].visible = item->checkState() == Qt::Checked;
@@ -550,16 +562,23 @@ MeshManagementPage::MeshManagementPage(QWidget *viewportHost, QWidget *parent)
         state.unit = QStringLiteral("m");
         meshes_.append(state);
         meshTable_->insertRow(meshTable_->rowCount());
-        auto *indexItem = new QTableWidgetItem;
-        indexItem->setFlags(indexItem->flags() & ~Qt::ItemIsEditable);
-        auto *nameItem = new QTableWidgetItem;
-        nameItem->setFlags(nameItem->flags() & ~Qt::ItemIsEditable);
-        auto *visibleItem = new QTableWidgetItem;
-        visibleItem->setFlags(visibleItem->flags() | Qt::ItemIsUserCheckable);
-        visibleItem->setTextAlignment(Qt::AlignCenter);
-        meshTable_->setItem(i, 0, indexItem);
-        meshTable_->setItem(i, 1, nameItem);
-        meshTable_->setItem(i, 2, visibleItem);
+        {
+            // Assigning a checkable item emits itemChanged while its check
+            // state is still unset; without this guard that would be read as
+            // the user hiding the mesh.
+            EditorUpdateScope updateGuard(editorUpdateDepth_);
+            auto *indexItem = new QTableWidgetItem;
+            indexItem->setFlags(indexItem->flags() & ~Qt::ItemIsEditable);
+            auto *nameItem = new QTableWidgetItem;
+            nameItem->setFlags(nameItem->flags() & ~Qt::ItemIsEditable);
+            auto *visibleItem = new QTableWidgetItem;
+            visibleItem->setFlags(visibleItem->flags() | Qt::ItemIsUserCheckable);
+            visibleItem->setTextAlignment(Qt::AlignCenter);
+            meshTable_->setItem(i, 0, indexItem);
+            meshTable_->setItem(i, 1, nameItem);
+            meshTable_->setItem(i, 2, visibleItem);
+            
+        }
         refreshTableRow(i);
     }
     updateCount();
@@ -588,7 +607,7 @@ void MeshManagementPage::addMesh()
     {
         // Building a checkable cell emits itemChanged before its initial check
         // state is assigned. Do not interpret that as a user hiding the mesh.
-        updatingEditor_ = true;
+        EditorUpdateScope updateGuard(editorUpdateDepth_);
         auto *indexItem = new QTableWidgetItem;
         indexItem->setFlags(indexItem->flags() & ~Qt::ItemIsEditable);
         auto *nameItem = new QTableWidgetItem;
@@ -599,7 +618,7 @@ void MeshManagementPage::addMesh()
         meshTable_->setItem(row, 0, indexItem);
         meshTable_->setItem(row, 1, nameItem);
         meshTable_->setItem(row, 2, visibleItem);
-        updatingEditor_ = false;
+        
     }
     refreshTableRow(row);
     meshTable_->setCurrentCell(row, 1);
@@ -636,14 +655,14 @@ void MeshManagementPage::refreshTableRow(int row)
     auto *nameItem = meshTable_->item(row, 1);
     auto *visibleItem = meshTable_->item(row, 2);
     if (!indexItem || !nameItem || !visibleItem) return;
-    updatingEditor_ = true;
+    EditorUpdateScope updateGuard(editorUpdateDepth_);
     indexItem->setText(QString::number(row + 1));
     indexItem->setTextAlignment(Qt::AlignCenter);
     nameItem->setText(meshes_[row].name + (meshes_[row].ready ? QString() : QString::fromUtf8(" · 加载中")));
     if (!meshes_[row].id.isEmpty()) nameItem->setData(Qt::UserRole, meshes_[row].id);
     visibleItem->setCheckState(meshes_[row].visible ? Qt::Checked : Qt::Unchecked);
     visibleItem->setTextAlignment(Qt::AlignCenter);
-    updatingEditor_ = false;
+    
 }
 
 void MeshManagementPage::refreshEditor()
@@ -654,7 +673,7 @@ void MeshManagementPage::refreshEditor()
                                         opacityEditor_, scaleEditor_, unitEditor_};
     for (auto *widget : editors) widget->setEnabled(valid && meshes_[row].ready);
     deleteMeshButton_->setEnabled(valid);
-    updatingEditor_ = true;
+    EditorUpdateScope updateGuard(editorUpdateDepth_);
     if (valid) {
         const auto &state = meshes_[row];
         nameEditor_->setText(state.name);
@@ -676,12 +695,12 @@ void MeshManagementPage::refreshEditor()
     }
     if (boundaryMode_) viewerStatus_->setText(valid ? meshes_[row].summary
         : QString::fromUtf8("请选择网格文件以显示边界。"));
-    updatingEditor_ = false;
+    
 }
 
 void MeshManagementPage::updateCurrentMesh()
 {
-    if (updatingEditor_) return;
+    if (isUpdatingEditor()) return;
     const int row = selectedRow();
     if (row < 0 || row >= meshes_.size()) return;
     auto &state = meshes_[row];
@@ -828,7 +847,7 @@ void MeshManagementPage::beginBoundary(const QString &id,const QString &path)
         // Building a checkable cell emits itemChanged before its initial check
         // state is assigned. Do not interpret that as a user hiding the mesh.
         QSignalBlocker block(meshTable_);
-        updatingEditor_ = true;
+        EditorUpdateScope updateGuard(editorUpdateDepth_);
         auto *indexItem = new QTableWidgetItem;
         indexItem->setFlags(indexItem->flags() & ~Qt::ItemIsEditable);
         auto *nameItem = new QTableWidgetItem;
@@ -839,7 +858,7 @@ void MeshManagementPage::beginBoundary(const QString &id,const QString &path)
         meshTable_->setItem(row, 0, indexItem);
         meshTable_->setItem(row, 1, nameItem);
         meshTable_->setItem(row, 2, visibleItem);
-        updatingEditor_ = false;
+        
     }
     refreshTableRow(row);
     meshTable_->setCurrentCell(row, 1); refreshEditor(); updateCount();
