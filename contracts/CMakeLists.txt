@@ -2,6 +2,7 @@ add_library(aerosim_contracts STATIC
     src/ConfigurationModels.cpp
     src/EnumTokens.cpp
     src/ExecutionModels.cpp
+    src/MeshModels.cpp
     src/RegisterMetaTypes.cpp
     src/ResourceModels.cpp
     src/TaskModels.cpp

@@ -38,6 +38,12 @@ void registerContractMetaTypes()
     qRegisterMetaType<TaskAttempt>("aerosim::TaskAttempt");
     qRegisterMetaType<BatchRun>("aerosim::BatchRun");
     qRegisterMetaType<TaskSnapshot>("aerosim::TaskSnapshot");
+    qRegisterMetaType<MeshVector3>("aerosim::MeshVector3");
+    qRegisterMetaType<RgbaColor>("aerosim::RgbaColor");
+    qRegisterMetaType<MeshDescriptor>("aerosim::MeshDescriptor");
+    qRegisterMetaType<MeshTransform>("aerosim::MeshTransform");
+    qRegisterMetaType<MeshPresentation>("aerosim::MeshPresentation");
+    qRegisterMetaType<MeshCollection>("aerosim::MeshCollection");
 }
 
 } // namespace aerosim

@@ -70,6 +70,12 @@ target_link_libraries(aerosim_contract_execution_models_test PRIVATE aerosim_con
 add_test(NAME contracts_execution_models
     COMMAND aerosim_contract_execution_models_test)
 
+add_executable(aerosim_contract_mesh_models_test
+    MeshModelsTest.cpp)
+target_link_libraries(aerosim_contract_mesh_models_test PRIVATE aerosim_contracts)
+add_test(NAME contracts_mesh_models
+    COMMAND aerosim_contract_mesh_models_test)
+
 add_test(NAME contracts_migration_fixture_layout
     COMMAND "${CMAKE_COMMAND}"
             "-DCONTRACT_FIXTURE_ROOT=${CMAKE_CURRENT_SOURCE_DIR}/fixtures"

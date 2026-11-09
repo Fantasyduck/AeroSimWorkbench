@@ -30,6 +30,10 @@ QString enumToken(ParameterCategory value);
 QString enumToken(ParameterValueKind value);
 QString enumToken(ExecutionState value);
 QString enumToken(TaskOrigin value);
+QString enumToken(MeshRole value);
+QString enumToken(MeshTopology value);
+QString enumToken(MeshRepresentation value);
+QString enumToken(MeshTransformKind value);
 
 AccessResult<AccessStatus> accessStatusFromToken(const QString &token);
 AccessResult<IssueSeverity> issueSeverityFromToken(const QString &token);
@@ -46,5 +50,9 @@ AccessResult<ParameterCategory> parameterCategoryFromToken(const QString &token)
 AccessResult<ParameterValueKind> parameterValueKindFromToken(const QString &token);
 AccessResult<ExecutionState> executionStateFromToken(const QString &token);
 AccessResult<TaskOrigin> taskOriginFromToken(const QString &token);
+AccessResult<MeshRole> meshRoleFromToken(const QString &token);
+AccessResult<MeshTopology> meshTopologyFromToken(const QString &token);
+AccessResult<MeshRepresentation> meshRepresentationFromToken(const QString &token);
+AccessResult<MeshTransformKind> meshTransformKindFromToken(const QString &token);
 
 } // namespace aerosim

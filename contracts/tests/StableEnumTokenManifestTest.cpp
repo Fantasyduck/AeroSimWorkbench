@@ -180,5 +180,37 @@ int main()
         {{aerosim::TaskOrigin::Single, "single"},
          {aerosim::TaskOrigin::Batch, "batch"}});
 
+    checkMapping<aerosim::MeshRole>(context, &aerosim::enumToken,
+        &aerosim::meshRoleFromToken,
+        {{aerosim::MeshRole::Unknown, "unknown"},
+         {aerosim::MeshRole::Computation, "computation"},
+         {aerosim::MeshRole::Reference, "reference"},
+         {aerosim::MeshRole::Result, "result"},
+         {aerosim::MeshRole::Auxiliary, "auxiliary"}});
+
+    checkMapping<aerosim::MeshTopology>(context, &aerosim::enumToken,
+        &aerosim::meshTopologyFromToken,
+        {{aerosim::MeshTopology::Unknown, "unknown"},
+         {aerosim::MeshTopology::Structured, "structured"},
+         {aerosim::MeshTopology::Unstructured, "unstructured"},
+         {aerosim::MeshTopology::Hybrid, "hybrid"},
+         {aerosim::MeshTopology::PointCloud, "point_cloud"}});
+
+    checkMapping<aerosim::MeshRepresentation>(context, &aerosim::enumToken,
+        &aerosim::meshRepresentationFromToken,
+        {{aerosim::MeshRepresentation::Unknown, "unknown"},
+         {aerosim::MeshRepresentation::Surface, "surface"},
+         {aerosim::MeshRepresentation::SurfaceWithEdges, "surface_with_edges"},
+         {aerosim::MeshRepresentation::Wireframe, "wireframe"},
+         {aerosim::MeshRepresentation::Points, "points"}});
+
+    checkMapping<aerosim::MeshTransformKind>(context, &aerosim::enumToken,
+        &aerosim::meshTransformKindFromToken,
+        {{aerosim::MeshTransformKind::Translation, "translation"},
+         {aerosim::MeshTransformKind::Rotation, "rotation"},
+         {aerosim::MeshTransformKind::Scaling, "scaling"},
+         {aerosim::MeshTransformKind::UnitConversion, "unit_conversion"},
+         {aerosim::MeshTransformKind::Composite, "composite"}});
+
     return context.result();
 }

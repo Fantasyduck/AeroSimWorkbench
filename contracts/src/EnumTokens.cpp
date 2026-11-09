@@ -172,6 +172,38 @@ const EnumTokenEntry<TaskOrigin> kTaskOriginTokens[] = {
     {TaskOrigin::Batch, "batch"}
 };
 
+const EnumTokenEntry<MeshRole> kMeshRoleTokens[] = {
+    {MeshRole::Unknown, "unknown"},
+    {MeshRole::Computation, "computation"},
+    {MeshRole::Reference, "reference"},
+    {MeshRole::Result, "result"},
+    {MeshRole::Auxiliary, "auxiliary"}
+};
+
+const EnumTokenEntry<MeshTopology> kMeshTopologyTokens[] = {
+    {MeshTopology::Unknown, "unknown"},
+    {MeshTopology::Structured, "structured"},
+    {MeshTopology::Unstructured, "unstructured"},
+    {MeshTopology::Hybrid, "hybrid"},
+    {MeshTopology::PointCloud, "point_cloud"}
+};
+
+const EnumTokenEntry<MeshRepresentation> kMeshRepresentationTokens[] = {
+    {MeshRepresentation::Unknown, "unknown"},
+    {MeshRepresentation::Surface, "surface"},
+    {MeshRepresentation::SurfaceWithEdges, "surface_with_edges"},
+    {MeshRepresentation::Wireframe, "wireframe"},
+    {MeshRepresentation::Points, "points"}
+};
+
+const EnumTokenEntry<MeshTransformKind> kMeshTransformKindTokens[] = {
+    {MeshTransformKind::Translation, "translation"},
+    {MeshTransformKind::Rotation, "rotation"},
+    {MeshTransformKind::Scaling, "scaling"},
+    {MeshTransformKind::UnitConversion, "unit_conversion"},
+    {MeshTransformKind::Composite, "composite"}
+};
+
 } // namespace
 
 #define AEROSIM_ENUM_TOKEN_FUNCTIONS(EnumType, functionStem, entries) \
@@ -196,6 +228,10 @@ AEROSIM_ENUM_TOKEN_FUNCTIONS(ParameterCategory, parameterCategory, kParameterCat
 AEROSIM_ENUM_TOKEN_FUNCTIONS(ParameterValueKind, parameterValueKind, kParameterValueKindTokens)
 AEROSIM_ENUM_TOKEN_FUNCTIONS(ExecutionState, executionState, kExecutionStateTokens)
 AEROSIM_ENUM_TOKEN_FUNCTIONS(TaskOrigin, taskOrigin, kTaskOriginTokens)
+AEROSIM_ENUM_TOKEN_FUNCTIONS(MeshRole, meshRole, kMeshRoleTokens)
+AEROSIM_ENUM_TOKEN_FUNCTIONS(MeshTopology, meshTopology, kMeshTopologyTokens)
+AEROSIM_ENUM_TOKEN_FUNCTIONS(MeshRepresentation, meshRepresentation, kMeshRepresentationTokens)
+AEROSIM_ENUM_TOKEN_FUNCTIONS(MeshTransformKind, meshTransformKind, kMeshTransformKindTokens)
 
 #undef AEROSIM_ENUM_TOKEN_FUNCTIONS
 
