@@ -53,7 +53,7 @@
 | `modules/ui/` | `PostProcessWorkbenchWindow` 已实现 `IWidgetHost` 和独立 CMake 目标；SARibbon、`WorkflowViewV2` 展示与业务命令适配仍待接入。 |
 | `modules/visualization/` | 最小 VTK 8.2 Viewer 已可通过 `WidgetSlot::Viewport` 插入主窗口；`IMeshAccess`/`IResultAccess`、数据读取和正式场景对象服务仍待实现。 |
 | `modules/configuration/` | 实现 `IParameterAccess`、配置与工况模型、专业校验及 JSON；保持服务层可在 CLI 使用。 |
-| `modules/logging_ui/` | 实现日志与错误 QWidget，通过 `WidgetSlot::Log/Error` 插入，消费公共 `LogEntry`/`ErrorInfo`。 |
+| `modules/logging_ui/` | 实现日志与错误 QWidget，通过 `WidgetSlot::Log/Error` 插入，消费公共 `LogEntryV2`/`LogFragment`/`ErrorInfo`。 |
 | `modules/runtime/` | 实现 `ITaskService`、TaskRecord 可靠保存、去重、求解器进程/适配器和日志后端；保留 `taskEventOccurred` 契约。真实 Shell 命令解析与执行也在本模块，当前 CLI 只是入口示范。 |
 | `modules/project/`、`modules/workflow/` | 实现 `IWorkflowService`、ProjectManager、工作流校验/恢复；工作流规则通过后才发出 TaskCommand。 |
 

@@ -12,16 +12,10 @@ namespace aerosim {
 
 enum class LogLevel { Debug, Info, Warning, Error };
 
-// Legacy aggregate log record kept for existing callers. New code uses the
-// attempt-aware LogEntryV2 below.
-struct LogEntry {
-    QDateTime timestamp;
-    LogLevel level = LogLevel::Info;
-    QString source;
-    QString taskId;
-    QString message;
-};
-
+// Shared structured error report. It has no V2 counterpart: per-attempt and
+// per-run failures also live in TaskAttempt/BatchRun/TaskSnapshot
+// errorCode/errorMessage fields, while ErrorInfo stays the generic report used
+// by the logging/error widgets and by data/validation failures.
 struct ErrorInfo {
     QString code;
     QString source;
@@ -30,14 +24,9 @@ struct ErrorInfo {
     QString detail;
 };
 
-struct MonitorSample {
-    QString taskId;
-    QDateTime timestamp;
-    quint64 sequence = 0;
-    QString metric;
-    double value = 0.0;
-    QString unit;
-};
+// The former LogEntry and MonitorSample aggregates have been removed: LogEntryV2
+// and MonitorSampleV2 below are supersets (typed task/attempt identity, sequence,
+// stream and update mode) and no module consumed the legacy shapes.
 
 // Where a line came from: the application itself or the solver process.
 enum class LogStream { Application, Stdout, Stderr };
@@ -142,9 +131,7 @@ struct MonitorBatch {
 
 } // namespace aerosim
 
-Q_DECLARE_METATYPE(aerosim::LogEntry)
 Q_DECLARE_METATYPE(aerosim::ErrorInfo)
-Q_DECLARE_METATYPE(aerosim::MonitorSample)
 Q_DECLARE_METATYPE(aerosim::LogRecordRef)
 Q_DECLARE_METATYPE(aerosim::LogEntryV2)
 Q_DECLARE_METATYPE(aerosim::LogFragment)
