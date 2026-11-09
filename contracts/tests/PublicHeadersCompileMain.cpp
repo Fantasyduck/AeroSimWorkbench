@@ -8,6 +8,7 @@ int compileMeshModelsHeader();
 int compilePostProcessRefsHeader();
 int compileReferencesHeader();
 int compileResourceModelsHeader();
+int compileResultModelsHeader();
 int compileTaskModelsHeader();
 int compileTaskPortsHeader();
 int compileTelemetryHeader();
@@ -25,6 +26,7 @@ int main()
         + compilePostProcessRefsHeader()
         + compileReferencesHeader()
         + compileResourceModelsHeader()
+        + compileResultModelsHeader()
         + compileTaskModelsHeader()
         + compileTaskPortsHeader()
         + compileTelemetryHeader()

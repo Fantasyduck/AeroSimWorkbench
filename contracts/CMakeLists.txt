@@ -5,8 +5,10 @@ add_library(aerosim_contracts STATIC
     src/MeshModels.cpp
     src/RegisterMetaTypes.cpp
     src/ResourceModels.cpp
+    src/ResultModels.cpp
     src/TaskModels.cpp
     src/TaskPorts.cpp
+    src/Telemetry.cpp
     include/aerosim/contracts/AccessResult.h
     include/aerosim/contracts/ConfigurationModels.h
     include/aerosim/contracts/DataAccess.h
@@ -16,6 +18,7 @@ add_library(aerosim_contracts STATIC
     include/aerosim/contracts/PostProcessRefs.h
     include/aerosim/contracts/References.h
     include/aerosim/contracts/ResourceModels.h
+    include/aerosim/contracts/ResultModels.h
     include/aerosim/contracts/TaskModels.h
     include/aerosim/contracts/TaskPorts.h
     include/aerosim/contracts/Telemetry.h

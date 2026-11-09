@@ -4,6 +4,7 @@
 #include "aerosim/contracts/ConfigurationModels.h"
 #include "aerosim/contracts/MeshModels.h"
 #include "aerosim/contracts/ResourceModels.h"
+#include "aerosim/contracts/ResultModels.h"
 
 #include <QMetaType>
 
@@ -44,6 +45,17 @@ void registerContractMetaTypes()
     qRegisterMetaType<MeshTransform>("aerosim::MeshTransform");
     qRegisterMetaType<MeshPresentation>("aerosim::MeshPresentation");
     qRegisterMetaType<MeshCollection>("aerosim::MeshCollection");
+    qRegisterMetaType<LogRecordRef>("aerosim::LogRecordRef");
+    qRegisterMetaType<LogEntryV2>("aerosim::LogEntryV2");
+    qRegisterMetaType<LogFragment>("aerosim::LogFragment");
+    qRegisterMetaType<MonitorSeriesRef>("aerosim::MonitorSeriesRef");
+    qRegisterMetaType<MonitorSampleV2>("aerosim::MonitorSampleV2");
+    qRegisterMetaType<MonitorSeries>("aerosim::MonitorSeries");
+    qRegisterMetaType<MonitorBatch>("aerosim::MonitorBatch");
+    qRegisterMetaType<ResultDescriptor>("aerosim::ResultDescriptor");
+    qRegisterMetaType<DatasetDescriptor>("aerosim::DatasetDescriptor");
+    qRegisterMetaType<SceneObjectDescriptor>("aerosim::SceneObjectDescriptor");
+    qRegisterMetaType<PostProcessScene>("aerosim::PostProcessScene");
 }
 
 } // namespace aerosim

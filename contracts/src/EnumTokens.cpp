@@ -204,6 +204,57 @@ const EnumTokenEntry<MeshTransformKind> kMeshTransformKindTokens[] = {
     {MeshTransformKind::Composite, "composite"}
 };
 
+const EnumTokenEntry<LogStream> kLogStreamTokens[] = {
+    {LogStream::Application, "application"},
+    {LogStream::Stdout, "stdout"},
+    {LogStream::Stderr, "stderr"}
+};
+
+const EnumTokenEntry<LogUpdateMode> kLogUpdateModeTokens[] = {
+    {LogUpdateMode::AppendLine, "append_line"},
+    {LogUpdateMode::AppendChunk, "append_chunk"},
+    {LogUpdateMode::ReplaceCurrentLine, "replace_current_line"}
+};
+
+const EnumTokenEntry<MonitorQuantity> kMonitorQuantityTokens[] = {
+    {MonitorQuantity::Residual, "residual"},
+    {MonitorQuantity::Lift, "lift"},
+    {MonitorQuantity::Drag, "drag"},
+    {MonitorQuantity::Moment, "moment"},
+    {MonitorQuantity::Coefficient, "coefficient"},
+    {MonitorQuantity::Other, "other"}
+};
+
+const EnumTokenEntry<ResultKind> kResultKindTokens[] = {
+    {ResultKind::Unknown, "unknown"},
+    {ResultKind::Field, "field"},
+    {ResultKind::Boundary, "boundary"},
+    {ResultKind::Curve, "curve"},
+    {ResultKind::Report, "report"},
+    {ResultKind::Export, "export"}
+};
+
+const EnumTokenEntry<DatasetFieldAssociation> kDatasetFieldAssociationTokens[] = {
+    {DatasetFieldAssociation::Unknown, "unknown"},
+    {DatasetFieldAssociation::Point, "point"},
+    {DatasetFieldAssociation::Cell, "cell"},
+    {DatasetFieldAssociation::Boundary, "boundary"},
+    {DatasetFieldAssociation::Global, "global"}
+};
+
+const EnumTokenEntry<SceneObjectKind> kSceneObjectKindTokens[] = {
+    {SceneObjectKind::Unknown, "unknown"},
+    {SceneObjectKind::SourceMesh, "source_mesh"},
+    {SceneObjectKind::Slice, "slice"},
+    {SceneObjectKind::IsoSurface, "iso_surface"},
+    {SceneObjectKind::Contour, "contour"},
+    {SceneObjectKind::Streamline, "streamline"},
+    {SceneObjectKind::Pathline, "pathline"},
+    {SceneObjectKind::Surface, "surface"},
+    {SceneObjectKind::Curve, "curve"},
+    {SceneObjectKind::Annotation, "annotation"}
+};
+
 } // namespace
 
 #define AEROSIM_ENUM_TOKEN_FUNCTIONS(EnumType, functionStem, entries) \
@@ -232,6 +283,13 @@ AEROSIM_ENUM_TOKEN_FUNCTIONS(MeshRole, meshRole, kMeshRoleTokens)
 AEROSIM_ENUM_TOKEN_FUNCTIONS(MeshTopology, meshTopology, kMeshTopologyTokens)
 AEROSIM_ENUM_TOKEN_FUNCTIONS(MeshRepresentation, meshRepresentation, kMeshRepresentationTokens)
 AEROSIM_ENUM_TOKEN_FUNCTIONS(MeshTransformKind, meshTransformKind, kMeshTransformKindTokens)
+AEROSIM_ENUM_TOKEN_FUNCTIONS(LogStream, logStream, kLogStreamTokens)
+AEROSIM_ENUM_TOKEN_FUNCTIONS(LogUpdateMode, logUpdateMode, kLogUpdateModeTokens)
+AEROSIM_ENUM_TOKEN_FUNCTIONS(MonitorQuantity, monitorQuantity, kMonitorQuantityTokens)
+AEROSIM_ENUM_TOKEN_FUNCTIONS(ResultKind, resultKind, kResultKindTokens)
+AEROSIM_ENUM_TOKEN_FUNCTIONS(DatasetFieldAssociation, datasetFieldAssociation,
+                             kDatasetFieldAssociationTokens)
+AEROSIM_ENUM_TOKEN_FUNCTIONS(SceneObjectKind, sceneObjectKind, kSceneObjectKindTokens)
 
 #undef AEROSIM_ENUM_TOKEN_FUNCTIONS
 

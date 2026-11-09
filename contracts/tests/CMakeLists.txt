@@ -10,6 +10,7 @@ set(AEROSIM_CONTRACT_HEADER_COMPILE_SOURCES
     compile/PostProcessRefsHeader.cpp
     compile/ReferencesHeader.cpp
     compile/ResourceModelsHeader.cpp
+    compile/ResultModelsHeader.cpp
     compile/TaskModelsHeader.cpp
     compile/TaskPortsHeader.cpp
     compile/TelemetryHeader.cpp
@@ -75,6 +76,18 @@ add_executable(aerosim_contract_mesh_models_test
 target_link_libraries(aerosim_contract_mesh_models_test PRIVATE aerosim_contracts)
 add_test(NAME contracts_mesh_models
     COMMAND aerosim_contract_mesh_models_test)
+
+add_executable(aerosim_contract_telemetry_models_test
+    TelemetryModelsTest.cpp)
+target_link_libraries(aerosim_contract_telemetry_models_test PRIVATE aerosim_contracts)
+add_test(NAME contracts_telemetry_models
+    COMMAND aerosim_contract_telemetry_models_test)
+
+add_executable(aerosim_contract_result_models_test
+    ResultModelsTest.cpp)
+target_link_libraries(aerosim_contract_result_models_test PRIVATE aerosim_contracts)
+add_test(NAME contracts_result_models
+    COMMAND aerosim_contract_result_models_test)
 
 add_test(NAME contracts_migration_fixture_layout
     COMMAND "${CMAKE_COMMAND}"

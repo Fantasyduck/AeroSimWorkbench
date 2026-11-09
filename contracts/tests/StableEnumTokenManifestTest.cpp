@@ -212,5 +212,56 @@ int main()
          {aerosim::MeshTransformKind::UnitConversion, "unit_conversion"},
          {aerosim::MeshTransformKind::Composite, "composite"}});
 
+    checkMapping<aerosim::LogStream>(context, &aerosim::enumToken,
+        &aerosim::logStreamFromToken,
+        {{aerosim::LogStream::Application, "application"},
+         {aerosim::LogStream::Stdout, "stdout"},
+         {aerosim::LogStream::Stderr, "stderr"}});
+
+    checkMapping<aerosim::LogUpdateMode>(context, &aerosim::enumToken,
+        &aerosim::logUpdateModeFromToken,
+        {{aerosim::LogUpdateMode::AppendLine, "append_line"},
+         {aerosim::LogUpdateMode::AppendChunk, "append_chunk"},
+         {aerosim::LogUpdateMode::ReplaceCurrentLine, "replace_current_line"}});
+
+    checkMapping<aerosim::MonitorQuantity>(context, &aerosim::enumToken,
+        &aerosim::monitorQuantityFromToken,
+        {{aerosim::MonitorQuantity::Residual, "residual"},
+         {aerosim::MonitorQuantity::Lift, "lift"},
+         {aerosim::MonitorQuantity::Drag, "drag"},
+         {aerosim::MonitorQuantity::Moment, "moment"},
+         {aerosim::MonitorQuantity::Coefficient, "coefficient"},
+         {aerosim::MonitorQuantity::Other, "other"}});
+
+    checkMapping<aerosim::ResultKind>(context, &aerosim::enumToken,
+        &aerosim::resultKindFromToken,
+        {{aerosim::ResultKind::Unknown, "unknown"},
+         {aerosim::ResultKind::Field, "field"},
+         {aerosim::ResultKind::Boundary, "boundary"},
+         {aerosim::ResultKind::Curve, "curve"},
+         {aerosim::ResultKind::Report, "report"},
+         {aerosim::ResultKind::Export, "export"}});
+
+    checkMapping<aerosim::DatasetFieldAssociation>(context, &aerosim::enumToken,
+        &aerosim::datasetFieldAssociationFromToken,
+        {{aerosim::DatasetFieldAssociation::Unknown, "unknown"},
+         {aerosim::DatasetFieldAssociation::Point, "point"},
+         {aerosim::DatasetFieldAssociation::Cell, "cell"},
+         {aerosim::DatasetFieldAssociation::Boundary, "boundary"},
+         {aerosim::DatasetFieldAssociation::Global, "global"}});
+
+    checkMapping<aerosim::SceneObjectKind>(context, &aerosim::enumToken,
+        &aerosim::sceneObjectKindFromToken,
+        {{aerosim::SceneObjectKind::Unknown, "unknown"},
+         {aerosim::SceneObjectKind::SourceMesh, "source_mesh"},
+         {aerosim::SceneObjectKind::Slice, "slice"},
+         {aerosim::SceneObjectKind::IsoSurface, "iso_surface"},
+         {aerosim::SceneObjectKind::Contour, "contour"},
+         {aerosim::SceneObjectKind::Streamline, "streamline"},
+         {aerosim::SceneObjectKind::Pathline, "pathline"},
+         {aerosim::SceneObjectKind::Surface, "surface"},
+         {aerosim::SceneObjectKind::Curve, "curve"},
+         {aerosim::SceneObjectKind::Annotation, "annotation"}});
+
     return context.result();
 }
