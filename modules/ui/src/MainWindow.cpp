@@ -559,8 +559,13 @@ void MainWindow::createWorkspace()
     workspaceStack_ = new QStackedWidget(this);
     workspaceStack_->setObjectName(QStringLiteral("centralWorkspace"));
     auto *viewport = createSlot(WidgetSlot::Viewport, uiText(u"\u4e09\u7ef4\u5de5\u4f5c\u533a\n\nVTK 8.2 \u89c6\u53e3\u63a5\u5165\u4f4d\u7f6e\n\u5bfc\u5165\u4e0e\u6e32\u67d3\u6a21\u5757\u5c1a\u672a\u63a5\u5165"));
-    viewportPage_ = new MeshManagementPage(viewport, workspaceStack_);
-    workspaceStack_->addWidget(viewportPage_);
+    auto *meshPage = new MeshManagementPage(viewport, workspaceStack_);
+    viewportPage_ = meshPage;
+    workspaceStack_->addWidget(meshPage);
+    // The replicated mesh workspace offers a 后处理 tab that opens the same
+    // standalone post-process workbench as the Ribbon entry.
+    connect(meshPage, &MeshManagementPage::postProcessRequested,
+            this, &MainWindow::openPostProcessRequested);
 
     const auto createWorkspacePage = [this](const QString &objectName, const QString &title,
                                              const QString &description) {
