@@ -8,6 +8,7 @@
 #include "aerosim/ui/OutputControlPanel.h"
 #include "aerosim/ui/InitializationPanel.h"
 #include "aerosim/ui/MeshManagementPage.h"
+#include "aerosim/ui/TrajectorySettingsPage.h"
 
 #include <SARibbonBar.h>
 #include <SARibbonCategory.h>
@@ -311,15 +312,14 @@ void MainWindow::createRibbon()
     newProjectMenu->menuAction()->setToolTip(uiText(u"\u9009\u62e9\u65b0\u5efa\u5de5\u4f5c\u533a\u7684\u65b9\u5f0f"));
     workspacePanel->addLargeMenu(newProjectMenu);
     workspacePanel->moveAction(workspacePanel->actionIndex(newProjectMenu->menuAction()), 0);
+    // Preprocess keeps a single unified entry per page. The former mesh file /
+    // transform / boundary / info entries and the trajectory file / data /
+    // state-extraction entries are gone; their in-page content stays inside the
+    // two consolidated pages instead of separate navigation targets.
     addGroup(preprocess, "meshManagementGroup", uiText(u"\u7f51\u683c\u7ba1\u7406"), {
-        {"mesh", uiText(u"\u7f51\u683c\u6587\u4ef6"), true, "workspace:viewport"},
-        {"transform", uiText(u"\u7f51\u683c\u53d8\u6362"), false, "workspace:mesh-transform"},
-        {"boundary", uiText(u"\u7f51\u683c\u8fb9\u754c"), false, "workspace:mesh-boundary"},
-        {"settings", uiText(u"\u7f51\u683c\u4fe1\u606f"), false, "workspace:mesh-info"}});
+        {"mesh", uiText(u"\u7f51\u683c\u7ba1\u7406"), true, "workspace:viewport"}});
     addGroup(preprocess, "trajectoryGroup", uiText(u"\u5f39\u9053\u8bbe\u7f6e"), {
-        {"import-config", uiText(u"\u5f39\u9053\u6587\u4ef6"), true, "workspace:trajectory-file"},
-        {"curve", uiText(u"\u5f39\u9053\u6570\u636e"), false, "workspace:trajectory-data"},
-        {"state", uiText(u"\u72b6\u6001\u63d0\u53d6"), false, "workspace:state-extraction"}});
+        {"curve", uiText(u"\u5f39\u9053\u8bbe\u7f6e"), true, "workspace:trajectory-settings"}});
     auto *viewPanel = addGroup(preprocess, "viewGroup", uiText(u"\u89c6\u56fe"), {
         {"view-fit", uiText(u"\u9002\u5e94"), true, ""},
         {"view-zoom-in", uiText(u"\u653e\u5927"), false, ""},
@@ -561,6 +561,11 @@ void MainWindow::createWorkspace()
     auto *viewport = createSlot(WidgetSlot::Viewport, uiText(u"\u4e09\u7ef4\u5de5\u4f5c\u533a\n\nVTK 8.2 \u89c6\u53e3\u63a5\u5165\u4f4d\u7f6e\n\u5bfc\u5165\u4e0e\u6e32\u67d3\u6a21\u5757\u5c1a\u672a\u63a5\u5165"));
     viewportPage_ = new MeshManagementPage(viewport, workspaceStack_);
     workspaceStack_->addWidget(viewportPage_);
+    // Unified trajectory settings page. The former trajectory leaf pages are
+    // consolidated here; the page keeps all of its state in the window and no
+    // longer depends on the deleted navigation entries.
+    trajectorySettingsPage_ = new TrajectorySettingsPage(workspaceStack_);
+    workspaceStack_->addWidget(trajectorySettingsPage_);
 
     const auto createWorkspacePage = [this](const QString &objectName, const QString &title,
                                              const QString &description) {
@@ -839,6 +844,7 @@ void MainWindow::createWorkspace()
                        batchMonitorPage_, taskMonitorPage_, dataProcessPage_, postprocessOverviewPage_})
         workspaceStack_->addWidget(page);
     workspacePages_.insert(QStringLiteral("viewport"), viewportPage_);
+    workspacePages_.insert(QStringLiteral("trajectory-settings"), trajectorySettingsPage_);
     workspacePages_.insert(QStringLiteral("parameters"), parameterWorkspacePage_);
     workspacePages_.insert(QStringLiteral("calculation-overview"), calculationOverviewPage_);
     workspacePages_.insert(QStringLiteral("states"), stateListPage_);
@@ -848,31 +854,12 @@ void MainWindow::createWorkspace()
     workspacePages_.insert(QStringLiteral("data-process"), dataProcessPage_);
     workspacePages_.insert(QStringLiteral("intelligent-data"), dataProcessPage_);
     workspacePages_.insert(QStringLiteral("postprocess-overview"), postprocessOverviewPage_);
-    const struct PlaceholderPage { const char *id; const char16_t *title; const char16_t *description; } placeholderPages[] = {
-        {"mesh-transform", u"\u7f51\u683c\u53d8\u6362", u"\u914d\u7f6e\u7f51\u683c\u5e73\u79fb\u3001\u65cb\u8f6c\u4e0e\u7f29\u653e\u3002\u5f53\u524d\u4ec5\u4fdd\u7559 UI \u5165\u53e3\uff0c\u4e0d\u6267\u884c\u7f51\u683c\u64cd\u4f5c\u3002"},
-        {"mesh-boundary", u"\u7f51\u683c\u8fb9\u754c", u"\u5c55\u793a\u7f51\u683c\u8fb9\u754c\u4fe1\u606f\u4e0e\u540e\u7eed\u8bbe\u7f6e\u5165\u53e3\u3002\u5c1a\u672a\u63a5\u5165\u771f\u5b9e\u7f51\u683c\u6570\u636e\u3002"},
-        {"mesh-info", u"\u7f51\u683c\u4fe1\u606f", u"\u7528\u4e8e\u663e\u793a\u7f51\u683c\u7c7b\u578b\u3001\u6587\u4ef6\u4e0e\u89c4\u6a21\u3002\u5f53\u524d\u4e3a\u7a7a\u72b6\u6001\uff0c\u4e0d\u4f2a\u9020\u7f51\u683c\u5c5e\u6027\u3002"},
-        {"trajectory-file", u"\u5f39\u9053\u6587\u4ef6", u"\u5f39\u9053\u6587\u4ef6\u9009\u62e9\u4e0e\u7ba1\u7406\u5165\u53e3\u3002\u672c\u671f\u4e0d\u5b9e\u73b0\u6587\u4ef6\u89e3\u6790\u3002"},
-        {"trajectory-data", u"\u5f39\u9053\u6570\u636e", u"\u5f39\u9053\u6570\u636e\u67e5\u770b\u5165\u53e3\u3002\u5f53\u524d\u5de5\u4f5c\u533a\u6ca1\u6709\u53ef\u5c55\u793a\u7684\u771f\u5b9e\u6570\u636e\u3002"},
-        {"state-extraction", u"\u72b6\u6001\u63d0\u53d6", u"\u4ece\u5f39\u9053\u6570\u636e\u63d0\u53d6\u8ba1\u7b97\u72b6\u6001\u7684\u914d\u7f6e\u5165\u53e3\u3002\u672c\u671f\u4e0d\u6267\u884c\u63d0\u53d6\u8ba1\u7b97\u3002"}
-    };
-    for (const auto &definition : placeholderPages) {
-        auto *page = createWorkspacePage(QString::fromLatin1(definition.id) + QStringLiteral("Page"),
-            QString::fromUtf16(reinterpret_cast<const ushort *>(definition.title)),
-            QString::fromUtf16(reinterpret_cast<const ushort *>(definition.description)));
-        qobject_cast<QVBoxLayout *>(page->layout())->addStretch();
-        workspaceStack_->addWidget(page);
-        workspacePages_.insert(QString::fromLatin1(definition.id), page);
-    }
     const QString preprocessModuleId = QStringLiteral("module-preprocess");
     const QString parameterModuleId = QStringLiteral("module-parameters");
     const QString calculationModuleId = QStringLiteral("module-calculation");
     const QString intelligentModuleId = QStringLiteral("module-intelligent-data");
     const QString postprocessModuleId = QStringLiteral("module-postprocess-analysis");
-    for (const QString &pageId : {QStringLiteral("viewport"), QStringLiteral("mesh-transform"),
-                                  QStringLiteral("mesh-boundary"), QStringLiteral("mesh-info"),
-                                  QStringLiteral("trajectory-file"), QStringLiteral("trajectory-data"),
-                                  QStringLiteral("state-extraction")})
+    for (const QString &pageId : {QStringLiteral("viewport"), QStringLiteral("trajectory-settings")})
         workspacePageModules_.insert(pageId, preprocessModuleId);
     workspacePageModules_.insert(QStringLiteral("parameters"), parameterModuleId);
     for (const QString &pageId : {QStringLiteral("calculation-overview"), QStringLiteral("states"),
@@ -902,15 +889,12 @@ void MainWindow::createWorkspace()
     auto *root = new QTreeWidgetItem(projectTree_, {uiText(u"\u5de5\u4f5c\u533a Workspace\uff08\u672a\u6253\u5f00\uff09")});
     root->setData(0, NodeTypeRole, QStringLiteral("workspace-root"));
     auto *preprocessModule = addNavigationItem(root, uiText(u"\u524d\u5904\u7406"), {}, QStringLiteral("module-preprocess"), QStringLiteral("module"));
-    auto *mesh = addNavigationItem(preprocessModule, uiText(u"\u7f51\u683c\u7ba1\u7406"), QStringLiteral("viewport"), QStringLiteral("mesh-management"), QStringLiteral("group"));
-    addNavigationItem(mesh, uiText(u"\u7f51\u683c\u6587\u4ef6"), QStringLiteral("viewport"), QStringLiteral("mesh-file"), QStringLiteral("feature"));
-    addNavigationItem(mesh, uiText(u"\u7f51\u683c\u53d8\u6362"), QStringLiteral("mesh-transform"), QStringLiteral("mesh-transform"), QStringLiteral("feature"));
-    addNavigationItem(mesh, uiText(u"\u7f51\u683c\u8fb9\u754c"), QStringLiteral("mesh-boundary"), QStringLiteral("mesh-boundary"), QStringLiteral("feature"));
-    addNavigationItem(mesh, uiText(u"\u7f51\u683c\u4fe1\u606f"), QStringLiteral("mesh-info"), QStringLiteral("mesh-info"), QStringLiteral("feature"));
-    auto *trajectory = addNavigationItem(preprocessModule, uiText(u"\u5f39\u9053\u8bbe\u7f6e"), {}, QStringLiteral("trajectory-settings"), QStringLiteral("group"));
-    addNavigationItem(trajectory, uiText(u"\u5f39\u9053\u6587\u4ef6"), QStringLiteral("trajectory-file"), QStringLiteral("trajectory-file"), QStringLiteral("feature"));
-    addNavigationItem(trajectory, uiText(u"\u5f39\u9053\u6570\u636e"), QStringLiteral("trajectory-data"), QStringLiteral("trajectory-data"), QStringLiteral("feature"));
-    addNavigationItem(trajectory, uiText(u"\u72b6\u6001\u63d0\u53d6"), QStringLiteral("state-extraction"), QStringLiteral("state-extraction"), QStringLiteral("feature"));
+    // Two leaf nodes only: the former mesh/trajectory sub-pages are consolidated
+    // into the two pages, so these nodes must not expose an expand indicator.
+    addNavigationItem(preprocessModule, uiText(u"\u7f51\u683c\u7ba1\u7406"),
+                      QStringLiteral("viewport"), QStringLiteral("mesh-management"), QStringLiteral("feature"));
+    addNavigationItem(preprocessModule, uiText(u"\u5f39\u9053\u8bbe\u7f6e"),
+                      QStringLiteral("trajectory-settings"), QStringLiteral("trajectory-settings"), QStringLiteral("feature"));
     auto *parameterModule = addNavigationItem(root, uiText(u"\u53c2\u6570\u8bbe\u7f6e"), {}, QStringLiteral("module-parameters"), QStringLiteral("module"));
     const struct ParameterNode { const char *id; const char16_t *label; } parameterNodes[] = {
         {"control-equations", u"\u63a7\u5236\u65b9\u7a0b"}, {"boundary-conditions", u"\u8fb9\u754c\u6761\u4ef6"},
@@ -949,8 +933,6 @@ void MainWindow::createWorkspace()
     addNavigationItem(root, uiText(u"\u540e\u5904\u7406\u5206\u6790"), {}, QStringLiteral("module-postprocess-analysis"), QStringLiteral("module"));
     root->setExpanded(true);
     preprocessModule->setExpanded(true);
-    mesh->setExpanded(true);
-    trajectory->setExpanded(true);
     parameterModule->setExpanded(true);
     calculationModule->setExpanded(true);
     startCalculation->setExpanded(true);
@@ -1606,10 +1588,8 @@ void MainWindow::selectPage(const QString &pageId)
         {"monitor-errors", uiText(u"\u9519\u8bef\u4fe1\u606f")}, {"results", uiText(u"\u7ed3\u679c\u4e0e\u540e\u5904\u7406")},
         {"parameters", uiText(u"\u53c2\u6570\u8bbe\u7f6e")}, {"calculation-overview", uiText(u"\u8ba1\u7b97")},
         {"intelligent-data", uiText(u"\u667a\u80fd\u6570\u636e\u5904\u7406")}, {"postprocess-overview", uiText(u"\u540e\u5904\u7406\u5206\u6790")},
-        {"viewport", uiText(u"\u7f51\u683c\u6587\u4ef6")}, {"mesh-transform", uiText(u"\u7f51\u683c\u53d8\u6362")},
-        {"mesh-boundary", uiText(u"\u7f51\u683c\u8fb9\u754c")}, {"mesh-info", uiText(u"\u7f51\u683c\u4fe1\u606f")},
-        {"trajectory-file", uiText(u"\u5f39\u9053\u6587\u4ef6")}, {"trajectory-data", uiText(u"\u5f39\u9053\u6570\u636e")},
-        {"state-extraction", uiText(u"\u72b6\u6001\u63d0\u53d6")}, {"single-calculation", uiText(u"\u5355\u6b21\u8ba1\u7b97")},
+        {"viewport", uiText(u"\u7f51\u683c\u7ba1\u7406")}, {"trajectory-settings", uiText(u"\u5f39\u9053\u8bbe\u7f6e")},
+        {"single-calculation", uiText(u"\u5355\u6b21\u8ba1\u7b97")},
         {"batch-calculation", uiText(u"\u6279\u91cf\u8ba1\u7b97")}};
     const QHash<QString, QString> parameterTitles = {
         {"calculation-control", uiText(u"\u8ba1\u7b97\u63a7\u5236")},

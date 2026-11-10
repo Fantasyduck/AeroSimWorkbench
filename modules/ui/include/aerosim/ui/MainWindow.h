@@ -114,6 +114,7 @@ private:
     QTreeWidget *taskTree_ = nullptr;
     QStackedWidget *workspaceStack_ = nullptr;
     QWidget *viewportPage_ = nullptr;
+    QWidget *trajectorySettingsPage_ = nullptr;
     QWidget *parameterWorkspacePage_ = nullptr;
     QWidget *calculationOverviewPage_ = nullptr;
     QWidget *stateListPage_ = nullptr;
