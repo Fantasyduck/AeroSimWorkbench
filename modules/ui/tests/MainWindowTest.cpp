@@ -121,49 +121,80 @@ int main(int argc, char **argv)
                "Help Ribbon must not alter the business workspace or unified tree")) return 80;
     window.ribbonBar()->raiseCategory(preprocess);
     auto *meshPage = window.findChild<QWidget *>("viewportPage");
-    auto *meshList = window.findChild<QTreeWidget *>("meshList");
+    auto *meshTable = window.findChild<QTableWidget *>("meshTable");
     auto *meshCount = window.findChild<QLabel *>("meshObjectCount");
-    auto *addMesh = window.findChild<QPushButton *>("addMeshButton");
-    auto *removeMesh = window.findChild<QPushButton *>("removeMeshButton");
+    auto *importMesh = window.findChild<QPushButton *>("importMeshButton");
+    auto *deleteMesh = window.findChild<QPushButton *>("deleteMeshButton");
     auto *scaleEditor = window.findChild<QDoubleSpinBox *>("meshScaleEditor");
     auto *historyTabs = window.findChild<QTabWidget *>("meshHistoryTabs");
     auto *history = window.findChild<QListWidget *>("meshOperationHistory");
     auto *historyCollapse = window.findChild<QPushButton *>("meshHistoryCollapseButton");
-    if (!check(meshPage && meshList && meshList->topLevelItemCount() == 3
+    auto *workspaceTabs = window.findChild<QTabWidget *>("meshWorkspaceTabs");
+    if (!check(meshPage && meshTable && meshTable->rowCount() == 3
+               && meshTable->columnCount() == 3
                && meshCount && meshCount->text().contains("3 / 10")
-               && addMesh && removeMesh && scaleEditor && historyTabs && history && historyCollapse
+               && importMesh && deleteMesh && scaleEditor && historyTabs && history && historyCollapse
+               && workspaceTabs && workspaceTabs->count() == 3
                && window.findChild<QSplitter *>("meshWorkspaceMainSplitter")
+               && window.findChild<QSplitter *>("meshSettingsSplitter")
                && window.findChild<QWidget *>("viewportSlot")
                && window.findChild<QDockWidget *>("propertyDock")->isHidden()
                && window.findChild<QWidget *>("outputBody")->isHidden()
-               && historyTabs->isHidden()
-               && historyCollapse->text() == text(u"\u5c55\u5f00")
+               && !historyTabs->isHidden()
+               && historyCollapse->text() == text(u"\u6536\u8d77")
                && !window.findChild<QPlainTextEdit *>("meshScriptPlaceholder")->isEnabled(),
                "Mesh management workspace is incomplete")) return 57;
-    meshList->setCurrentItem(meshList->topLevelItem(1));
+    // The replicated reference layout exposes a coordinate system selector and
+    // a 序号/网格名称/是否可见 table next to the tabbed workspace.
+    auto *solidRadio = window.findChild<QRadioButton *>("meshCoordinateSystemSolid");
+    auto *planarRadio = window.findChild<QRadioButton *>("meshCoordinateSystemPlanar");
+    if (!check(solidRadio && planarRadio && solidRadio->isChecked()
+               && meshTable->horizontalHeaderItem(0)
+               && meshTable->horizontalHeaderItem(0)->text() == text(u"\u5e8f\u53f7")
+               && meshTable->horizontalHeaderItem(1)->text() == text(u"\u7f51\u683c\u540d\u79f0")
+               && meshTable->horizontalHeaderItem(2)->text() == text(u"\u662f\u5426\u53ef\u89c1"),
+               "Mesh information table does not match the reference layout")) return 86;
+    // Initial visibility must mirror the seeded state (the first two meshes are
+    // visible, the third is hidden). Assigning a checkable cell emits
+    // itemChanged before its state is set, which used to be read back as the
+    // user hiding every mesh.
+    if (!check(meshTable->item(0, 2)->checkState() == Qt::Checked
+               && meshTable->item(1, 2)->checkState() == Qt::Checked
+               && meshTable->item(2, 2)->checkState() == Qt::Unchecked,
+               "Initial mesh visibility was not preserved in the table")) return 87;
+    if (!check(!history->count() || !history->item(history->count() - 1)->text()
+                   .contains(text(u"\u9690\u85c5 Mesh_001")),
+               "Seeding the table must not log a spurious hide")) return 88;
+    meshTable->setCurrentCell(1, 1);
     scaleEditor->setValue(2.5);
-    meshList->topLevelItem(1)->setCheckState(0, Qt::Unchecked);
-    meshList->setCurrentItem(meshList->topLevelItem(0));
-    meshList->setCurrentItem(meshList->topLevelItem(1));
+    meshTable->item(1, 2)->setCheckState(Qt::Unchecked);
+    meshTable->setCurrentCell(0, 1);
+    meshTable->setCurrentCell(1, 1);
     app.processEvents();
     if (!check(scaleEditor->value() == 2.5
                && !window.findChild<QCheckBox *>("meshVisibleEditor")->isChecked()
                && history->count() >= 3,
                "Per-mesh mock display state was not retained")) return 58;
-    for (int i = meshList->topLevelItemCount(); i < 10; ++i) addMesh->click();
-    if (!check(meshList->topLevelItemCount() == 10 && !addMesh->isEnabled()
+    for (int i = meshTable->rowCount(); i < 10; ++i) importMesh->click();
+    if (!check(meshTable->rowCount() == 10 && !importMesh->isEnabled()
                && meshCount->text().contains("10 / 10"),
                "Mesh management did not enforce its ten-object UI limit")) return 59;
-    removeMesh->click();
-    if (!check(meshList->topLevelItemCount() == 9 && addMesh->isEnabled(),
+    deleteMesh->click();
+    if (!check(meshTable->rowCount() == 9 && importMesh->isEnabled(),
                "Removing a mock mesh did not update list availability")) return 60;
+    // The reference layout shows the log panel expanded, so the first click
+    // collapses it and the second restores it.
+    historyCollapse->click();
+    app.processEvents();
+    if (!check(historyTabs->isHidden() && historyCollapse->text() == text(u"\u5c55\u5f00"),
+               "Mesh operation history did not collapse")) return 62;
     historyCollapse->click();
     app.processEvents();
     if (!check(!historyTabs->isHidden() && historyCollapse->text() == text(u"\u6536\u8d77"),
                "Mesh operation history did not expand")) return 61;
     historyCollapse->click();
     app.processEvents();
-    if (!check(historyTabs->isHidden(), "Mesh operation history did not collapse")) return 62;
+    if (!check(historyTabs->isHidden(), "Mesh operation history did not collapse again")) return 62;
     if (!check(window.findChild<QTreeWidget *>("workflowTree")->isHidden(),
                "Workflow tree must not occupy the module navigation")) return 33;
     // Preprocess holds exactly two expand-free leaf nodes: mesh management and
@@ -257,7 +288,7 @@ int main(int argc, char **argv)
     app.processEvents();
     if (!check(workspace->currentWidget() == retainedPage
                && window.findChildren<QWidget *>("viewportSlot").size() == 1
-               && meshList->topLevelItemCount() == 9,
+               && meshTable->rowCount() == 9,
                "Repeated module switching recreated state or the VTK host")) return 68;
     window.show();
     app.processEvents();
@@ -460,12 +491,12 @@ int main(int argc, char **argv)
                "Non-mesh workspace did not restore the shared property panel")) return 65;
     projectTree->setCurrentItem(preprocessNode->child(0));
     app.processEvents();
-    if (!check(workspace->currentWidget() == meshPage && meshList->topLevelItemCount() == 9
+    if (!check(workspace->currentWidget() == meshPage && meshTable->rowCount() == 9
                && propertyDock->isHidden()
                && !window.findChild<QWidget *>("outputBody")->isHidden()
                && projectDock->width() >= 200
                && window.findChild<QWidget *>("meshViewerPanel")->width()
-                    > window.findChild<QWidget *>("meshObjectPanel")->width(),
+                    > window.findChild<QWidget *>("meshInfoPanel")->width(),
                "Mesh management group did not restore its persistent workspace")) return 63;
     app.processEvents();
     auto *saveUserLayout = window.findChild<QAction *>("saveUserLayoutAction");
