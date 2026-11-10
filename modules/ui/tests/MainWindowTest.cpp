@@ -82,7 +82,7 @@ int main(int argc, char **argv)
                "Ribbon application button must return to the startup page")) return 69;
     returnToStartup->click();
     if (!check(startupRequests == 1, "Startup button did not emit the existing navigation request")) return 70;
-    if (!check(window.findChild<QLabel *>("propertyTitle")->text() == text(u"\u7f51\u683c\u6587\u4ef6"),
+    if (!check(window.findChild<QLabel *>("propertyTitle")->text() == text(u"\u7f51\u683c\u7ba1\u7406"),
                "Property title has incorrect Unicode characters")) return 16;
     if (!check(window.findChild<QTreeWidget *>("workspaceTree")->topLevelItemCount() == 1, "Missing workspace navigation")) return 1;
     const auto categories = window.ribbonBar()->categoryPages();
@@ -197,11 +197,28 @@ int main(int argc, char **argv)
     if (!check(historyTabs->isHidden(), "Mesh operation history did not collapse again")) return 62;
     if (!check(window.findChild<QTreeWidget *>("workflowTree")->isHidden(),
                "Workflow tree must not occupy the module navigation")) return 33;
-    projectTree->setCurrentItem(preprocessNode->child(0)->child(2));
-    projectTree->setCurrentItem(preprocessNode->child(0)->child(1));
+    // Preprocess holds exactly two expand-free leaf nodes: mesh management and
+    // the unified trajectory settings page.
+    projectTree->setCurrentItem(preprocessNode->child(1));
+    app.processEvents();
+    auto *trajectoryPage = window.findChild<QWidget *>("trajectorySettingsPage");
+    auto *selectTrajectoryFile = window.findChild<QPushButton *>("selectTrajectoryFileButton");
+    if (!check(preprocessNode->childCount() == 2
+               && preprocessNode->child(0)->childCount() == 0
+               && preprocessNode->child(1)->childCount() == 0,
+               "Preprocess navigation must expose two leaf nodes without sub-pages")) return 66;
+    if (!check(trajectoryPage && workspace->currentWidget() == trajectoryPage
+               && projectTree->currentItem() == preprocessNode->child(1)
+               && selectTrajectoryFile && !selectTrajectoryFile->isEnabled()
+               && window.findChild<QPushButton *>("loadTrajectoryDataButton")
+               && window.findChild<QPushButton *>("extractTrajectoryStateButton")
+               && window.findChild<QWidget *>("trajectoryFileSection")
+               && !trajectoryPage->findChild<QWidget *>("viewportSlot"),
+               "Trajectory leaf did not open the unified mock settings page")) return 66;
+    projectTree->setCurrentItem(preprocessNode->child(0));
     app.processEvents();
     auto *retainedPage = workspace->currentWidget();
-    if (!check(retainedPage->objectName() == "mesh-transformPage",
+    if (!check(retainedPage->objectName() == "viewportPage",
                "Preprocess node did not establish its module page state")) return 66;
     parameterNode->setExpanded(false);
     window.ribbonBar()->raiseCategory(window.findChild<SARibbonCategory *>("parametersCategory"));
@@ -259,7 +276,7 @@ int main(int argc, char **argv)
     app.processEvents();
     if (!check(projectTree->currentItem() == preprocessNode
                && workspace->currentWidget() == retainedPage
-               && workspace->currentWidget()->objectName() == "mesh-transformPage",
+               && workspace->currentWidget()->objectName() == "viewportPage",
                "Preprocess Ribbon did not restore its last page")) return 51;
     for (int cycle = 0; cycle < 3; ++cycle) {
         for (auto *category : categories) {
@@ -326,6 +343,22 @@ int main(int argc, char **argv)
                && preprocess->panelByObjectName("meshManagementGroup")
                && preprocess->panelByObjectName("trajectoryGroup")
                && preprocess->panelByObjectName("viewGroup"), "Missing grouped Preprocess commands")) return 18;
+    // Ribbon: one unified entry per preprocess page, all view tools retained.
+    auto *meshManagementPanel = preprocess->panelByObjectName("meshManagementGroup");
+    auto *trajectoryPanel = preprocess->panelByObjectName("trajectoryGroup");
+    auto *viewPanel = preprocess->panelByObjectName("viewGroup");
+    auto *meshManagementAction = window.findChild<QAction *>("meshAction");
+    auto *trajectoryAction = window.findChild<QAction *>("curveAction");
+    if (!check(meshManagementPanel && meshManagementPanel->actions().size() == 1
+               && trajectoryPanel && trajectoryPanel->actions().size() == 1
+               && meshManagementAction
+               && meshManagementAction->property("ribbonGroup").toString() == "meshManagementGroup"
+               && meshManagementAction->text() == text(u"\u7f51\u683c\u7ba1\u7406")
+               && trajectoryAction
+               && trajectoryAction->property("ribbonGroup").toString() == "trajectoryGroup"
+               && trajectoryAction->text() == text(u"\u5f39\u9053\u8bbe\u7f6e")
+               && viewPanel && viewPanel->actions().size() == 8,
+               "Preprocess Ribbon must expose one unified entry per page plus the view tools")) return 18;
     if (!check(window.findChild<QAction *>("showStartupAction")
                && window.findChild<QAction *>("showStartupAction")->isEnabled(),
                "Workbench must expose a return-to-startup entry")) return 56;
@@ -450,11 +483,10 @@ int main(int argc, char **argv)
         if (action->property("ribbonGroup").isValid()
             && !check(!action->icon().pixmap(32, 32).isNull(), "Missing embedded Ribbon icon")) return 20;
     }
-    projectTree->setCurrentItem(preprocessNode->child(0)->child(2));
-    projectTree->setCurrentItem(preprocessNode->child(0)->child(1));
+    projectTree->setCurrentItem(preprocessNode->child(1));
     app.processEvents();
-    if (!check(workspace->currentWidget()->objectName() == "mesh-transformPage",
-               "Mesh transform node did not open its placeholder page")) return 43;
+    if (!check(workspace->currentWidget()->objectName() == "trajectorySettingsPage",
+               "Trajectory settings node did not open its unified page")) return 43;
     if (!check(!propertyDock->isHidden(),
                "Non-mesh workspace did not restore the shared property panel")) return 65;
     projectTree->setCurrentItem(preprocessNode->child(0));
