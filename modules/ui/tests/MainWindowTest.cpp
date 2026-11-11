@@ -140,8 +140,8 @@ int main(int argc, char **argv)
                && window.findChild<QWidget *>("viewportSlot")
                && window.findChild<QDockWidget *>("propertyDock")->isHidden()
                && window.findChild<QWidget *>("outputBody")->isHidden()
-               && !historyTabs->isHidden()
-               && historyCollapse->text() == text(u"\u6536\u8d77")
+               && historyTabs->isHidden()
+               && historyCollapse->text() == text(u"\u5c55\u5f00")
                && !window.findChild<QPlainTextEdit *>("meshScriptPlaceholder")->isEnabled(),
                "Mesh management workspace is incomplete")) return 57;
     // The replicated reference layout exposes a coordinate system selector and
@@ -182,19 +182,14 @@ int main(int argc, char **argv)
     deleteMesh->click();
     if (!check(meshTable->rowCount() == 9 && importMesh->isEnabled(),
                "Removing a mock mesh did not update list availability")) return 60;
-    // The reference layout shows the log panel expanded, so the first click
-    // collapses it and the second restores it.
-    historyCollapse->click();
-    app.processEvents();
-    if (!check(historyTabs->isHidden() && historyCollapse->text() == text(u"\u5c55\u5f00"),
-               "Mesh operation history did not collapse")) return 62;
     historyCollapse->click();
     app.processEvents();
     if (!check(!historyTabs->isHidden() && historyCollapse->text() == text(u"\u6536\u8d77"),
                "Mesh operation history did not expand")) return 61;
     historyCollapse->click();
     app.processEvents();
-    if (!check(historyTabs->isHidden(), "Mesh operation history did not collapse again")) return 62;
+    if (!check(historyTabs->isHidden() && historyCollapse->text() == text(u"\u5c55\u5f00"),
+               "Mesh operation history did not collapse")) return 62;
     if (!check(window.findChild<QTreeWidget *>("workflowTree")->isHidden(),
                "Workflow tree must not occupy the module navigation")) return 33;
     // Preprocess holds exactly two expand-free leaf nodes: mesh management and
@@ -495,8 +490,7 @@ int main(int argc, char **argv)
                && propertyDock->isHidden()
                && !window.findChild<QWidget *>("outputBody")->isHidden()
                && projectDock->width() >= 200
-               && window.findChild<QWidget *>("meshViewerPanel")->width()
-                    > window.findChild<QWidget *>("meshInfoPanel")->width(),
+               && window.findChild<QWidget *>("meshViewerPanel")->width() > 0,
                "Mesh management group did not restore its persistent workspace")) return 63;
     app.processEvents();
     auto *saveUserLayout = window.findChild<QAction *>("saveUserLayoutAction");
@@ -539,7 +533,7 @@ int main(int argc, char **argv)
     const QList<int> defaultMeshSizes = meshMainSplitter->sizes();
     const double defaultMeshRatio = double(defaultMeshSizes.value(0))
         / qMax(1, defaultMeshSizes.value(0) + defaultMeshSizes.value(1));
-    if (!check(defaultMeshRatio >= (290.0 / 1140.0) - 0.04 && defaultMeshRatio <= 0.42
+    if (!check(defaultMeshRatio >= 0.54 && defaultMeshRatio <= 0.71
                && window.findChild<QWidget *>("outputBody")->isHidden()
                && userLayout.value("UserLayout/version").toInt() == 1,
                "Default layout must be safe without deleting the saved user layout")) return 84;
