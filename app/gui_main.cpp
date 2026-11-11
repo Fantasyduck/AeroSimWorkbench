@@ -4,6 +4,19 @@
 #include "aerosim/ui/postprocess/PostProcessWorkbenchWindow.h"
 #include "aerosim/ui/MainWindow.h"
 #include "aerosim/ui/StartupLandingPage.h"
+#ifdef AEROSIM_HAS_MONITOR_CURVES
+#include "aerosim/ui/monitor/ComputeMonitorPage.h"
+#include "aerosim/ui/monitor/MonitorSampleCurveWidget.h"
+#endif
+#ifdef AEROSIM_HAS_RESULT_SOURCE
+#include "aerosim/ui/intelligent/MonitorResultDataSource.h"
+#include "aerosim/ui/intelligent/ResultDataTablePage.h"
+#include "aerosim/ui/intelligent/ResultSummaryTablePage.h"
+#endif
+#ifdef AEROSIM_HAS_RESULT_CURVES
+#include "aerosim/ui/intelligent/QwtResultCurveView.h"
+#include "aerosim/ui/intelligent/ResultDataTablePage.h"
+#endif
 #include <QPixmap>
 
 #ifdef AEROSIM_HAS_VTK_VIEWER
@@ -37,6 +50,9 @@ int main(int argc, char *argv[])
 
     const bool smoke = app.arguments().contains(QStringLiteral("--smoke"));
 #ifndef AEROSIM_POSTPROCESS_STANDALONE
+#ifdef AEROSIM_HAS_RESULT_SOURCE
+    aerosim::MonitorResultDataSource resultReader;
+#endif
     aerosim::MainWindow window;
     aerosim::StartupLandingPage landing;
 #endif
@@ -45,6 +61,36 @@ int main(int argc, char *argv[])
         controller.workflow(), controller.tasks(), nullptr, nullptr, nullptr, nullptr};
 #ifndef AEROSIM_POSTPROCESS_STANDALONE
     window.bindServices(bindings);
+#ifdef AEROSIM_HAS_MONITOR_CURVES
+    // The curve slot is filled here, in the assembly layer, and not inside the
+    // window: the page owns the slot and accepts exactly one widget, so a test
+    // that injects its own double would be locked out by a self-installed one.
+    {
+        auto *curves = new aerosim::MonitorSampleCurveWidget;
+        if (!window.monitorPage()->insertCurveWidget(curves)) {
+            delete curves;
+            QTextStream(stderr) << "Failed to insert monitor curve widget\n";
+        }
+    }
+#endif
+#ifdef AEROSIM_HAS_RESULT_SOURCE
+    // Same reasoning as the curve slot above: the result pages take a reader and
+    // a curve view through their abstract ports, and only this executable has the
+    // monitor reader and the chart stack linked in. A build without the
+    // visualization module leaves both slots empty and the pages say so instead
+    // of pretending they can open a file.
+    {
+        auto *reader = &resultReader;
+        window.resultDataTablePage()->setDataSource(reader);
+        window.resultSummaryTablePage()->setDataSource(reader);
+    }
+#endif
+#ifdef AEROSIM_HAS_RESULT_CURVES
+    if (!window.resultDataTablePage()->setCurveView(new aerosim::QwtResultCurveView))
+        QTextStream(stderr) << "Failed to insert result curve view\n";
+#endif
+    if (app.arguments().contains(QStringLiteral("--monitor")))
+        window.showComputeMonitor();
 #endif
     postprocess.bindServices(bindings);
 #ifndef AEROSIM_POSTPROCESS_STANDALONE
@@ -103,7 +149,8 @@ int main(int argc, char *argv[])
 #else
     QWidget *initialWindow = app.arguments().contains(QStringLiteral("--postprocess"))
         ? static_cast<QWidget *>(&postprocess)
-        : app.arguments().contains(QStringLiteral("--workbench"))
+        : (app.arguments().contains(QStringLiteral("--workbench"))
+           || app.arguments().contains(QStringLiteral("--monitor")))
             ? static_cast<QWidget *>(&window) : static_cast<QWidget *>(&landing);
 #endif
     initialWindow->show();

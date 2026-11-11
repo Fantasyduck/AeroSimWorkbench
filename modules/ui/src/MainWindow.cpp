@@ -8,6 +8,9 @@
 #include "aerosim/ui/OutputControlPanel.h"
 #include "aerosim/ui/InitializationPanel.h"
 #include "aerosim/ui/MeshManagementPage.h"
+#include "aerosim/ui/monitor/ComputeMonitorPage.h"
+#include "aerosim/ui/intelligent/ResultDataTablePage.h"
+#include "aerosim/ui/intelligent/ResultSummaryTablePage.h"
 #include "aerosim/ui/TrajectorySettingsPage.h"
 
 #include <SARibbonBar.h>
@@ -235,7 +238,12 @@ void MainWindow::createRibbon()
                 connect(action, &QAction::triggered, this, [this, index] { showOutput(index); });
             } else if (route.startsWith("workspace:")) {
                 const QString workspace = route.mid(10);
-                connect(action, &QAction::triggered, this, [this, workspace] { showWorkspacePage(workspace); });
+                connect(action, &QAction::triggered, this, [this, workspace] {
+                    if (workspace == QStringLiteral("result-data-table")
+                        || workspace == QStringLiteral("result-summary-table"))
+                        selectNavigationNode(projectTree_, workspace);
+                    showWorkspacePage(workspace);
+                });
             } else if (route == "postprocess") {
                 action->setObjectName(QStringLiteral("openPostProcessAction"));
                 connect(action, &QAction::triggered, this, &MainWindow::openPostProcessRequested);
@@ -370,8 +378,11 @@ void MainWindow::createRibbon()
 
     auto *data = ribbonBar()->addCategoryPage(uiText(u"\u667a\u80fd\u6570\u636e\u5904\u7406"));
     data->setObjectName(QStringLiteral("intelligentDataCategory"));
-    addGroup(data, "intelligentDataGroup", uiText(u"\u529f\u80fd\u5165\u53e3"), {
-        {"compare", uiText(u"\u667a\u80fd\u6570\u636e\u5904\u7406"), true, ""}});
+    auto *resultPanel = addGroup(data, "intelligentDataGroup", uiText(u"\u529f\u80fd\u5165\u53e3"), {
+        {"curve", uiText(u"结果数据表"), true, "workspace:result-data-table"},
+        {"compare", uiText(u"结果汇总表"), true, "workspace:result-summary-table"}});
+    resultPanel->actions().at(0)->setObjectName(QStringLiteral("resultDataTableAction"));
+    resultPanel->actions().at(1)->setObjectName(QStringLiteral("resultSummaryTableAction"));
 
     auto *post = ribbonBar()->addCategoryPage(uiText(u"\u540e\u5904\u7406\u5206\u6790"));
     post->setObjectName(QStringLiteral("postprocessAnalysisCategory"));
@@ -839,12 +850,35 @@ void MainWindow::createWorkspace()
     taskMonitorPage_ = createWorkspacePage(QStringLiteral("taskMonitorPage"), uiText(u"\u5355\u4efb\u52a1\u76d1\u63a7"),
         uiText(u"\u7efc\u5408\u663e\u793a\u4efb\u52a1\u8fdb\u5ea6\u3001\u6536\u655b\u8d8b\u52bf\u548c\u8d44\u6e90\u4fe1\u606f\u3002\u672a\u63a5\u5165\u771f\u5b9e\u6570\u636e\u7684\u5b57\u6bb5\u5747\u6807\u8bb0\u4e3a Mock\u3002"));
     dataProcessPage_ = createWorkspacePage(QStringLiteral("intelligentDataPage"), uiText(u"\u667a\u80fd\u6570\u636e\u5904\u7406"),
-        uiText(u"\u8be5\u6a21\u5757\u529f\u80fd\u5f85\u63a5\u5165\u3002\u672c\u9875\u4ec5\u7528\u4e8e\u660e\u786e Ribbon \u4e0e\u4e2d\u592e\u5de5\u4f5c\u533a\u7684\u5bfc\u822a\u8fb9\u754c\uff0c\u4e0d\u6267\u884c\u6570\u636e\u5206\u6790\u3001AI \u6216\u516c\u5f0f\u8ba1\u7b97\u3002"));
-    qobject_cast<QVBoxLayout *>(dataProcessPage_->layout())->addStretch();
+        uiText(u"\u8bfb\u53d6\u6c42\u89e3\u5668\u4fdd\u5b58\u7684\u7ed3\u679c\u6587\u4ef6\u3002\u7ed3\u679c\u6570\u636e\u8868\u5c55\u793a\u91c7\u6837\u5e8f\u5217\u548c\u66f2\u7ebf\uff0c\u7ed3\u679c\u6c47\u603b\u8868\u6309\u5de5\u51b5\u5bf9\u6bd4\u5404\u58c1\u9762\u6c14\u52a8\u529b\u7cfb\u6570\u3002"));
+    // The module page keeps its own object name and heading: the workspace-tree
+    // test pins both. The two result pages live inside it on a private stack, so
+    // the left tree gains two real destinations without the module turning into
+    // two separate top-level modules.
+    intelligentStack_ = new QStackedWidget(dataProcessPage_);
+    intelligentStack_->setObjectName(QStringLiteral("intelligentDataStack"));
+    resultDataTablePage_ = new ResultDataTablePage(intelligentStack_);
+    resultDataTablePage_->setObjectName(QStringLiteral("resultDataTablePage"));
+    resultSummaryTablePage_ = new ResultSummaryTablePage(intelligentStack_);
+    resultSummaryTablePage_->setObjectName(QStringLiteral("resultSummaryTablePage"));
+    intelligentStack_->addWidget(resultDataTablePage_);
+    intelligentStack_->addWidget(resultSummaryTablePage_);
+    intelligentPageIndex_.insert(QStringLiteral("intelligent-data"), 0);
+    intelligentPageIndex_.insert(QStringLiteral("result-data-table"), 0);
+    intelligentPageIndex_.insert(QStringLiteral("result-summary-table"), 1);
+    qobject_cast<QVBoxLayout *>(dataProcessPage_->layout())->addWidget(intelligentStack_, 1);
     postprocessOverviewPage_ = createWorkspacePage(
         QStringLiteral("postprocessOverviewPage"), uiText(u"\u540e\u5904\u7406\u5206\u6790"),
         uiText(u"\u8be5\u6a21\u5757\u529f\u80fd\u5f85\u63a5\u5165\u3002\u5df2\u6709\u540e\u5904\u7406\u5de5\u4f5c\u53f0\u4e0e\u76f8\u5173\u4ee3\u7801\u4fdd\u6301\u4e0d\u53d8\uff0c\u672c\u9875\u4e0d\u521b\u5efa\u7b2c\u4e8c\u4e2a VTK \u89c6\u53e3\u6216\u6267\u884c\u540e\u5904\u7406\u7b97\u6cd5\u3002"));
     qobject_cast<QVBoxLayout *>(postprocessOverviewPage_->layout())->addStretch();
+    // The live monitoring page is a real page fed by task events and monitor
+    // samples. It sits beside the mock task-monitor page above instead of
+    // replacing it: the placeholder carries its own navigation entry and the
+    // window-level tests pin its object names and log behaviour.
+    monitorPage_ = new ComputeMonitorPage(workspaceStack_);
+    computeMonitorPage_ = monitorPage_;
+    workspaceStack_->addWidget(computeMonitorPage_);
+    workspacePages_.insert(QStringLiteral("compute-monitor"), computeMonitorPage_);
     for (auto *page : {parameterWorkspacePage_, calculationOverviewPage_, stateListPage_, batchPlanPage_,
                        batchMonitorPage_, taskMonitorPage_, dataProcessPage_, postprocessOverviewPage_})
         workspaceStack_->addWidget(page);
@@ -858,6 +892,11 @@ void MainWindow::createWorkspace()
     workspacePages_.insert(QStringLiteral("task-monitor"), taskMonitorPage_);
     workspacePages_.insert(QStringLiteral("data-process"), dataProcessPage_);
     workspacePages_.insert(QStringLiteral("intelligent-data"), dataProcessPage_);
+    // Both result pages resolve to the one module page; showWorkspacePage picks
+    // the inner index. Registering them here is what makes the shared
+    // navigation dispatch in handleNavigationSelection find them.
+    workspacePages_.insert(QStringLiteral("result-data-table"), dataProcessPage_);
+    workspacePages_.insert(QStringLiteral("result-summary-table"), dataProcessPage_);
     workspacePages_.insert(QStringLiteral("postprocess-overview"), postprocessOverviewPage_);
     const QString preprocessModuleId = QStringLiteral("module-preprocess");
     const QString parameterModuleId = QStringLiteral("module-parameters");
@@ -874,6 +913,8 @@ void MainWindow::createWorkspace()
         workspacePageModules_.insert(pageId, calculationModuleId);
     workspacePageModules_.insert(QStringLiteral("data-process"), intelligentModuleId);
     workspacePageModules_.insert(QStringLiteral("intelligent-data"), intelligentModuleId);
+    workspacePageModules_.insert(QStringLiteral("result-data-table"), intelligentModuleId);
+    workspacePageModules_.insert(QStringLiteral("result-summary-table"), intelligentModuleId);
     workspacePageModules_.insert(QStringLiteral("postprocess-overview"), postprocessModuleId);
     moduleLastPages_.insert(preprocessModuleId, QStringLiteral("viewport"));
     moduleLastPages_.insert(parameterModuleId, QStringLiteral("parameters"));
@@ -934,7 +975,12 @@ void MainWindow::createWorkspace()
         auto *task = addNavigationItem(batchRun, id + uiText(u"\uff08Mock \u793a\u4f8b\uff09"), QStringLiteral("task"), id, QStringLiteral("task"));
         setTaskItemStatus(task, i == 1 ? TaskStatus::Finished : i == 2 ? TaskStatus::Running : TaskStatus::Preparing);
     }
-    addNavigationItem(root, uiText(u"\u667a\u80fd\u6570\u636e\u5904\u7406"), {}, QStringLiteral("module-intelligent-data"), QStringLiteral("module"));
+    // Appended after the two run groups, never between them: the workspace tree
+    // tests address 单次计算任务 and 批处理任务 by child index under 计算监控.
+    addNavigationItem(calculationMonitor, uiText(u"\u5b9e\u65f6\u76d1\u63a7"), QStringLiteral("compute-monitor"), QStringLiteral("compute-monitor"), QStringLiteral("feature"));
+    auto *intelligentModule = addNavigationItem(root, uiText(u"\u667a\u80fd\u6570\u636e\u5904\u7406"), {}, QStringLiteral("module-intelligent-data"), QStringLiteral("module"));
+    addNavigationItem(intelligentModule, uiText(u"\u7ed3\u679c\u6570\u636e\u8868"), QStringLiteral("result-data-table"), QStringLiteral("result-data-table"), QStringLiteral("feature"));
+    addNavigationItem(intelligentModule, uiText(u"\u7ed3\u679c\u6c47\u603b\u8868"), QStringLiteral("result-summary-table"), QStringLiteral("result-summary-table"), QStringLiteral("feature"));
     addNavigationItem(root, uiText(u"\u540e\u5904\u7406\u5206\u6790"), {}, QStringLiteral("module-postprocess-analysis"), QStringLiteral("module"));
     root->setExpanded(true);
     preprocessModule->setExpanded(true);
@@ -1332,6 +1378,7 @@ void MainWindow::handleNavigationSelection(QTreeWidgetItem *item)
         setOutputScope(objectId);
         showTaskMonitor(objectId);
     }
+    else if (page == QStringLiteral("compute-monitor")) showComputeMonitor();
     else if (workspacePages_.contains(page)) showWorkspacePage(page);
     else if (page == QStringLiteral("dataset") || page == QStringLiteral("data-process")) showWorkspacePage(QStringLiteral("data-process"));
     else if (page == QStringLiteral("monitor-log")) showOutput(0);
@@ -1344,6 +1391,14 @@ void MainWindow::showWorkspacePage(const QString &pageId)
 {
     if (auto *target = workspacePages_.value(pageId, nullptr)) {
         workspaceStack_->setCurrentWidget(target);
+        // Several page ids share the module widget, so the id alone does not say
+        // which screen to show; the inner stack carries that. Anything not
+        // listed keeps the index it was left on.
+        if (pageId == QStringLiteral("intelligent-data")
+            || pageId == QStringLiteral("result-data-table")
+            || pageId == QStringLiteral("result-summary-table")) {
+            if (intelligentStack_) intelligentStack_->setCurrentIndex(intelligentPageIndex_.value(pageId, 0));
+        }
         const QString moduleId = workspacePageModules_.value(pageId);
         if (!moduleId.isEmpty()) moduleLastPages_.insert(moduleId, pageId);
         setMeshWorkspaceActive(target == viewportPage_);
@@ -1363,6 +1418,16 @@ void MainWindow::showWorkspacePage(const QString &pageId)
                 propertyDock_->show();
         }
     }
+}
+
+void MainWindow::showComputeMonitor()
+{
+    if (!monitorPage_) return;
+    // Reuse the shared page switch instead of toggling the stack here: leaving
+    // a parameter page has to restore the property dock, and that state lives in
+    // showWorkspacePage().
+    selectPage(QStringLiteral("compute-monitor"));
+    showWorkspacePage(QStringLiteral("compute-monitor"));
 }
 
 void MainWindow::showModuleWorkspace(const QString &moduleId)
@@ -1593,6 +1658,8 @@ void MainWindow::selectPage(const QString &pageId)
         {"monitor-errors", uiText(u"\u9519\u8bef\u4fe1\u606f")}, {"results", uiText(u"\u7ed3\u679c\u4e0e\u540e\u5904\u7406")},
         {"parameters", uiText(u"\u53c2\u6570\u8bbe\u7f6e")}, {"calculation-overview", uiText(u"\u8ba1\u7b97")},
         {"intelligent-data", uiText(u"\u667a\u80fd\u6570\u636e\u5904\u7406")}, {"postprocess-overview", uiText(u"\u540e\u5904\u7406\u5206\u6790")},
+        {"result-data-table", uiText(u"\u7ed3\u679c\u6570\u636e\u8868")}, {"result-summary-table", uiText(u"\u7ed3\u679c\u6c47\u603b\u8868")},
+        {"compute-monitor", uiText(u"实时监控")},
         {"viewport", uiText(u"\u7f51\u683c\u7ba1\u7406")}, {"trajectory-settings", uiText(u"\u5f39\u9053\u8bbe\u7f6e")},
         {"single-calculation", uiText(u"\u5355\u6b21\u8ba1\u7b97")},
         {"batch-calculation", uiText(u"\u6279\u91cf\u8ba1\u7b97")}};
@@ -2308,6 +2375,23 @@ void MainWindow::displayTaskEvent(const TaskEvent &event)
     appendLog(level, QStringLiteral("Task"),
               (event.errorCode.isEmpty() ? QString() : event.errorCode + QLatin1Char(' ')) + event.message,
               event.taskId);
+    // Feed the live monitoring page as a second consumer. Its task set is its
+    // own, so this adds a listener without changing what the task tree and log
+    // table above already show for the same event.
+    if (monitorPage_) {
+        // The page rejects events whose attempt does not match the attempt it
+        // holds, which is what keeps a stale delivery from attaching itself to
+        // a newer run. A retry therefore has to reach it as a record first:
+        // without this the service would move to a second attempt and every
+        // event from it would be dropped as stale, leaving the page on the dead
+        // attempt with no visible sign that anything moved on.
+        if (tasks_) {
+            const TaskRecord known = tasks_->record(event.taskId);
+            if (!known.taskId.isEmpty() && monitorPage_->taskRecord(event.taskId).attemptId != known.attemptId)
+                monitorPage_->upsertTask(known);
+        }
+        monitorPage_->displayTaskEvent(event);
+    }
 }
 
 void MainWindow::appendMessage(const QString &message)

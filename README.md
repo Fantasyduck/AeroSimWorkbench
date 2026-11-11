@@ -8,7 +8,7 @@
 
 ## 快速开始
 
-统一开发基线为 C++14、CMake 3.18.2、Qt 5.12.12、Windows VS2017 v141 x64 **Debug**。GUI 查找 Qt Core/Widgets/Svg 和 SARibbon 2.9.3；CLI 仅需 Qt Core；启用可视化模块后才查找 VTK。目标机 VTK 8.2.0 仅提供 Debug 导出，因此完整 C++ 技术栈只在 Debug 配置下验证。环境配置和 Linux 模板见[开发环境说明](docs/DevelopmentEnvironment.md)，代码规范见[开发规范](docs/DevelopmentGuide.md)。
+统一开发基线为 C++14、CMake 3.18.2、Qt 5.12.12、Windows VS2017 v141 x64 **Debug**。GUI 查找 Qt Core/Widgets/Svg、SARibbon 2.9.3，以及默认开启的可视化模块所需的 Qwt 7.5 与 Eigen 3；CLI 仅需 Qt Core；VTK 只在启用后处理 Viewer 或全栈探针时查找。目标机 VTK 8.2.0 仅提供 Debug 导出，因此完整 C++ 技术栈只在 Debug 配置下验证。环境配置和 Linux 模板见[开发环境说明](docs/DevelopmentEnvironment.md)，代码规范见[开发规范](docs/DevelopmentGuide.md)。
 
 Windows（VS2017 开发者命令提示符）：
 
@@ -20,14 +20,22 @@ build-windows\Debug\aerosim_cli.exe --mock-once
 build-windows\Debug\aerosim_gui.exe
 ```
 
-启用真实 VTK 视口（目标机只有 Debug VTK 导出）：
+GUI 构建默认带监控曲线模块，因此配置阶段需要 Qwt 7.5 与 Eigen 3；指向本地副本即可（缺失时 CMake 会直接说明缺哪一个）：
+
+```bat
+set "AEROSIM_QWT_ROOT=D:\Project\Qwt-7.5.2"
+set "AEROSIM_EIGEN_ROOT=D:\Project\eigen-3.3.4"
+set "AEROSIM_BUILD_DIR=build-postprocess"
+scripts\build-windows.cmd all Debug
+```
+
+不需要监控曲线时加 `-DAEROSIM_BUILD_VISUALIZATION=OFF`（或 `set "AEROSIM_BUILD_VISUALIZATION=OFF"`）配置即可。
+
+启用真实 VTK 视口（目标机只有 Debug VTK 导出），在上面的基础上再设：
 
 ```bat
 set "AEROSIM_VTK_DIR=D:\Project\VTK\lib\cmake\vtk-8.2"
 set "AEROSIM_VTK_BIN=D:\Project\VTK\bin"
-set "AEROSIM_BUILD_VISUALIZATION=ON"
-set "AEROSIM_BUILD_DIR=build-postprocess"
-scripts\build-windows.cmd all Debug
 set "AEROSIM_ENABLE_VTK_VIEWER=1"
 build-postprocess\Debug\aerosim_gui.exe --postprocess
 ```
@@ -37,11 +45,13 @@ Linux（需自行准备同版本 Qt；当前尚未实机验证）：
 ```bash
 export AEROSIM_QT_ROOT=/path/to/qt-5.12.12
 export AEROSIM_SARIBBON_SOURCE_DIR=/path/to/SARibbon-2.9.3
+export AEROSIM_QWT_ROOT=/path/to/Qwt-7.5.2
+export AEROSIM_EIGEN_ROOT=/path/to/eigen-3.3.4
 ./scripts/build-linux.sh all
 ./build-linux/aerosim_cli --mock-once
 ```
 
-无界面构建设置 `AEROSIM_BUILD_GUI=OFF`；仅编译某个当前模块时将 `all` 换为 `aerosim_contracts`、`aerosim_application`、`aerosim_mock` 或 `aerosim_ui`。CMake 3.18 不支持 Presets，因此统一使用脚本。GUI 必须提供 SARibbon 2.9.3 源码；VTK 仅在开启可视化或技术栈探针时查找。无界面构建不依赖 SARibbon。空间特征模块的独立测试见 [modules/visualization/tests/README.md](modules/visualization/tests/README.md)。
+无界面构建设置 `AEROSIM_BUILD_GUI=OFF`；仅编译某个当前模块时将 `all` 换为 `aerosim_contracts`、`aerosim_application`、`aerosim_mock` 或 `aerosim_ui`。CMake 3.18 不支持 Presets，因此统一使用脚本。GUI 必须提供 SARibbon 2.9.3 源码，并默认携带可视化模块（需要 Qwt 7.5 与 Eigen 3，可用 `AEROSIM_BUILD_VISUALIZATION=OFF` 关掉）；VTK 仅在启用后处理 Viewer 或全栈探针时查找。无界面构建不依赖 SARibbon，也不需要 Qwt/Eigen。空间特征模块的独立测试见 [modules/visualization/tests/README.md](modules/visualization/tests/README.md)。
 
 ## 模块边界
 
@@ -55,7 +65,7 @@ GUI / CLI entry ──> ApplicationController ──> contracts <── Mock ser
 
 `ApplicationController` 只拥有服务对象并建立工作流服务与任务服务之间的排队连接，不执行任何工作流判断或任务调度。GUI/CLI 都使用 `IWorkflowService` 和 `ITaskService`。跨线程消息按值传递，Qt 自定义类型在连接前注册；界面必须留在 GUI 线程。Mock 任务不会启动求解器，也不持久化记录。
 
-未启用 `AEROSIM_BUILD_VISUALIZATION` 时，GUI 中央视口显示明确标记的占位画布；编译启用后还需设置 `AEROSIM_ENABLE_VTK_VIEWER=1`，才在后处理工作台嵌入 `QVTKOpenGLNativeWidget` Viewer。`aerosim_gui --smoke` 仅验证 Qt 装配与 Mock 任务通信。
+监控曲线页与图表控件随可视化模块一起构建（GUI 构建默认开启）。中央视口在未启用 VTK 时显示明确标记的占位画布；设置 `AEROSIM_ENABLE_VTK_VIEWER=1` 后才会在后处理工作台嵌入 `QVTKOpenGLNativeWidget` Viewer。`aerosim_gui --smoke` 仅验证 Qt 装配与 Mock 任务通信。
 
 详细契约、目录结构、接入方法和未完成工作见 [第一阶段集成说明](docs/phase1-integration.md)；实际测试结果见 [构建与运行记录](docs/phase1-validation.md)。Windows 运行目录的打包与启动步骤见 [部署说明](docs/windows-deployment.md)。
 

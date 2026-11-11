@@ -106,9 +106,17 @@ int main(int argc, char **argv)
     auto *calculationNode = root->child(2);
     auto *intelligentDataNode = root->child(3);
     auto *postprocessNode = root->child(4);
+    // 智能数据处理 carries the two result pages. They were checked as "no
+    // children" while the module was an empty placeholder; the count is pinned
+    // to the two entries the module actually has rather than to a number that
+    // only happened to be zero.
+    const bool intelligentChildrenOk =
+        intelligentDataNode->childCount() == 2
+        && intelligentDataNode->child(0)->data(0, Qt::UserRole).toString() == QStringLiteral("result-data-table")
+        && intelligentDataNode->child(1)->data(0, Qt::UserRole).toString() == QStringLiteral("result-summary-table");
     if (!check(preprocessNode->childCount() == 2 && parameterNode->childCount() == 8
                && calculationNode->childCount() == 2
-               && intelligentDataNode->childCount() == 0 && postprocessNode->childCount() == 0,
+               && intelligentChildrenOk && postprocessNode->childCount() == 0,
                "Unified tree module hierarchy is incorrect")) return 54;
     auto *helpCategory = categories[5];
     auto *pageBeforeHelp = workspace->currentWidget();
@@ -258,6 +266,43 @@ int main(int argc, char **argv)
     if (!check(projectTree->currentItem() == intelligentDataNode
                && workspace->currentWidget()->objectName() == "intelligentDataPage",
                "Intelligent data Ribbon did not show its reserved page")) return 53;
+
+    // Both result pages are destinations of their own. The module entry and the
+    // first page share one widget, so the inner stack index is the only thing
+    // that distinguishes them -- and the only thing that can prove the summary
+    // page is reachable at all rather than sitting behind a dead entry.
+    auto *intelligentStack = window.findChild<QStackedWidget *>("intelligentDataStack");
+    auto *resultDataPage = window.findChild<QWidget *>("resultDataTablePage");
+    auto *resultSummaryPage = window.findChild<QWidget *>("resultSummaryTablePage");
+    if (!check(intelligentStack && resultDataPage && resultSummaryPage
+               && resultDataPage->parentWidget() == intelligentStack
+               && resultSummaryPage->parentWidget() == intelligentStack,
+               "Intelligent data module must host both result pages")) return 89;
+    auto *resultDataAction = window.findChild<QAction *>("resultDataTableAction");
+    auto *resultSummaryAction = window.findChild<QAction *>("resultSummaryTableAction");
+    if (!check(resultDataAction && resultSummaryAction
+               && resultDataAction->isEnabled() && resultSummaryAction->isEnabled(),
+               "Intelligent data Ribbon must expose both working result actions")) return 92;
+    resultSummaryAction->trigger();
+    app.processEvents();
+    if (!check(intelligentStack->currentWidget() == resultSummaryPage
+               && projectTree->currentItem() == intelligentDataNode->child(1),
+               "Summary Ribbon action must synchronize the page and navigation")) return 93;
+    resultDataAction->trigger();
+    app.processEvents();
+    if (!check(intelligentStack->currentWidget() == resultDataPage
+               && projectTree->currentItem() == intelligentDataNode->child(0),
+               "Result Ribbon action must synchronize the page and navigation")) return 94;
+    projectTree->setCurrentItem(intelligentDataNode->child(0));
+    app.processEvents();
+    if (!check(workspace->currentWidget()->objectName() == "intelligentDataPage"
+               && intelligentStack->currentWidget() == resultDataPage,
+               "Result data table entry did not select the data page")) return 90;
+    projectTree->setCurrentItem(intelligentDataNode->child(1));
+    app.processEvents();
+    if (!check(workspace->currentWidget()->objectName() == "intelligentDataPage"
+               && intelligentStack->currentWidget() == resultSummaryPage,
+               "Result summary table entry did not select the summary page")) return 91;
     window.ribbonBar()->raiseCategory(window.findChild<SARibbonCategory *>("calculationCategory"));
     app.processEvents();
     if (!check(workspace->currentWidget()->objectName() == "taskMonitorPage",

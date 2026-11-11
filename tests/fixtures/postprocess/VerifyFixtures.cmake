@@ -11,7 +11,9 @@ set(_fixtures
     "curves.csv|5dfa4fd5ad4926e1b1843f358c306ab89fe3873bc53b2292454d1d8e26eedc71"
     "cube_t00.vtk|c35d1c2ad00c05ca1e2deb989ef47d302781850cd8fc70b2bce8aa269b947906"
     "cube_t01.vtk|f75e6452c4d7c6d279fe60ed31fe6e7e53e3244ce15e8bc9f6c0d6a8821dbe60"
-    "cube_t02.vtk|adf4d4de61fdd4cace47bd9c5849a94d9b9d4c8cd7ae269525f10c96e079fdf5")
+    "cube_t02.vtk|adf4d4de61fdd4cace47bd9c5849a94d9b9d4c8cd7ae269525f10c96e079fdf5"
+    "su2_history_steady.csv|082addc2296febe9357c041c5d168b22a4d7a16033274f5a6a478e57bea27754"
+    "xcfd_history_tec.tec|0483728bf65c6de1de5b769fafc99426005c4e17d1aa60f67ab922f7577d2bad")
 
 foreach(_fixture IN LISTS _fixtures)
     string(REPLACE "|" ";" _parts "${_fixture}")
@@ -77,4 +79,71 @@ foreach(_frame IN ITEMS 00 01 02)
     endforeach()
 endforeach()
 
-message(STATUS "Postprocess fixtures OK: 7 files, 27 points, 8 cells, 6 boundaries, 3 frames, 4 cases")
+# Solver history log: a trimmed export of a real SU2 run. Asserting its shape
+# keeps the reader tests meaningful -- they quote specific values from row 1 and
+# the last row, so a re-trimmed or re-ordered fixture has to be a deliberate edit.
+file(READ "${POSTPROCESS_FIXTURE_DIR}/su2_history_steady.csv" _history)
+string(REPLACE "\r\n" "\n" _history "${_history}")
+string(REPLACE "\r" "\n" _history "${_history}")
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/su2_history_normalised.csv" "${_history}")
+file(STRINGS "${CMAKE_CURRENT_BINARY_DIR}/su2_history_normalised.csv" _history_lines)
+list(LENGTH _history_lines _history_line_count)
+if(NOT _history_line_count EQUAL 80)
+    message(FATAL_ERROR "Expected 80 monitor lines (1 header + 79 data rows), found ${_history_line_count}")
+endif()
+list(GET _history_lines 0 _history_header)
+string(REGEX MATCHALL "," _history_commas "${_history_header}")
+list(LENGTH _history_commas _history_comma_count)
+if(NOT _history_comma_count EQUAL 16)
+    message(FATAL_ERROR "Expected 17 monitor columns, found ${_history_comma_count}+1")
+endif()
+foreach(_token IN ITEMS "Time_Iter" "Outer_Iter" "Inner_Iter" "rms[Rho]" "CD" "CL" "CEff")
+    string(FIND "${_history_header}" "${_token}" _at)
+    if(_at EQUAL -1)
+        message(FATAL_ERROR "su2_history_steady.csv lacks column ${_token}")
+    endif()
+endforeach()
+list(GET _history_lines 79 _history_last)
+# Columns are space-padded fixed-width fields ("          0,           0,         325,..."),
+# so the match has to tolerate the padding rather than assume "0,0,325,".
+if(NOT _history_last MATCHES ", *0, *325,")
+    message(FATAL_ERROR "The last monitor row no longer advances to Inner_Iter 325")
+endif()
+
+# Tecplot ASCII history: the format XCFD writes its convergence and residual
+# curves in. The reader tests quote the first and last row of each ZONE and rely
+# on the Fortran D exponents and the two-ZONE split, so the shape is asserted here
+# as well -- a re-trimmed fixture has to be a deliberate edit.
+file(READ "${POSTPROCESS_FIXTURE_DIR}/xcfd_history_tec.tec" _tecplot)
+string(REPLACE "\r\n" "\n" _tecplot "${_tecplot}")
+string(REPLACE "\r" "\n" _tecplot "${_tecplot}")
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/xcfd_history_normalised.tec" "${_tecplot}")
+file(STRINGS "${CMAKE_CURRENT_BINARY_DIR}/xcfd_history_normalised.tec" _tecplot_lines)
+list(LENGTH _tecplot_lines _tecplot_line_count)
+if(NOT _tecplot_line_count EQUAL 14)
+    message(FATAL_ERROR "Expected 14 Tecplot lines (3 header + 2 zones x (1 record + 5 rows)), found ${_tecplot_line_count}")
+endif()
+list(GET _tecplot_lines 1 _tecplot_variables)
+foreach(_token IN ITEMS "Iter" "rms[Rho]" "CD" "CL" "CEff")
+    string(FIND "${_tecplot_variables}" "\"${_token}\"" _at)
+    if(_at EQUAL -1)
+        message(FATAL_ERROR "xcfd_history_tec.tec lacks variable ${_token}")
+    endif()
+endforeach()
+file(STRINGS "${POSTPROCESS_FIXTURE_DIR}/xcfd_history_tec.tec" _tecplot_zones REGEX "^ZONE ")
+list(LENGTH _tecplot_zones _tecplot_zone_count)
+if(NOT _tecplot_zone_count EQUAL 2)
+    message(FATAL_ERROR "Expected two ZONE records (a run continued over a restart), found ${_tecplot_zone_count}")
+endif()
+foreach(_zone IN LISTS _tecplot_zones)
+    if(NOT _zone MATCHES "I=5")
+        message(FATAL_ERROR "Every ZONE must declare five steps: ${_zone}")
+    endif()
+endforeach()
+file(STRINGS "${POSTPROCESS_FIXTURE_DIR}/xcfd_history_tec.tec" _tecplot_d REGEX "D[+-]")
+list(LENGTH _tecplot_d _tecplot_d_count)
+if(NOT _tecplot_d_count EQUAL 10)
+    message(FATAL_ERROR "Expected ten Fortran-exponent data rows, found ${_tecplot_d_count}")
+endif()
+
+message(STATUS "Postprocess fixtures OK: 9 files, 27 points, 8 cells, 6 boundaries, 3 frames, 4 cases, 80 monitor lines (79 data rows)")

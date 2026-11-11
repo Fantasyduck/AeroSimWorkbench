@@ -98,7 +98,7 @@ export AEROSIM_SARIBBON_SOURCE_DIR=/path/to/SARibbon-2.9.3
 ./build-linux/aerosim_gui
 ```
 
-如需正式后处理 Viewer，设置 `AEROSIM_BUILD_VISUALIZATION=ON`、`AEROSIM_VTK_DIR=/path/to/vtk-8.2/lib/cmake/vtk-8.2`、`AEROSIM_VTK_LIB=/path/to/vtk-8.2/lib`。如需全栈探针，额外设置 `AEROSIM_BUILD_STACK_PROBE=ON` 与 `AEROSIM_SARIBBON_SOURCE_DIR=/path/to/SARibbon`。`AEROSIM_BUILD_GUI=OFF ./scripts/build-linux.sh all` 可仅构建 CLI。Linux 图形和 OpenGL 运行测试依赖可用显示服务器；无界面环境只保证 CLI 骨架与不要求 GUI 的目标。
+构建 GUI 时 `AEROSIM_BUILD_VISUALIZATION` 默认随 `AEROSIM_BUILD_GUI` 打开，因此配置阶段就需要 Qwt 7.5 与 Eigen 3：用 `AEROSIM_QWT_ROOT=/path/to/Qwt-7.x`、`AEROSIM_EIGEN_ROOT=/path/to/eigen-3` 指定（缺失时 CMake 会直接报出缺哪一个）；不想要监控曲线可设 `AEROSIM_BUILD_VISUALIZATION=OFF`。如需正式后处理 Viewer，另设 `AEROSIM_VTK_DIR=/path/to/vtk-8.2/lib/cmake/vtk-8.2`、`AEROSIM_VTK_LIB=/path/to/vtk-8.2/lib`。如需全栈探针，额外设置 `AEROSIM_BUILD_STACK_PROBE=ON` 与 `AEROSIM_SARIBBON_SOURCE_DIR=/path/to/SARibbon`。`AEROSIM_BUILD_GUI=OFF ./scripts/build-linux.sh all` 可仅构建 CLI。Linux 图形和 OpenGL 运行测试依赖可用显示服务器；无界面环境只保证 CLI 骨架与不要求 GUI 的目标。
 
 ## 常见环境错误
 

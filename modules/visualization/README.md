@@ -88,4 +88,18 @@ tests/      每个实际目标的读取、算法和 UI 接入测试
 4. 耗时读取与计算异步执行；回传结果携带任务和数据版本，数据更新或会话关闭后不得写回过期结果。
 5. 跨模块仅传轻量 ID、元信息或不可变结果，避免将大型数组或 VTK 对象放入 `contracts/`。
 
+### 已实现目标与其依赖
+
+| 目标 | 依赖 | 说明 |
+| --- | --- | --- |
+| `aerosim_monitor_data` | Qt5::Core | 监控日志读取、实时源与累加器，无界面即可使用 |
+| `aerosim_monitor_analysis` | Qt5::Core + Eigen 3 | 序列模型与曲线拟合（最小二乘用 Eigen 列主元 QR） |
+| `aerosim_monitor_charts` | Qwt 7.5 | 唯一链接绘图库的目标；换库只需重写它 |
+
+Eigen 为纯头文件库，不需要链接，只需包含路径。查找逻辑在 `analysis/CMakeLists.txt`，两种布局都接受（`<eigen/Dense>` 与 `<Eigen/Dense>`）：先试 `find_package(Eigen3)`，否则用 `-DAEROSIM_EIGEN_ROOT=<包含 eigen/Dense 的目录>`。可以不另装 Eigen，直接用 VTK 自带的那份（`ThirdParty/eigen/vtkeigen`）。Qwt 的查找同理，见 `charts/CMakeLists.txt` 与其中的 `AEROSIM_QWT_ROOT`。两个变量都不写默认绝对路径。
+
+用 CMake 构建并测试本目录（含 Qwt 与 Eigen 的完整环境变量设置）：
+
+启用 `AEROSIM_BUILD_VISUALIZATION` 后，使用仓库的构建脚本或 CMake 构建，再用 CTest 运行监控数据和图表测试。
+
 构建环境、正式 VTK 版本、Windows 验证与部署方式见根目录 `AGENTS.md`、`docs/DevelopmentEnvironment.md` 和 `docs/windows-deployment.md`；后处理接口和接入约定见 `docs/PostProcessIntegrationGuide.md`、`docs/PostProcessContracts.md` 与 `docs/PostProcessTaskHandoff.md`。若这些草案与真实代码或更新的实测记录冲突，应先核对再实现。

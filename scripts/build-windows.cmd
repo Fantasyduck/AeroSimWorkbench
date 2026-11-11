@@ -11,7 +11,12 @@ if not defined AEROSIM_SARIBBON_SOURCE_DIR (
 )
 if not defined AEROSIM_BUILD_DIR set "AEROSIM_BUILD_DIR=%ROOT%\build-windows"
 if not defined AEROSIM_BUILD_GUI set "AEROSIM_BUILD_GUI=ON"
-if not defined AEROSIM_BUILD_VISUALIZATION set "AEROSIM_BUILD_VISUALIZATION=OFF"
+rem AEROSIM_BUILD_VISUALIZATION is deliberately not defaulted here. The project
+rem turns visualization on together with AEROSIM_BUILD_GUI, and also supplies
+rem the Qwt/Eigen error messages when they are missing; pinning OFF here would
+rem silently override that and leave the caller with a placeholder chart and no
+rem hint about why. Set the variable to force a value; leave it unset to take
+rem the project default.
 if not defined AEROSIM_BUILD_STACK_PROBE set "AEROSIM_BUILD_STACK_PROBE=OFF"
 set "PATH=%AEROSIM_QT_ROOT%\bin;%PATH%"
 rem Deployed GUI directories may only contain qwindowsd; CTest also needs offscreen.
@@ -26,13 +31,24 @@ if /I "%AEROSIM_BUILD_STACK_PROBE%"=="ON" if not defined AEROSIM_VTK_DIR (
     echo Set AEROSIM_VTK_DIR to the VTK 8.2.0 CMake package directory.
     exit /b 2
 )
+rem Optional arguments are assembled one variable at a time: each holds its own
+rem quoted value, so a path with spaces survives, and an unset variable expands
+rem to nothing instead of sending an empty -D that would override a default.
+set "VIS_ARGS="
+if defined AEROSIM_BUILD_VISUALIZATION set VIS_ARGS=-DAEROSIM_BUILD_VISUALIZATION=%AEROSIM_BUILD_VISUALIZATION%
+set "QWT_ARGS="
+if defined AEROSIM_QWT_ROOT set QWT_ARGS=-DAEROSIM_QWT_ROOT="%AEROSIM_QWT_ROOT%"
+set "EIGEN_ARGS="
+if defined AEROSIM_EIGEN_ROOT set EIGEN_ARGS=-DAEROSIM_EIGEN_ROOT="%AEROSIM_EIGEN_ROOT%"
+set "VTK_ARGS="
+if defined AEROSIM_VTK_DIR set VTK_ARGS=-DVTK_DIR="%AEROSIM_VTK_DIR%"
+
 cmake -S "%ROOT%" -B "%AEROSIM_BUILD_DIR%" -G "Visual Studio 15 2017 Win64" ^
     "-DCMAKE_PREFIX_PATH=%AEROSIM_QT_ROOT%" ^
     "-DAEROSIM_BUILD_GUI=%AEROSIM_BUILD_GUI%" ^
-    "-DAEROSIM_BUILD_VISUALIZATION=%AEROSIM_BUILD_VISUALIZATION%" ^
     "-DAEROSIM_BUILD_STACK_PROBE=%AEROSIM_BUILD_STACK_PROBE%" ^
-    "-DVTK_DIR=%AEROSIM_VTK_DIR%" ^
-    "-DSARIBBON_SOURCE_DIR=%AEROSIM_SARIBBON_SOURCE_DIR%"
+    "-DSARIBBON_SOURCE_DIR=%AEROSIM_SARIBBON_SOURCE_DIR%" ^
+    %VIS_ARGS% %QWT_ARGS% %EIGEN_ARGS% %VTK_ARGS%
 if errorlevel 1 exit /b %errorlevel%
 
 if /I "%TARGET%"=="all" (

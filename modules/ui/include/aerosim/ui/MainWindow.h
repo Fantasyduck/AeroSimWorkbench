@@ -32,6 +32,10 @@ class QObject;
 
 namespace aerosim {
 
+class ComputeMonitorPage;
+class ResultDataTablePage;
+class ResultSummaryTablePage;
+
 // UI shell: business validation and persistence remain in injected services.
 class MainWindow final : public SARibbonMainWindow, public IWidgetHost {
     Q_OBJECT
@@ -43,6 +47,21 @@ public:
     void setRunContext(const RunRequest &request);
     void displayWorkflow(const WorkflowViewV2 &view);
     void displayTaskEvent(const TaskEvent &event);
+
+    // The live monitoring page is created with the workspace but is reachable
+    // only through its own navigation entry, so the placeholder monitor page and
+    // its mock-driven assertions stay untouched. The assembly layer fills the
+    // page's curve slot; the window only exposes it.
+    ComputeMonitorPage *monitorPage() const { return monitorPage_; }
+    void showComputeMonitor();
+
+    // The two pages under 智能数据处理. They are created with the workspace but
+    // stay behind abstract result ports, so the window never learns what a
+    // monitor log or a chart is. The assembly layer injects the concrete reader
+    // and curve view; a build without the visualization module leaves both
+    // null and the pages simply show their empty state.
+    ResultDataTablePage *resultDataTablePage() const { return resultDataTablePage_; }
+    ResultSummaryTablePage *resultSummaryTablePage() const { return resultSummaryTablePage_; }
 
 signals:
     void openPostProcessRequested();
@@ -125,6 +144,16 @@ private:
     QWidget *batchCalculationPage_ = nullptr;
     QWidget *dataProcessPage_ = nullptr;
     QWidget *postprocessOverviewPage_ = nullptr;
+    QWidget *computeMonitorPage_ = nullptr;
+    ComputeMonitorPage *monitorPage_ = nullptr;
+    ResultDataTablePage *resultDataTablePage_ = nullptr;
+    ResultSummaryTablePage *resultSummaryTablePage_ = nullptr;
+    QStackedWidget *intelligentStack_ = nullptr;
+    // page id -> index inside intelligentStack_. Several ids deliberately map to
+    // the same widget: the module entry point and the first result page are the
+    // same screen, and keeping them distinct without a second widget avoids a
+    // duplicate page the user would have to wonder about.
+    QHash<QString, int> intelligentPageIndex_;
     QHash<QString, QWidget *> workspacePages_;
     QHash<QString, QString> workspacePageModules_;
     QHash<QString, QString> moduleLastPages_;
