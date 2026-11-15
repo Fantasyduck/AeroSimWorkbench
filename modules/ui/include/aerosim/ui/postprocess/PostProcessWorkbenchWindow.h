@@ -43,6 +43,7 @@ public slots:
     void setDataServiceAvailable(bool available);
     void presentImportedData(const QVariantList &datasets, bool replace);
     void presentImportError(const QString &message);
+    void presentImageExportResult(const QString &path, bool success);
 
 signals:
     void viewRequested(const QString &orientation);
@@ -56,6 +57,9 @@ signals:
     void dataSelectionChanged(const QString &dataset, const QString &region,
                               const QString &field, const QString &association);
     void exportFileRequested(const QString &kind, const QString &path);
+    void exportImageRequested(const QString &path, int width, int height);
+    void regionStyleChanged(const QString &dataset, const QString &region, const QVariantMap &style);
+    void fieldRangeChanged(const QString &dataset, const QString &region, const QString &field, const QString &association, bool automatic, double minimum, double maximum);
     // GUI-thread view preference; a future viewer adapter must apply it to VTK.
     void backgroundChanged(const QColor &bottom, const QColor &top, bool gradient);
 

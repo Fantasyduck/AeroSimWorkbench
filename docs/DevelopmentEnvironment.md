@@ -93,6 +93,16 @@ scripts\build-windows.cmd all Debug
 
 上述 VTK/SARibbon 路径仅为目标机实例；其他环境设置各自的依赖路径。探针检查 Qt 5.12.12、VTK 8.2.0、64 位，并创建 `SARibbonMainWindow`、`QVTKOpenGLNativeWidget` 和 `vtkGenericOpenGLRenderWindow` 以验证最小 C++ 对象装配；它不显示或渲染正式场景。默认关闭，不影响只安装 Qt 的构建。若只需编译探针：`scripts\build-windows.cmd aerosim_stack_probe Debug`。目标机只有 VTK Debug 导出，探针的 Release 编译会明确失败，避免链接到错误配置。
 
+## macOS：后处理工作台
+
+Apple Silicon 本机可使用 Intel 版 Qt 5.12.12 和 Rosetta，其他二进制依赖须统一为 x86_64。准备好 Qt、SARibbon、Qwt 7.5、Eigen 3、VTK 8.2（含 Qt 支持）及带 HDF5 的 CGNS 后，在仓库根目录执行：
+
+```sh
+./scripts/run-postprocess-macos.sh
+```
+
+脚本默认从 `~/.local/share/aerosim-deps` 查找依赖，可分别用 `AEROSIM_QT_ROOT`、`AEROSIM_SARIBBON_SOURCE_DIR`、`AEROSIM_QWT_ROOT`、`AEROSIM_EIGEN_ROOT`、`AEROSIM_VTK_DIR` 和 `AEROSIM_CGNS_ROOT` 覆盖。它启用后处理可视化、编译并启动工作台；`--smoke` 可运行启动检查。Qt 5.12 在本机的 `offscreen` 平台插件可能崩溃，GUI 测试应使用 macOS 原生图形会话。macOS 全栈尚非项目的正式验证基线。
+
 ## Linux：配置模板（尚未实机验证）
 
 Linux 端必须准备**同版本、同架构**的 Qt 5.12.12 与 VTK 8.2.0 开发库，并从源码编译相容的 SARibbon。编译器 GCC/Clang 的最低实测版本尚未确定；首次 Linux 集成需记录发行版、编译器版本、ABI、VTK Qt 支持及测试结果。不要把 Windows 的 DLL、MSVC 库或 SARibbon 构建目录复制到 Linux。

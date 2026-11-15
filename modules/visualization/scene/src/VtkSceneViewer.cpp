@@ -80,7 +80,7 @@ public:
         legendLayout->addWidget(legendName); legendLayout->addWidget(legendMax); legendLayout->addWidget(legendColors); legendLayout->addWidget(legendMin); legend->hide();
     }
     void render() { window->Render(); }
-    struct Display { QString dataset; QString region; vtkSmartPointer<vtkActor> actor; vtkSmartPointer<vtkDataSetMapper> mapper; bool active = false; };
+    struct Display { QString dataset; QString region; vtkSmartPointer<vtkActor> actor; vtkSmartPointer<vtkDataSetMapper> mapper; bool active = false; bool customRepresentation = false; QString field, association; QHash<QString, QPair<double,double>> ranges; };
     void addDataset(const LoadedDataset &dataset) {
         for(const auto &region:dataset.data.regions) {
             Display display; display.dataset=dataset.id; display.region=region.id;
@@ -122,19 +122,23 @@ public:
         return thin;
     }
     void select(const QString &datasetId,const QString &regionId,const QString &field,const QString &association) {
+        selectedDataset = datasetId; selectedRegion = regionId;
+        if (field.isEmpty()) return;
         for(const auto &dataset:datasets) if(dataset.id==datasetId) for(const auto &region:dataset.data.regions) if(region.id==regionId) {
             for(auto &display:displays) if(display.dataset==datasetId && display.region==regionId) {
                 const bool visible=display.actor->GetVisibility()!=0;
-                const bool thin=visible && region.dimension==2 && orientEdgeOnRegion(region.data);
-                display.actor->GetProperty()->SetEdgeVisibility(thin);
-                if(thin) { display.actor->GetProperty()->SetEdgeColor(.1,.12,.16); display.actor->GetProperty()->SetLineWidth(3); }
                 if(!field.isEmpty()) {
                     const QByteArray name=field.toUtf8();
                     vtkDataArray *array=association=="cell" ? region.data->GetCellData()->GetArray(name.constData()) : region.data->GetPointData()->GetArray(name.constData());
                     if(array) {
+                        display.field = field; display.association = association;
                         display.mapper->ScalarVisibilityOn(); display.mapper->SetScalarMode(association=="cell" ? VTK_SCALAR_MODE_USE_CELL_FIELD_DATA : VTK_SCALAR_MODE_USE_POINT_FIELD_DATA);
-                        display.mapper->SelectColorArray(name.constData()); display.mapper->SetScalarRange(array->GetRange());
-                        const double *range=array->GetRange();
+                        display.mapper->SelectColorArray(name.constData());
+                        const QString rangeKey = association + QStringLiteral(":") + field;
+                        const double *dataRange = array->GetRange();
+                        const auto stored = display.ranges.value(rangeKey, qMakePair(dataRange[0], dataRange[1]));
+                        const double range[] = {stored.first, stored.second};
+                        display.mapper->SetScalarRange(range[0], range[1]);
                         auto lookup=vtkSmartPointer<vtkLookupTable>::New(); lookup->SetRange(range[0],range[1]);
                         lookup->SetHueRange(0.667,0.0); lookup->Build();
                         display.mapper->SetLookupTable(lookup); display.mapper->UseLookupTableScalarRangeOn();
@@ -150,7 +154,6 @@ public:
                         if(visible) { legend->show(); legend->raise(); } else legend->hide();
                     } else { display.mapper->ScalarVisibilityOff(); legend->hide(); }
                 } else { display.mapper->ScalarVisibilityOff(); legend->hide(); }
-                if(visible) { renderer->ResetCamera(region.data->GetBounds()); renderer->ResetCameraClippingRange(); }
             } render(); return;
         }
     }
@@ -160,6 +163,7 @@ public:
     vtkSmartPointer<WorkbenchInteractorStyle> style;
     QFrame *legend=nullptr;
     QString legendDataset, legendRegion;
+    QString selectedDataset, selectedRegion;
     QLabel *legendName=nullptr; QLabel *legendMax=nullptr; QLabel *legendColors=nullptr; QLabel *legendMin=nullptr;
     QVector<LoadedDataset> datasets;
     QVector<Display> displays;
@@ -194,13 +198,80 @@ void VtkSceneViewer::bindWorkbench(PostProcessWorkbenchWindow *workbench) {
     });
     connect(workbench,&PostProcessWorkbenchWindow::datasetVisibilityChanged,this,[this](const QString &dataset,bool visible) {
         impl_->visibility[dataset]=visible;
-        if(!visible && impl_->legendDataset==dataset) impl_->legend->hide();
         for(auto &display:impl_->displays) if(display.dataset==dataset) display.actor->SetVisibility(visible && display.active);
+        if (impl_->legendDataset == dataset) {
+            bool show = false;
+            for (const auto &display : impl_->displays)
+                if (display.dataset == dataset && display.region == impl_->legendRegion) show = display.actor->GetVisibility() != 0 && display.mapper->GetScalarVisibility() != 0;
+            impl_->legend->setVisible(show);
+        }
         impl_->render();
     });
     connect(workbench,&PostProcessWorkbenchWindow::regionVisibilityChanged,this,[this](const QString &dataset,const QString &region,bool visible) {
-        if(!visible && impl_->legendDataset==dataset && impl_->legendRegion==region) impl_->legend->hide();
         for(auto &display:impl_->displays) if(display.dataset==dataset && display.region==region) { display.active=visible; display.actor->SetVisibility(visible && impl_->visibility.value(dataset,true)); }
+        if (impl_->legendDataset == dataset && impl_->legendRegion == region)
+            {
+                bool show = false;
+                for (const auto &display : impl_->displays) if (display.dataset == dataset && display.region == region)
+                    show = display.actor->GetVisibility() && display.mapper->GetScalarVisibility();
+                impl_->legend->setVisible(show);
+            }
+        impl_->render();
+    });
+    connect(workbench, &PostProcessWorkbenchWindow::viewRequested, this, [this](const QString &view) {
+        if (view != QStringLiteral("focusSelected")) return;
+        for (const auto &display : impl_->displays) {
+            if (display.dataset == impl_->selectedDataset && display.region == impl_->selectedRegion && display.actor->GetVisibility()) {
+                for (const auto &dataset : impl_->datasets) if (dataset.id == display.dataset)
+                    for (const auto &region : dataset.data.regions) if (region.id == display.region && region.dimension == 2) {
+                        if (impl_->orientEdgeOnRegion(region.data) && !display.customRepresentation) {
+                            display.actor->GetProperty()->SetEdgeVisibility(true);
+                            display.actor->GetProperty()->SetEdgeColor(.1, .12, .16);
+                            display.actor->GetProperty()->SetLineWidth(3);
+                        }
+                    }
+                impl_->renderer->ResetCamera(display.actor->GetBounds());
+                impl_->renderer->ResetCameraClippingRange(); impl_->render(); return;
+            }
+        }
+    });
+    connect(workbench, &PostProcessWorkbenchWindow::exportImageRequested, this,
+            [this, workbench](const QString &path, int width, int height) {
+        impl_->render();
+        const QPixmap capture = grab();
+        const bool saved = !capture.isNull() && capture.scaled(width, height, Qt::IgnoreAspectRatio, Qt::SmoothTransformation).save(path);
+        workbench->presentImageExportResult(path, saved);
+    });
+    connect(workbench, &PostProcessWorkbenchWindow::fieldRangeChanged, this,
+            [this](const QString &dataset, const QString &region, const QString &field, const QString &association, bool automatic, double minimum, double maximum) {
+        for (auto &display : impl_->displays) if (display.dataset == dataset && display.region == region) {
+            const QString key = association + QStringLiteral(":") + field;
+            if (automatic) display.ranges.remove(key); else display.ranges.insert(key, qMakePair(minimum, maximum));
+            break;
+        }
+        impl_->select(dataset, region, field, association);
+    });
+    connect(workbench, &PostProcessWorkbenchWindow::regionStyleChanged, this,
+            [this](const QString &dataset, const QString &region, const QVariantMap &style) {
+        for (auto &display : impl_->displays) if (display.dataset == dataset && display.region == region) {
+            vtkProperty *property = display.actor->GetProperty();
+            const int representation = style.value("representation").toInt();
+            display.customRepresentation = true;
+            property->SetPointSize(3.0);
+            property->SetRepresentation(representation == 1 ? VTK_WIREFRAME : representation == 3 ? VTK_POINTS : VTK_SURFACE);
+            property->SetEdgeVisibility(representation == 2);
+            property->SetOpacity(qBound(0, style.value("opacity", 100).toInt(), 100) / 100.0);
+            const int color = style.value("color").toInt();
+            const double colors[][3] = {{.72,.78,.84},{.16,.38,.78},{.0,.7,.75},{1.,.55,.1},{.55,.55,.55}};
+            const int index = qBound(0, color, 4);
+            property->SetColor(colors[index][0], colors[index][1], colors[index][2]);
+            if (index != 0) {
+                display.mapper->ScalarVisibilityOff();
+                if (impl_->legendDataset == dataset && impl_->legendRegion == region) impl_->legend->hide();
+            } else if (!display.field.isEmpty()) {
+                impl_->select(dataset, region, display.field, display.association);
+            }
+        }
         impl_->render();
     });
     connect(workbench,&PostProcessWorkbenchWindow::datasetRemovalRequested,this,[this](const QString &dataset) {
