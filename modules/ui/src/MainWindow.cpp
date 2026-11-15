@@ -18,6 +18,7 @@
 #include <SARibbonPanel.h>
 #include <QAbstractButton>
 #include <QAction>
+#include <QDir>
 #include <QActionGroup>
 #include <QApplication>
 #include <QBrush>
@@ -62,10 +63,12 @@
 #include <QScreen>
 #include <QSignalBlocker>
 #include <QSplitter>
+#include <QLibraryInfo>
 #include <QSpinBox>
 #include <QTextCharFormat>
 #include <QTextBlock>
 #include <QTextCursor>
+#include <QTranslator>
 #include <QTreeWidget>
 #include <QTreeWidgetItemIterator>
 #include <QVBoxLayout>
@@ -173,6 +176,22 @@ void setTaskItemStatus(QTreeWidgetItem *item, TaskStatus status)
 
 MainWindow::MainWindow(QWidget *parent) : SARibbonMainWindow(initializeRibbonResources(parent))
 {
+    auto *qtTranslator = new QTranslator(this);
+    const QString qtCatalog = QStringLiteral("qtbase_zh_CN.qm");
+    const QString bundledTranslations = QCoreApplication::applicationDirPath()
+        + QStringLiteral("/translations");
+    const QString platformPlugins = qEnvironmentVariable("QT_QPA_PLATFORM_PLUGIN_PATH");
+    // Qt 5.12 may report the original install path after the SDK has moved.
+    // The Windows launch command points to the active SDK's plugins/platforms.
+    if (qtTranslator->load(qtCatalog, bundledTranslations)
+        || qtTranslator->load(qtCatalog, QLibraryInfo::location(QLibraryInfo::TranslationsPath))
+        || (!platformPlugins.isEmpty() && qtTranslator->load(
+                qtCatalog, QDir(platformPlugins).absoluteFilePath(QStringLiteral("../../translations"))))) {
+        QCoreApplication::installTranslator(qtTranslator);
+    } else {
+        delete qtTranslator;
+    }
+
     setObjectName(QStringLiteral("AeroSimMainWindow"));
     setWindowTitle(uiText(u"AeroSimWorkbench \u00b7 \u4eff\u771f\u5de5\u4f5c\u53f0\uff08Mock \u670d\u52a1\uff09"));
     resize(1440, 960);
@@ -379,8 +398,8 @@ void MainWindow::createRibbon()
     auto *data = ribbonBar()->addCategoryPage(uiText(u"\u667a\u80fd\u6570\u636e\u5904\u7406"));
     data->setObjectName(QStringLiteral("intelligentDataCategory"));
     auto *resultPanel = addGroup(data, "intelligentDataGroup", uiText(u"\u529f\u80fd\u5165\u53e3"), {
-        {"curve", uiText(u"结果数据表"), true, "workspace:result-data-table"},
-        {"compare", uiText(u"结果汇总表"), true, "workspace:result-summary-table"}});
+        {"curve", uiText(u"结果数据表可视化分析"), true, "workspace:result-data-table"},
+        {"compare", uiText(u"结果汇总分析"), true, "workspace:result-summary-table"}});
     resultPanel->actions().at(0)->setObjectName(QStringLiteral("resultDataTableAction"));
     resultPanel->actions().at(1)->setObjectName(QStringLiteral("resultSummaryTableAction"));
 
@@ -596,9 +615,11 @@ void MainWindow::createWorkspace()
         font.setBold(true);
         heading->setFont(font);
         layout->addWidget(heading);
-        auto *note = new QLabel(description, page);
-        note->setWordWrap(true);
-        layout->addWidget(note);
+        if (!description.isEmpty()) {
+            auto *note = new QLabel(description, page);
+            note->setWordWrap(true);
+            layout->addWidget(note);
+        }
         return page;
     };
     parameterWorkspacePage_ = createWorkspacePage(
@@ -849,8 +870,8 @@ void MainWindow::createWorkspace()
     batchMonitorLayout->addStretch();
     taskMonitorPage_ = createWorkspacePage(QStringLiteral("taskMonitorPage"), uiText(u"\u5355\u4efb\u52a1\u76d1\u63a7"),
         uiText(u"\u7efc\u5408\u663e\u793a\u4efb\u52a1\u8fdb\u5ea6\u3001\u6536\u655b\u8d8b\u52bf\u548c\u8d44\u6e90\u4fe1\u606f\u3002\u672a\u63a5\u5165\u771f\u5b9e\u6570\u636e\u7684\u5b57\u6bb5\u5747\u6807\u8bb0\u4e3a Mock\u3002"));
-    dataProcessPage_ = createWorkspacePage(QStringLiteral("intelligentDataPage"), uiText(u"\u667a\u80fd\u6570\u636e\u5904\u7406"),
-        uiText(u"\u8bfb\u53d6\u6c42\u89e3\u5668\u4fdd\u5b58\u7684\u7ed3\u679c\u6587\u4ef6\u3002\u7ed3\u679c\u6570\u636e\u8868\u5c55\u793a\u91c7\u6837\u5e8f\u5217\u548c\u66f2\u7ebf\uff0c\u7ed3\u679c\u6c47\u603b\u8868\u6309\u5de5\u51b5\u5bf9\u6bd4\u5404\u58c1\u9762\u6c14\u52a8\u529b\u7cfb\u6570\u3002"));
+    dataProcessPage_ = createWorkspacePage(QStringLiteral("intelligentDataPage"),
+        uiText(u"\u667a\u80fd\u6570\u636e\u5904\u7406"), {});
     // The module page keeps its own object name and heading: the workspace-tree
     // test pins both. The two result pages live inside it on a private stack, so
     // the left tree gains two real destinations without the module turning into
@@ -979,8 +1000,8 @@ void MainWindow::createWorkspace()
     // tests address 单次计算任务 and 批处理任务 by child index under 计算监控.
     addNavigationItem(calculationMonitor, uiText(u"\u5b9e\u65f6\u76d1\u63a7"), QStringLiteral("compute-monitor"), QStringLiteral("compute-monitor"), QStringLiteral("feature"));
     auto *intelligentModule = addNavigationItem(root, uiText(u"\u667a\u80fd\u6570\u636e\u5904\u7406"), {}, QStringLiteral("module-intelligent-data"), QStringLiteral("module"));
-    addNavigationItem(intelligentModule, uiText(u"\u7ed3\u679c\u6570\u636e\u8868"), QStringLiteral("result-data-table"), QStringLiteral("result-data-table"), QStringLiteral("feature"));
-    addNavigationItem(intelligentModule, uiText(u"\u7ed3\u679c\u6c47\u603b\u8868"), QStringLiteral("result-summary-table"), QStringLiteral("result-summary-table"), QStringLiteral("feature"));
+    addNavigationItem(intelligentModule, uiText(u"结果数据表可视化分析"), QStringLiteral("result-data-table"), QStringLiteral("result-data-table"), QStringLiteral("feature"));
+    addNavigationItem(intelligentModule, uiText(u"结果汇总分析"), QStringLiteral("result-summary-table"), QStringLiteral("result-summary-table"), QStringLiteral("feature"));
     addNavigationItem(root, uiText(u"\u540e\u5904\u7406\u5206\u6790"), {}, QStringLiteral("module-postprocess-analysis"), QStringLiteral("module"));
     root->setExpanded(true);
     preprocessModule->setExpanded(true);
@@ -1401,21 +1422,22 @@ void MainWindow::showWorkspacePage(const QString &pageId)
         }
         const QString moduleId = workspacePageModules_.value(pageId);
         if (!moduleId.isEmpty()) moduleLastPages_.insert(moduleId, pageId);
-        setMeshWorkspaceActive(target == viewportPage_);
-        // Embedded parameter editors fill the central area, so hide the shared
-        // property dock while editing and keep the workspace tree at a stable
-        // width. Leaving the parameter pages restores main's dock state.
-        if (pageId.startsWith(QStringLiteral("parameter-"))) {
-            if (!parameterDockHidden_) {
-                propertyDockVisibleBeforeParameter_ = propertyDock_ && propertyDock_->isVisible();
-                parameterDockHidden_ = true;
-            }
-            propertyDock_->hide();
-            resizeDocks({projectDock_}, {260}, Qt::Horizontal);
-        } else if (parameterDockHidden_) {
-            parameterDockHidden_ = false;
-            if (propertyDockVisibleBeforeParameter_ && !meshWorkspaceActive_)
+        const bool hidePropertyDock = target == dataProcessPage_
+            || pageId.startsWith(QStringLiteral("parameter-"));
+        if (propertyDockHiddenForPage_ && !hidePropertyDock) {
+            propertyDockHiddenForPage_ = false;
+            if (propertyDockVisibleBeforePage_ && !meshWorkspaceActive_)
                 propertyDock_->show();
+        }
+        setMeshWorkspaceActive(target == viewportPage_);
+        if (hidePropertyDock) {
+            if (!propertyDockHiddenForPage_) {
+                propertyDockVisibleBeforePage_ = !propertyDock_->isHidden();
+                propertyDockHiddenForPage_ = true;
+            }
+            const int treeWidth = target == dataProcessPage_ ? projectDock_->width() : 260;
+            propertyDock_->hide();
+            resizeDocks({projectDock_}, {treeWidth}, Qt::Horizontal);
         }
     }
 }
@@ -1423,9 +1445,7 @@ void MainWindow::showWorkspacePage(const QString &pageId)
 void MainWindow::showComputeMonitor()
 {
     if (!monitorPage_) return;
-    // Reuse the shared page switch instead of toggling the stack here: leaving
-    // a parameter page has to restore the property dock, and that state lives in
-    // showWorkspacePage().
+    // The shared page switch restores the property dock when needed.
     selectPage(QStringLiteral("compute-monitor"));
     showWorkspacePage(QStringLiteral("compute-monitor"));
 }
@@ -1658,7 +1678,7 @@ void MainWindow::selectPage(const QString &pageId)
         {"monitor-errors", uiText(u"\u9519\u8bef\u4fe1\u606f")}, {"results", uiText(u"\u7ed3\u679c\u4e0e\u540e\u5904\u7406")},
         {"parameters", uiText(u"\u53c2\u6570\u8bbe\u7f6e")}, {"calculation-overview", uiText(u"\u8ba1\u7b97")},
         {"intelligent-data", uiText(u"\u667a\u80fd\u6570\u636e\u5904\u7406")}, {"postprocess-overview", uiText(u"\u540e\u5904\u7406\u5206\u6790")},
-        {"result-data-table", uiText(u"\u7ed3\u679c\u6570\u636e\u8868")}, {"result-summary-table", uiText(u"\u7ed3\u679c\u6c47\u603b\u8868")},
+        {"result-data-table", uiText(u"结果数据表可视化分析")}, {"result-summary-table", uiText(u"结果汇总分析")},
         {"compute-monitor", uiText(u"实时监控")},
         {"viewport", uiText(u"\u7f51\u683c\u7ba1\u7406")}, {"trajectory-settings", uiText(u"\u5f39\u9053\u8bbe\u7f6e")},
         {"single-calculation", uiText(u"\u5355\u6b21\u8ba1\u7b97")},
@@ -1727,8 +1747,7 @@ void MainWindow::selectPage(const QString &pageId)
         note->setWordWrap(true);
         propertyForm_->addRow(note);
     }
-    if (meshWorkspaceActive_) propertyDock_->hide();
-    else propertyDock_->show();
+    propertyDock_->setVisible(!meshWorkspaceActive_ && !propertyDockHiddenForPage_);
 }
 
 void MainWindow::restoreLayout()
@@ -1752,8 +1771,8 @@ void MainWindow::restoreLayout()
     if (auto *meshPage = qobject_cast<MeshManagementPage *>(viewportPage_))
         meshPage->restoreDefaultLayout();
     if (taskMonitorContentSplitter_) taskMonitorContentSplitter_->setSizes({300, 170});
+    if (meshWorkspaceActive_ || propertyDockHiddenForPage_) propertyDock_->hide();
     if (meshWorkspaceActive_) {
-        propertyDock_->hide();
         resizeDocks({projectDock_}, {260}, Qt::Horizontal);
         projectDockWidth_ = projectDock_->width();
     }
@@ -1870,7 +1889,7 @@ void MainWindow::restoreUserLayout()
             addDockWidget(Qt::LeftDockWidgetArea, propertyDock_);
             splitDockWidget(projectDock_, propertyDock_, Qt::Horizontal);
         }
-        if (!meshWorkspaceActive_) propertyDock_->show();
+        propertyDock_->setVisible(!meshWorkspaceActive_ && !propertyDockHiddenForPage_);
         resizeDocks({projectDock_, propertyDock_},
                     {qMax(220, qRound(width() * projectRatio)), qMax(300, qRound(width() * propertyRatio))},
                     Qt::Horizontal);

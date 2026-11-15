@@ -36,6 +36,8 @@ endif()
 
 if(NOT AEROSIM_EIGEN_TARGET)
     message(FATAL_ERROR
+        "If your VTK SDK includes the Eigen headers, set AEROSIM_EIGEN_ROOT to that include root (for example, <VTK>/include/vtk-8.2/vtkeigen).\n"
+        "Otherwise, download and extract an Eigen 3 release from https://gitlab.com/libeigen/eigen/-/releases and use its header directory.\n"
         "Eigen 3 was not found. Install it, or configure with "
         "-DAEROSIM_EIGEN_ROOT=<include root containing eigen/Dense or Eigen/Dense>.")
 endif()

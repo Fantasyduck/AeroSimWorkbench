@@ -23,10 +23,7 @@ struct ResultAxis {
 // One opened result file: a shared horizontal axis plus, for every variable, its
 // whole vector of samples.
 //
-// The storage is column-major because that is how the file is laid out and how
-// the reader produces it, but the pages read it row-wise -- one row is one
-// variable carrying all of its samples -- which is the orientation the result
-// table was asked for and the transpose of the file.
+// Each variable owns one column of values indexed by the shared axis.
 struct ResultTable {
     QString sourcePath;
     QString datasetId;

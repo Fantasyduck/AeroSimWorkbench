@@ -2,6 +2,7 @@
 #include "aerosim/ui/intelligent/ResultSummaryTablePage.h"
 
 #include <QApplication>
+#include <QHeaderView>
 #include <QComboBox>
 #include <QPushButton>
 #include <QSplitter>
@@ -85,11 +86,11 @@ class ResultDataPagesTest final : public QObject {
 private slots:
     void emptyStateIsUsable();
     void tableIsTransposedToRowsPerVariable();
-    void untickingAVariableDropsItsRowAndItsCurve();
+    void untickingAVariableDropsItsColumnAndItsCurve();
     void failedLoadKeepsThePreviousResult();
     void summaryReportsRangeAndLastValue();
     void curveSlotAcceptsExactlyOneView();
-    void selectingRowsDrawsImmediatelyBelowTable();
+    void selectingColumnsDrawsImmediatelyBelowTable();
     void switchingXAxisUsesTheSelectedColumn();
     void clearingSelectionClearsCurves();
 };
@@ -118,23 +119,21 @@ void ResultDataPagesTest::tableIsTransposedToRowsPerVariable()
     QVERIFY2(page.loadFile(QStringLiteral("C:/tmp/stub.csv"), &error), qPrintable(error));
     QCOMPARE(source.loads, 1);
 
-    // One row per variable, not per sample: two variables against four samples.
-    QCOMPARE(page.tableWidget()->rowCount(), 2);
-    // Variable column plus one column per sample.
-    QCOMPARE(page.tableWidget()->columnCount(), 5);
-    QCOMPARE(page.tableWidget()->item(0, 0)->text(), QStringLiteral("CD"));
-    QCOMPARE(page.tableWidget()->item(1, 0)->text(), QStringLiteral("rms[Rho]"));
-    // The values run left to right along the row, which is the transpose of the
-    // file and the whole point of the page.
-    QVERIFY(page.tableWidget()->item(0, 1)->text().toDouble() > 0.07);
-    QVERIFY(page.tableWidget()->item(0, 4)->text().toDouble() < 0.02);
+    auto *table = page.tableWidget();
+    QCOMPARE(table->rowCount(), 4);
+    QCOMPARE(table->columnCount(), 3);
+    QCOMPARE(table->horizontalHeaderItem(1)->text(), QStringLiteral("CD"));
+    QCOMPARE(table->horizontalHeaderItem(2)->text(), QStringLiteral("rms[Rho]"));
+    QCOMPARE(table->item(3, 0)->text(), QStringLiteral("30"));
+    QVERIFY(table->item(0, 1)->text().toDouble() > 0.07);
+    QVERIFY(table->item(3, 1)->text().toDouble() < 0.02);
 
     // The tree groups residuals apart from everything else.
     QCOMPARE(page.variableTree()->topLevelItemCount(), 2);
     QCOMPARE(page.selectedKeys().size(), 2);
 }
 
-void ResultDataPagesTest::untickingAVariableDropsItsRowAndItsCurve()
+void ResultDataPagesTest::untickingAVariableDropsItsColumnAndItsCurve()
 {
     StubSource source;
     aerosim::ResultDataTablePage page;
@@ -148,7 +147,7 @@ void ResultDataPagesTest::untickingAVariableDropsItsRowAndItsCurve()
     QString error;
     QVERIFY(page.loadFile(QStringLiteral("C:/tmp/stub.csv"), &error));
     QCOMPARE(curves->replacements, 0);
-    page.tableWidget()->setRangeSelected(QTableWidgetSelectionRange(0, 0, 1, 4), true);
+    page.tableWidget()->setRangeSelected(QTableWidgetSelectionRange(0, 1, 3, 2), true);
     QCOMPARE(curves->replacements, 1);
     QCOMPARE(curves->keys.size(), 2);
 
@@ -166,8 +165,9 @@ void ResultDataPagesTest::untickingAVariableDropsItsRowAndItsCurve()
     group->child(0)->setCheckState(0, Qt::Unchecked);
 
     QCOMPARE(page.selectedKeys().size(), 1);
-    QCOMPARE(page.tableWidget()->rowCount(), 1);
-    QCOMPARE(page.tableWidget()->item(0, 0)->text(), QStringLiteral("rms[Rho]"));
+    QCOMPARE(page.tableWidget()->rowCount(), 4);
+    QCOMPARE(page.tableWidget()->columnCount(), 2);
+    QCOMPARE(page.tableWidget()->horizontalHeaderItem(1)->text(), QStringLiteral("rms[Rho]"));
     // The curve view is told again, with one key instead of two.
     QCOMPARE(curves->replacements, 2);
     QCOMPARE(curves->keys.size(), 1);
@@ -196,9 +196,10 @@ void ResultDataPagesTest::failedLoadKeepsThePreviousResult()
     source.failNext = true;
     QVERIFY(!page.loadFile(QStringLiteral("C:/tmp/second.csv"), &error));
     QCOMPARE(error, QStringLiteral("stub failure"));
-    // A failed open must not blank the table the user was reading.
+    // A failed open preserves the table the user was reading.
     QCOMPARE(page.table().variables.size(), 2);
-    QCOMPARE(page.tableWidget()->rowCount(), 2);
+    QCOMPARE(page.tableWidget()->rowCount(), 4);
+    QCOMPARE(page.tableWidget()->columnCount(), 3);
 
     // Clearing is explicit and does empty it.
     page.clearData();
@@ -214,7 +215,7 @@ void ResultDataPagesTest::summaryReportsRangeAndLastValue()
     QString error;
     QVERIFY(page.loadFile(QStringLiteral("C:/tmp/stub.csv"), &error));
 
-    // One row per variable, and none of the per-sample columns of the table page.
+    // One row per variable, and one aggregate per variable.
     QCOMPARE(page.tableWidget()->rowCount(), 2);
     QCOMPARE(page.tableWidget()->columnCount(), 8);
     QCOMPARE(page.tableWidget()->item(0, 0)->text(), QStringLiteral("CD"));
@@ -241,7 +242,7 @@ void ResultDataPagesTest::curveSlotAcceptsExactlyOneView()
     delete second;
 }
 
-void ResultDataPagesTest::selectingRowsDrawsImmediatelyBelowTable()
+void ResultDataPagesTest::selectingColumnsDrawsImmediatelyBelowTable()
 {
     StubSource source;
     aerosim::ResultDataTablePage page;
@@ -251,14 +252,19 @@ void ResultDataPagesTest::selectingRowsDrawsImmediatelyBelowTable()
     QString error;
     QVERIFY(page.loadFile(QStringLiteral("stub.csv"), &error));
     QCOMPARE(view->replacements, 0);
-    page.tableWidget()->selectRow(1);
+    page.resize(960, 540);
+    page.show();
+    auto *header = page.tableWidget()->horizontalHeader();
+    const QPoint columnCenter(header->sectionViewportPosition(2) + header->sectionSize(2) / 2,
+                              header->viewport()->height() / 2);
+    QTest::mouseClick(header->viewport(), Qt::LeftButton, Qt::NoModifier, columnCenter);
     QCOMPARE(view->keys, QStringList{QStringLiteral("rms[Rho]")});
     QCOMPARE(view->table.axisValues, QVector<double>({0, 10, 20, 30}));
     auto *splitter = page.findChild<QSplitter *>(QStringLiteral("resultDataRightSplit"));
     QVERIFY(splitter);
     QCOMPARE(splitter->widget(0), static_cast<QWidget *>(page.tableWidget()));
     QVERIFY(splitter->widget(1)->isAncestorOf(view));
-    page.tableWidget()->selectRow(0);
+    page.tableWidget()->selectColumn(1);
     QCOMPARE(view->keys, QStringList{QStringLiteral("CD")});
 }
 
@@ -271,7 +277,7 @@ void ResultDataPagesTest::switchingXAxisUsesTheSelectedColumn()
     QVERIFY(page.setCurveView(view));
     QString error;
     QVERIFY(page.loadFile(QStringLiteral("stub.csv"), &error));
-    page.tableWidget()->selectRow(1);
+    page.tableWidget()->selectColumn(2);
     auto *axis = page.findChild<QComboBox *>(QStringLiteral("resultDataXAxis"));
     QVERIFY(axis);
     QCOMPARE(axis->count(), 3);
@@ -296,12 +302,12 @@ void ResultDataPagesTest::clearingSelectionClearsCurves()
     QVERIFY(page.setCurveView(view));
     QString error;
     QVERIFY(page.loadFile(QStringLiteral("stub.csv"), &error));
-    page.tableWidget()->selectRow(0);
+    page.tableWidget()->selectColumn(1);
     const int clears = view->clears;
     page.tableWidget()->clearSelection();
     QCOMPARE(view->clears, clears + 1);
-    // Opening another file must not carry stale row selections into it.
-    page.tableWidget()->selectRow(1);
+    // Opening another file must not carry stale column selections into it.
+    page.tableWidget()->selectColumn(2);
     const int replacements = view->replacements;
     QVERIFY(page.loadFile(QStringLiteral("next.csv"), &error));
     QCOMPARE(view->replacements, replacements);

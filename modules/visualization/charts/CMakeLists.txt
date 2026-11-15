@@ -1,5 +1,10 @@
 cmake_minimum_required(VERSION 3.16)
 
+option(AEROSIM_BUILD_CURVES "Build the Qwt curve charts when Qwt is available" ON)
+if(NOT AEROSIM_BUILD_CURVES)
+    return()
+endif()
+
 # Chart widget for the monitor series. This target is the only place that links a
 # charting library: the model in analysis/ and the reader in data/ stay free of
 # any plotting dependency, so the library choice remains reversible
@@ -52,8 +57,12 @@ else()
 endif()
 
 if(NOT AEROSIM_QWT_TARGET)
-    message(FATAL_ERROR
-        "Qwt 7.5 was not found. Install it, or configure with -DAEROSIM_QWT_ROOT=<path to Qwt 7.x>.")
+    message(STATUS
+        "Qwt 7.5 was not found. Building without curve charts.\n"
+        "  To enable curves, get Qwt 7.5 from https://github.com/czyt1988/QWT/releases\n"
+        "  Build and install Qwt for your Qt and compiler, then reconfigure with\n"
+        "  -DAEROSIM_QWT_ROOT=<Qwt install directory> -DAEROSIM_BUILD_CURVES=ON")
+    return()
 endif()
 
 add_library(aerosim_monitor_charts STATIC

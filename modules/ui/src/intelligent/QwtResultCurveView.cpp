@@ -8,6 +8,9 @@
 #include <QGroupBox>
 #include <QHBoxLayout>
 #include <QIcon>
+#include <QDialog>
+#include <QDialogButtonBox>
+#include <QLineEdit>
 #include <QLabel>
 #include <QPixmap>
 #include <QPushButton>
@@ -69,21 +72,26 @@ QwtResultCurveView::QwtResultCurveView(QWidget *parent) : ResultCurveView(parent
     setObjectName(QStringLiteral("resultCurveView"));
     auto *layout = new QVBoxLayout(this);
     layout->setContentsMargins(0, 0, 0, 0);
-    settingsPanel_ = new QWidget(this);
+    settingsPanel_ = new QDialog(this, Qt::Tool | Qt::WindowTitleHint | Qt::WindowCloseButtonHint);
+    settingsPanel_->setWindowTitle(QStringLiteral(u"曲线设置"));
     settingsPanel_->hide();
     settingsPanel_->setObjectName(QStringLiteral("resultCurveSettingsPanel"));
-    settingsPanel_->setMinimumWidth(252);
-    settingsPanel_->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Expanding);
+    settingsPanel_->setMinimumWidth(330);
     auto *panelLayout = new QVBoxLayout(settingsPanel_);
-    panelLayout->setContentsMargins(0, 0, 0, 0);
+    panelLayout->setContentsMargins(14, 14, 14, 12);
+    panelLayout->setSpacing(12);
     const auto addGroup = [this, panelLayout](const QString &title) {
         auto *group = new QGroupBox(title, settingsPanel_);
         auto *form = new QFormLayout(group);
+        form->setContentsMargins(12, 12, 12, 12);
+        form->setHorizontalSpacing(14);
+        form->setVerticalSpacing(8);
+        form->setLabelAlignment(Qt::AlignLeft);
         form->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
         panelLayout->addWidget(group);
         return form;
     };
-    auto *appearance = addGroup(QStringLiteral(u"曲线设置"));
+    auto *appearance = addGroup(QStringLiteral(u"曲线与散点"));
     const auto addControl = [](QFormLayout *form, const QString &label, QWidget *control) {
         control->setAccessibleName(label);
         form->addRow(label, control);
@@ -95,8 +103,15 @@ QwtResultCurveView::QwtResultCurveView(QWidget *parent) : ResultCurveView(parent
     curveChoice_->setMinimumContentsLength(12);
     addControl(appearance, QStringLiteral(u"编辑曲线"), curveChoice_);
 
+    legendName_ = new QLineEdit(settingsPanel_);
+    legendName_->setObjectName(QStringLiteral("resultCurveLegendName"));
+    legendName_->setPlaceholderText(QStringLiteral(u"留空恢复默认名称"));
+    addControl(appearance, QStringLiteral(u"图例名称"), legendName_);
+    connect(legendName_, &QLineEdit::editingFinished, this, &QwtResultCurveView::applyLegendName);
+
     color_ = new QPushButton(QStringLiteral(u"选颜色"), this);
     color_->setObjectName(QStringLiteral("resultCurveColor"));
+    color_->setAutoDefault(false);
     addControl(appearance, QStringLiteral(u"颜色"), color_);
 
     shape_ = new QComboBox(settingsPanel_);
@@ -123,12 +138,13 @@ QwtResultCurveView::QwtResultCurveView(QWidget *parent) : ResultCurveView(parent
     pointSize_->setSingleStep(0.5);
     addControl(appearance, QStringLiteral(u"点大小"), pointSize_);
 
-    auto *drawing = addGroup(QStringLiteral(u"连线与拟合"));
+    auto *drawing = addGroup(QStringLiteral(u"绘制方式"));
+    drawingForm_ = drawing;
     drawingMode_ = new QComboBox(settingsPanel_);
     drawingMode_->setObjectName(QStringLiteral("resultCurveDrawingMode"));
     for (const auto &mode : kDrawingModes)
         drawingMode_->addItem(QString::fromUtf16(reinterpret_cast<const ushort *>(mode.label)));
-    addControl(drawing, QStringLiteral(u"绘制方式"), drawingMode_);
+    addControl(drawing, QStringLiteral(u"模式"), drawingMode_);
 
     lineStyle_ = new QComboBox(settingsPanel_);
     lineStyle_->setObjectName(QStringLiteral("resultCurveLineStyle"));
@@ -162,15 +178,28 @@ QwtResultCurveView::QwtResultCurveView(QWidget *parent) : ResultCurveView(parent
     fitFeedback_->setTextFormat(Qt::PlainText);
     fitFeedback_->setWordWrap(true);
     drawing->addRow(fitFeedback_);
-    panelLayout->addStretch(1);
+    auto *buttons = new QDialogButtonBox(QDialogButtonBox::Close, settingsPanel_);
+    buttons->button(QDialogButtonBox::Close)->setText(QStringLiteral(u"关闭"));
+    buttons->button(QDialogButtonBox::Close)->setAutoDefault(false);
+    connect(buttons, &QDialogButtonBox::rejected, settingsPanel_.data(), &QWidget::close);
+    panelLayout->addWidget(buttons);
 
     chart_ = new monitor::MonitorChartView(this);
     chart_->setObjectName(QStringLiteral("resultCurveChart"));
     chart_->setMinimumHeight(200);
     chart_->enableViewNavigation();
+    chart_->enableLegendClicks();
 
     auto *viewTools = new QHBoxLayout;
     viewTools->addStretch();
+    auto *axisSettings = new QPushButton(QStringLiteral(u"坐标轴 · 自动"), this);
+    axisSettings->setObjectName(QStringLiteral("resultCurveAxisSettings"));
+    connect(axisSettings, &QPushButton::clicked, this, [this, axisSettings] {
+        editAxisRanges();
+        axisSettings->setText(chart_->hasFixedAxisRanges() ? QStringLiteral(u"坐标轴 · 固定")
+                                                            : QStringLiteral(u"坐标轴 · 自动"));
+    });
+    viewTools->addWidget(axisSettings);
     auto *resetView = new QPushButton(QStringLiteral(u"重置视图"), this);
     resetView->setObjectName(QStringLiteral("resultCurveResetView"));
     resetView->setToolTip(QStringLiteral(u"滚轮缩放，按住中键拖动，点击恢复全图"));
@@ -185,8 +214,16 @@ QwtResultCurveView::QwtResultCurveView(QWidget *parent) : ResultCurveView(parent
     connect(chart_, &monitor::MonitorChartView::curveClicked, this, [this](const QString &id) {
         curveChoice_->setCurrentIndex(curveChoice_->findData(id));
     });
+    connect(chart_, &monitor::MonitorChartView::legendClicked, this, &QwtResultCurveView::editLegend);
     connect(chart_, &monitor::MonitorChartView::curveStyleChanged, this, [this](const QString &id) {
-        styles_.insert(id, chart_->curveStyle(id));
+        auto style = chart_->curveStyle(id);
+        const int index = curveChoice_->findData(id);
+        if (index >= 0)
+            curveChoice_->setItemText(index, style.label);
+        // A resolved caption may include the default variable name and unit.
+        // Store only an explicitly configured name so defaults can be restored.
+        style.label = styles_.value(id).label;
+        styles_.insert(id, style);
         if (curveChoice_->currentData().toString() == id)
             loadControls();
     });
@@ -218,7 +255,7 @@ void QwtResultCurveView::refreshCurveChoices()
     for (int index = 0; index < ids.size(); ++index)
         curveChoice_->addItem(labels.at(index), ids.at(index));
     if (ids.isEmpty())
-        curveChoice_->addItem(QStringLiteral(u"请先选择表格行"));
+        curveChoice_->addItem(QStringLiteral(u"请先选择变量列"));
     const int previousIndex = curveChoice_->findData(previous);
     curveChoice_->setCurrentIndex(previousIndex < 0 ? 0 : previousIndex);
     curveChoice_->setEnabled(!ids.isEmpty());
@@ -238,6 +275,8 @@ void QwtResultCurveView::loadControls()
     const QString id = curveChoice_->currentData().toString();
     const bool active = !id.isEmpty();
     auto style = chart_->curveStyle(id);
+    legendName_->setEnabled(active);
+    legendName_->setText(style.label);
     if (!active) {
         style.pointSize = kDefaultPointSize;
         style.lineWidth = kDefaultLineWidth;
@@ -267,10 +306,15 @@ void QwtResultCurveView::loadControls()
     pointSize_->setEnabled(active && style.pointShape != MonitorPointShape::None);
     drawingMode_->setEnabled(active);
     const bool hasLine = active && (fitting || interpolation != MonitorInterpolation::None);
-    lineStyle_->setEnabled(hasLine);
-    lineWidth_->setEnabled(hasLine);
-    fitDegree_->setEnabled(active && style.fit.method == MonitorFitMethod::Polynomial);
-    fitWindow_->setEnabled(active && style.fit.method == MonitorFitMethod::MovingAverage);
+    const auto showField = [this](QWidget *field, bool visible) {
+        drawingForm_->labelForField(field)->setVisible(visible);
+        field->setVisible(visible);
+        field->setEnabled(visible);
+    };
+    showField(lineStyle_, hasLine);
+    showField(lineWidth_, hasLine);
+    showField(fitDegree_, active && style.fit.method == MonitorFitMethod::Polynomial);
+    showField(fitWindow_, active && style.fit.method == MonitorFitMethod::MovingAverage);
 
     const auto fit = chart_->fitResult(id);
     QString feedback = fit.note;
@@ -293,8 +337,12 @@ void QwtResultCurveView::loadControls()
             summary += QLatin1Char('\n') + feedback;
         feedback = summary;
     }
+    if (active && !hasLine)
+        feedback = QStringLiteral(u"选择直线、样条或拟合模式，即可调整线型与线宽。");
     fitFeedback_->setText(feedback);
     fitFeedback_->setVisible(!feedback.isEmpty());
+    if (settingsPanel_->isVisible())
+        settingsPanel_->adjustSize();
 }
 
 void QwtResultCurveView::applyControls()
@@ -335,6 +383,127 @@ void QwtResultCurveView::chooseColor()
     style.label.clear();
     style.color = picked;
     chart_->setCurveStyle(id, style);
+}
+
+void QwtResultCurveView::editLegend(const QString &id)
+{
+    const int index = curveChoice_->findData(id);
+    if (index < 0)
+        return;
+    curveChoice_->setCurrentIndex(index);
+    settingsPanel_->adjustSize();
+    settingsPanel_->show();
+    settingsPanel_->raise();
+    settingsPanel_->activateWindow();
+}
+
+void QwtResultCurveView::applyLegendName()
+{
+    if (!legendName_->isModified())
+        return;
+    const QString id = curveChoice_->currentData().toString();
+    const QString defaultName = defaultLegendNames_.value(id);
+    if (defaultName.isEmpty())
+        return;
+
+    const QString name = legendName_->text().trimmed();
+    legendName_->setModified(false);
+    styles_[id].label = name == defaultName ? QString() : name;
+    chart_->setCurveLabel(id, name.isEmpty() ? defaultName : name);
+}
+
+void QwtResultCurveView::hideEvent(QHideEvent *event)
+{
+    if (settingsPanel_)
+        settingsPanel_->hide();
+    ResultCurveView::hideEvent(event);
+}
+
+void QwtResultCurveView::editAxisRanges()
+{
+    auto ranges = chart_->axisRanges();
+    QDialog dialog(this);
+    dialog.setWindowTitle(QStringLiteral(u"坐标轴范围"));
+    dialog.setMinimumWidth(380);
+    auto *layout = new QVBoxLayout(&dialog);
+    auto *form = new QFormLayout;
+    layout->addLayout(form);
+
+    auto *mode = new QComboBox(&dialog);
+    mode->addItem(QStringLiteral(u"自动"));
+    mode->addItem(QStringLiteral(u"固定"));
+    mode->setCurrentIndex(chart_->hasFixedAxisRanges() ? 1 : 0);
+    form->addRow(QStringLiteral(u"范围模式"), mode);
+    auto *help = new QLabel(QStringLiteral(u"自动模式按数据计算范围，可缩放和平移。固定模式使用填写的上下限。"),
+                            &dialog);
+    help->setWordWrap(true);
+    layout->addWidget(help);
+
+    QVector<QPair<QLineEdit *, QLineEdit *>> editors;
+    auto *rangeFields = new QWidget(&dialog);
+    auto *rangeForm = new QFormLayout(rangeFields);
+    rangeForm->setContentsMargins(0, 0, 0, 0);
+    layout->addWidget(rangeFields);
+    for (const auto &range : ranges) {
+        auto *lower = new QLineEdit(QString::number(range.lower, 'g', 17), rangeFields);
+        auto *upper = new QLineEdit(QString::number(range.upper, 'g', 17), rangeFields);
+        lower->setAccessibleName(range.name + QStringLiteral(u"下限"));
+        upper->setAccessibleName(range.name + QStringLiteral(u"上限"));
+        auto *fields = new QHBoxLayout;
+        fields->addWidget(lower);
+        fields->addWidget(new QLabel(QStringLiteral(u"至"), rangeFields));
+        fields->addWidget(upper);
+        rangeForm->addRow(range.name, fields);
+        editors.append(qMakePair(lower, upper));
+    }
+    if (ranges.isEmpty())
+        help->setText(QStringLiteral(u"请先选中变量列绘图，再设置固定范围。"));
+    rangeFields->setVisible(mode->currentIndex() == 1);
+    connect(mode, QOverload<int>::of(&QComboBox::currentIndexChanged), &dialog,
+            [rangeFields](int index) { rangeFields->setVisible(index == 1); });
+
+    auto *error = new QLabel(&dialog);
+    error->setWordWrap(true);
+    error->hide();
+    layout->addWidget(error);
+    auto *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+    layout->addWidget(buttons);
+    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    connect(buttons, &QDialogButtonBox::accepted, &dialog, [&] {
+        if (mode->currentIndex() == 0) {
+            chart_->setFixedAxisRanges({});
+            dialog.accept();
+            return;
+        }
+        if (ranges.isEmpty()) {
+            error->setText(QStringLiteral(u"当前没有可设置范围的坐标轴。"));
+            error->show();
+            return;
+        }
+        for (int i = 0; i < ranges.size(); ++i) {
+            auto &range = ranges[i];
+            bool lowerOk = false;
+            bool upperOk = false;
+            range.lower = editors.at(i).first->text().toDouble(&lowerOk);
+            range.upper = editors.at(i).second->text().toDouble(&upperOk);
+            if (!lowerOk || !upperOk || !std::isfinite(range.lower) || !std::isfinite(range.upper)
+                || range.lower >= range.upper || (range.logarithmic && range.lower <= 0.0)) {
+                error->setText(range.logarithmic
+                    ? QStringLiteral(u"%1需要填写两个正数，且下限小于上限。").arg(range.name)
+                    : QStringLiteral(u"%1需要填写两个有效数值，且下限小于上限。").arg(range.name));
+                error->show();
+                editors.at(i).first->setFocus();
+                return;
+            }
+        }
+        if (chart_->setFixedAxisRanges(ranges)) {
+            dialog.accept();
+        } else {
+            error->setText(QStringLiteral(u"坐标轴已变化，请重新打开范围设置。"));
+            error->show();
+        }
+    });
+    dialog.exec();
 }
 
 void QwtResultCurveView::replaceSeries(const ResultTable &table, const QStringList &keys,
@@ -433,9 +602,15 @@ void QwtResultCurveView::replaceSeries(const ResultTable &table, const QStringLi
     // Label each Y axis with the quantities actually selected in the table.
     QStringList residualLabels;
     QStringList seriesLabels;
-    for (const auto &curve : curves) {
+    defaultLegendNames_.clear();
+    for (auto &curve : curves) {
         const QString label = curve.label.isEmpty() ? curve.key : curve.label;
         (curve.logarithmic ? residualLabels : seriesLabels).append(label);
+        const QString id = monitor::MonitorChartView::curveId(curve);
+        defaultLegendNames_.insert(id, label);
+        const QString customName = styles_.value(id).label;
+        if (!customName.isEmpty())
+            curve.label = customName;
     }
     for (auto &curve : curves)
         curve.groupTitle = (curve.logarithmic ? residualLabels : seriesLabels).join(QStringLiteral(", "));
@@ -455,6 +630,8 @@ void QwtResultCurveView::replaceSeries(const ResultTable &table, const QStringLi
 
 void QwtResultCurveView::clearSeries()
 {
+    settingsPanel_->hide();
+    defaultLegendNames_.clear();
     chart_->clearCurves();
     refreshCurveChoices();
 }

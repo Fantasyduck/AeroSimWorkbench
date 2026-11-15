@@ -18,10 +18,8 @@ option(AEROSIM_BUILD_STACK_PROBE "Build the optional Qt/VTK/SARibbon compatibili
 # not a placeholder. It follows AEROSIM_BUILD_GUI because the chart layer needs
 # Qt5::Widgets - a headless configuration must not be forced to provide Qwt.
 #
-# Turning this on makes Qwt and Eigen required: configure fails with an
-# actionable message rather than silently dropping the curve widget, so pass
-# -DAEROSIM_QWT_ROOT and -DAEROSIM_EIGEN_ROOT (or have them installed) or
-# explicitly set -DAEROSIM_BUILD_VISUALIZATION=OFF.
+# The visualization targets still require Eigen. Curves are optional when Qwt
+# is unavailable, or can be disabled with -DAEROSIM_BUILD_CURVES=OFF.
 option(AEROSIM_BUILD_VISUALIZATION "Enable visualization/post-processing module targets" ${AEROSIM_BUILD_GUI})
 
 find_package(Qt5 5.12.12 EXACT REQUIRED COMPONENTS Core)
@@ -39,8 +37,8 @@ add_subdirectory(mocks/services)
 
 # Visualization is configured before the UI so that modules/ui can see
 # aerosim_monitor_charts and opt into the concrete curve widget. The UI never
-# requires it: whenever visualization is off, the monitor page keeps its
-# placeholder and the abstract MonitorCurveWidget injection point.
+# requires it: without the chart target, the monitor page keeps its placeholder
+# and the abstract MonitorCurveWidget injection point.
 if(AEROSIM_BUILD_VISUALIZATION)
     add_subdirectory(modules/visualization)
 endif()

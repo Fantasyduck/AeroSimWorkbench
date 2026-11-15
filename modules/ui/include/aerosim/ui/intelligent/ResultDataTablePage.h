@@ -18,7 +18,7 @@ namespace aerosim {
 
 // "结果数据表": the table and the curves of one opened result file on one page.
 //
-// The tree filters the table. Selecting table rows chooses Y series, while the
+// The tree filters the table. Selecting variable columns chooses Y series, while the
 // X selector offers the file's coordinates and numeric variables. The plot sits
 // below the table so changing either selection needs no page switch.
 class ResultDataTablePage final : public QWidget {

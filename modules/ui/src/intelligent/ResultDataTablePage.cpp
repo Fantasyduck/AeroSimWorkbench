@@ -22,7 +22,7 @@ namespace {
 // A result file can carry thousands of iterations. The grid is a reading aid,
 // not a data store, so the sample columns stop here and the status line says so
 // rather than silently hiding the tail.
-constexpr int kMaxSampleColumns = 400;
+constexpr int kMaxSampleRows = 400;
 
 QString numberText(double value)
 {
@@ -113,8 +113,10 @@ void ResultDataTablePage::buildUi()
     tableWidget_->setObjectName(QStringLiteral("resultDataTable"));
     tableWidget_->setMinimumHeight(96);
     tableWidget_->verticalHeader()->hide();
+    tableWidget_->horizontalHeader()->setSectionsClickable(true);
+    tableWidget_->verticalHeader()->setDefaultSectionSize(22);
     tableWidget_->setEditTriggers(QAbstractItemView::NoEditTriggers);
-    tableWidget_->setSelectionBehavior(QAbstractItemView::SelectRows);
+    tableWidget_->setSelectionBehavior(QAbstractItemView::SelectColumns);
     tableWidget_->setSelectionMode(QAbstractItemView::ExtendedSelection);
     connect(tableWidget_, &QTableWidget::itemSelectionChanged, this, [this] {
         updateCurveView();
@@ -122,7 +124,7 @@ void ResultDataTablePage::buildUi()
     });
     tableWidget_->setAlternatingRowColors(true);
     right->addWidget(tableWidget_);
-    // Selecting rows above immediately draws the corresponding curves below.
+    // Selecting variable columns above immediately draws the corresponding curves below.
     right->addWidget(curveHost_);
     right->setChildrenCollapsible(false);
     right->setStretchFactor(0, 0);
@@ -171,7 +173,8 @@ bool ResultDataTablePage::setCurveView(ResultCurveView *view)
     curve_ = view;
     curveHint_->hide();
     curveLayout_->addWidget(curve_, 1);
-    if (auto *panel = curve_->settingsPanel()) {
+    auto *panel = curve_->settingsPanel();
+    if (panel && !panel->isWindow()) {
         contentLayout_->addWidget(panel);
         panel->show();
     }
@@ -309,40 +312,30 @@ void ResultDataTablePage::populateTable()
         return;
     }
 
-    // One row per variable, one column per sample. The file is the transpose of
-    // this, and that transpose is the whole point of the page: a variable's
-    // entire trace reads left to right on a single line.
-    const int samples = qMin(table_.sampleCount(), kMaxSampleColumns);
-    QStringList headers;
-    headers.reserve(samples + 1);
-    headers << QStringLiteral(u"变量");
-    for (int i = 0; i < samples; ++i)
-        headers << QString::number(table_.axisValues.at(i), 'g', 6);
+    const int samples = qMin(table_.sampleCount(), kMaxSampleRows);
+    const QString axis = table_.axisLabel.isEmpty() ? QStringLiteral(u"采样坐标") : table_.axisLabel;
+    const QStringList headers = QStringList{axis} + keys;
 
     tableWidget_->clear();
     tableWidget_->setColumnCount(headers.size());
-    tableWidget_->setRowCount(keys.size());
+    tableWidget_->setRowCount(samples);
     tableWidget_->setHorizontalHeaderLabels(headers);
-    tableWidget_->verticalHeader()->setVisible(true);
-    tableWidget_->verticalHeader()->setDefaultSectionSize(22);
-
-    const int dataColumns = headers.size() - 1;
-    for (int row = 0; row < keys.size(); ++row) {
-        const QString &key = keys.at(row);
-        tableWidget_->setItem(row, 0, readOnlyItem(key));
+    for (int row = 0; row < samples; ++row) {
+        auto *coordinate = readOnlyItem(numberText(table_.axisValues.at(row)));
+        coordinate->setFlags(coordinate->flags() & ~Qt::ItemIsSelectable);
+        tableWidget_->setItem(row, 0, coordinate);
+    }
+    for (int column = 1; column < headers.size(); ++column) {
+        const QString &key = headers.at(column);
         const QVector<double> values = table_.samples.value(key);
-        for (int column = 0; column < dataColumns; ++column) {
-            tableWidget_->setItem(row, column + 1,
-                                  readOnlyItem(numberText(values.value(column, std::numeric_limits<double>::quiet_NaN()))));
+        for (int row = 0; row < samples; ++row) {
+            tableWidget_->setItem(row, column,
+                                  readOnlyItem(numberText(values.value(row, std::numeric_limits<double>::quiet_NaN()))));
         }
+        if (previous.contains(key))
+            tableWidget_->setRangeSelected(QTableWidgetSelectionRange(0, column, samples - 1, column), true);
     }
-    for (int row = 0; row < keys.size(); ++row) {
-        if (previous.contains(keys.at(row)))
-            tableWidget_->setRangeSelected(
-                QTableWidgetSelectionRange(row, 0, row, headers.size() - 1), true);
-    }
-    tableWidget_->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Interactive);
-    tableWidget_->horizontalHeader()->resizeSection(0, 180);
+    tableWidget_->horizontalHeader()->resizeSection(0, 140);
 }
 
 void ResultDataTablePage::populateAxes()
@@ -363,10 +356,10 @@ void ResultDataTablePage::populateAxes()
 QStringList ResultDataTablePage::curveKeys() const
 {
     QStringList keys;
-    for (int row = 0; row < tableWidget_->rowCount(); ++row) {
-        const auto *item = tableWidget_->item(row, 0);
+    for (int column = 1; column < tableWidget_->columnCount(); ++column) {
+        const auto *item = tableWidget_->item(0, column);
         if (item && item->isSelected())
-            keys.append(item->text());
+            keys.append(tableWidget_->horizontalHeaderItem(column)->text());
     }
     return keys;
 }
@@ -397,20 +390,20 @@ void ResultDataTablePage::updateCurveView()
 void ResultDataTablePage::updateStatus()
 {
     if (table_.isEmpty()) {
-        status_->setText(QStringLiteral(u"打开一个结果文件后，这里按「每行一个变量」列出采样值。"));
+        status_->setText(QStringLiteral(u"打开一个结果文件后，这里按「每列一个变量」列出采样值。"));
         return;
     }
 
-    QString text = QStringLiteral(u"%1 个变量 · %2 个采样点 · 当前勾选 %3 个 · 选中 %4 行绘图")
+    QString text = QStringLiteral(u"%1 个变量 · %2 个采样点 · 当前勾选 %3 个 · 选中 %4 列绘图")
                        .arg(table_.variables.size())
                        .arg(table_.sampleCount())
                        .arg(selectedKeys().size())
                        .arg(curveKeys().size());
     if (curveKeys().isEmpty())
-        text += QStringLiteral(u" · 请选择表格行以绘图，Ctrl/Shift 可多选");
-    if (table_.sampleCount() > kMaxSampleColumns) {
+        text += QStringLiteral(u" · 请选择变量列以绘图，Ctrl/Shift 可多选");
+    if (table_.sampleCount() > kMaxSampleRows) {
         text += QStringLiteral(u" · 表格只显示前 %1 个采样点")
-                    .arg(kMaxSampleColumns);
+                    .arg(kMaxSampleRows);
     }
     if (!table_.warnings.isEmpty())
         text += QStringLiteral(u" · %1").arg(table_.warnings.join(QStringLiteral("；")));

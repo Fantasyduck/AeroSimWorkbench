@@ -4,6 +4,9 @@
 #include "aerosim/ui/intelligent/ResultSummaryTablePage.h"
 #include <QComboBox>
 #include <QLabel>
+#include <QHelpEvent>
+#include <QLineEdit>
+#include <QToolTip>
 #include <QPen>
 #include <QMouseEvent>
 #include <QPushButton>
@@ -18,14 +21,17 @@
 #include <QTest>
 #include <limits>
 
+#include <qwt_legend.h>
+#include <qwt_legend_label.h>
 #include <qwt_plot.h>
 #include <qwt_plot_curve.h>
 #include <qwt_scale_div.h>
+#include <qwt_scale_map.h>
 
 class ResultAdaptersTest final : public QObject {
     Q_OBJECT
 private slots:
-    void realReaderFeedsSelectedRowsAndBothAxes();
+    void realReaderFeedsSelectedColumnsAndBothAxes();
     void constantTimeIsNotOfferedAsAnAxis();
     void wheelZoomMiddleDragAndResetWorkWithDualAxes();
     void invalidCoordinatesAreExcluded();
@@ -33,9 +39,10 @@ private slots:
     void resultCurveControlsApplyAndSurviveSelection();
     void polynomialFitOnCfyUsesSelectedDegree();
     void forceSummaryComparesCasesByCoefficient();
+    void clickingLegendRenamesOnlyThatCurve();
 };
 
-void ResultAdaptersTest::realReaderFeedsSelectedRowsAndBothAxes()
+void ResultAdaptersTest::realReaderFeedsSelectedColumnsAndBothAxes()
 {
     QTemporaryDir directory;
     QVERIFY(directory.isValid());
@@ -54,14 +61,14 @@ void ResultAdaptersTest::realReaderFeedsSelectedRowsAndBothAxes()
     QVERIFY2(page.loadFile(path, &error), qPrintable(error));
     QCOMPARE(page.table().alternativeAxes.size(), 1);
     QCOMPARE(view->chart()->visibleCurveCount(), 0);
-    int cdRow = -1, residualRow = -1;
-    for (int i = 0; i < page.tableWidget()->rowCount(); ++i) {
-        const QString key = page.tableWidget()->item(i, 0)->text();
-        if (key == QStringLiteral("CD")) cdRow = i;
-        if (key == QStringLiteral("rms[Rho]")) residualRow = i;
+    int cdColumn = -1, residualColumn = -1;
+    for (int i = 1; i < page.tableWidget()->columnCount(); ++i) {
+        const QString key = page.tableWidget()->horizontalHeaderItem(i)->text();
+        if (key == QStringLiteral("CD")) cdColumn = i;
+        if (key == QStringLiteral("rms[Rho]")) residualColumn = i;
     }
-    QVERIFY(cdRow >= 0 && residualRow >= 0);
-    page.tableWidget()->selectRow(residualRow);
+    QVERIFY(cdColumn >= 0 && residualColumn >= 0);
+    page.tableWidget()->selectColumn(residualColumn);
     QCOMPARE(view->chart()->visibleCurveCount(), 1);
     const QString id = view->chart()->curveIds().first();
     QCOMPARE(view->chart()->curvePoints(id).at(1), QPointF(1, 0.01));
@@ -150,6 +157,27 @@ void ResultAdaptersTest::wheelZoomMiddleDragAndResetWorkWithDualAxes()
     QVERIFY(plot->axisScaleDiv(QwtAxis::YLeft).interval() == y);
     QVERIFY(plot->axisScaleDiv(QwtAxis::YRight).interval() == logY);
     QCOMPARE(view.chart()->chartBuildCount(), builds);
+
+    auto ranges = view.chart()->axisRanges();
+    QCOMPARE(ranges.size(), 3);
+    auto invalid = ranges;
+    QVERIFY(invalid.last().logarithmic);
+    invalid.last().lower = 0.0;
+    QVERIFY(!view.chart()->setFixedAxisRanges(invalid));
+    ranges[0].lower = 5.0;
+    ranges[0].upper = 15.0;
+    QVERIFY(view.chart()->setFixedAxisRanges(ranges));
+    const auto fixedX = plot->axisScaleDiv(QwtAxis::XBottom).interval();
+    QCOMPARE(fixedX.minValue(), 5.0);
+    QCOMPARE(fixedX.maxValue(), 15.0);
+    scroll(120);
+    QVERIFY(plot->axisScaleDiv(QwtAxis::XBottom).interval() == fixedX);
+    view.replaceSeries(table, {QStringLiteral("CD"), QStringLiteral("residual")}, QStringLiteral("X"));
+    plot = view.chart()->findChild<QwtPlot *>();
+    QVERIFY(plot);
+    QVERIFY(plot->axisScaleDiv(QwtAxis::XBottom).interval() == fixedX);
+    QVERIFY(view.chart()->setFixedAxisRanges({}));
+    QVERIFY(plot->axisScaleDiv(QwtAxis::XBottom).interval() == x);
 }
 
 void ResultAdaptersTest::constantTimeIsNotOfferedAsAnAxis()
@@ -194,8 +222,9 @@ void ResultAdaptersTest::tecplotFixtureLoadsIntoMergedPage()
     QString error;
     QVERIFY2(page.loadFile(QStringLiteral(AEROSIM_RESULT_FIXTURE_DIR "/xcfd_history_tec.tec"), &error), qPrintable(error));
     QCOMPARE(page.table().sampleCount(), 10);
-    QCOMPARE(page.tableWidget()->rowCount(), 4);
-    page.tableWidget()->selectRow(0);
+    QCOMPARE(page.tableWidget()->columnCount(), 5);
+    QCOMPARE(page.tableWidget()->rowCount(), 10);
+    page.tableWidget()->selectColumn(1);
     QCOMPARE(view->chart()->visibleCurveCount(), 1);
     page.resize(1000, 450);
     page.show();
@@ -236,13 +265,10 @@ void ResultAdaptersTest::resultCurveControlsApplyAndSurviveSelection()
     QVERIFY(choice && line && width && shape && size && mode && degree && window);
     auto *panel = view->settingsPanel();
     QVERIFY(panel->isAncestorOf(choice));
-    QVERIFY(!panel->isWindow());
+    QVERIFY(panel->isWindow());
     page.resize(1100, 450);
     page.show();
-    QVERIFY(panel->isVisible());
-    QVERIFY(panel->mapTo(&page, QPoint()).x()
-            >= view->mapTo(&page, QPoint(view->width(), 0)).x());
-    QVERIFY(panel->height() > view->height());
+    QVERIFY(!panel->isVisible());
     QVERIFY(!mode->isEnabled());
     const auto chooseMode = [mode](const QString &label) {
         const int index = mode->findText(label);
@@ -250,18 +276,21 @@ void ResultAdaptersTest::resultCurveControlsApplyAndSurviveSelection()
         mode->setCurrentIndex(index);
     };
 
-    page.tableWidget()->selectRow(0);
+    page.tableWidget()->selectColumn(1);
     QVERIFY(mode->isEnabled());
     auto *chart = view->chart();
     auto *selection = page.tableWidget()->selectionModel();
-    selection->select(page.tableWidget()->model()->index(1, 0),
-                      QItemSelectionModel::Select | QItemSelectionModel::Rows);
+    selection->select(page.tableWidget()->model()->index(0, 2),
+                      QItemSelectionModel::Select | QItemSelectionModel::Columns);
     QCOMPARE(chart->visibleCurveCount(), 2);
     QCOMPARE(choice->count(), 2);
     const auto firstId = chart->curveIds().at(0);
     const auto secondId = chart->curveIds().at(1);
     QCOMPARE(choice->currentData().toString(), firstId);
     QVERIFY(!width->isEnabled());
+    QVERIFY(width->isHidden());
+    QVERIFY(degree->isHidden());
+    QVERIFY(window->isHidden());
     const auto renderedWidth = [chart]() -> qreal {
         const auto *plot = chart->findChild<QwtPlot *>();
         if (plot) {
@@ -279,6 +308,7 @@ void ResultAdaptersTest::resultCurveControlsApplyAndSurviveSelection()
     size->setValue(8.0);
     chooseMode(QStringLiteral(u"直线连接采样点"));
     QVERIFY(width->isEnabled());
+    QVERIFY(!width->isHidden());
     QCOMPARE(width->value(), 0.5);
     const qreal initialJoinWidth = renderedWidth();
     QVERIFY(initialJoinWidth > 0.0);
@@ -320,12 +350,16 @@ void ResultAdaptersTest::resultCurveControlsApplyAndSurviveSelection()
 
     chooseMode(QStringLiteral(u"多项式拟合"));
     QVERIFY(degree->isEnabled());
+    QVERIFY(!degree->isHidden());
     QVERIFY(!window->isEnabled());
+    QVERIFY(window->isHidden());
     degree->setValue(2);
     QCOMPARE(chart->fitResult(firstId).degree, 2);
     chooseMode(QStringLiteral(u"移动平均"));
     QVERIFY(!degree->isEnabled());
+    QVERIFY(degree->isHidden());
     QVERIFY(window->isEnabled());
+    QVERIFY(!window->isHidden());
     window->setValue(5);
     QCOMPARE(chart->fitResult(firstId).window, 5);
 
@@ -342,10 +376,10 @@ void ResultAdaptersTest::resultCurveControlsApplyAndSurviveSelection()
     QCOMPARE(choice->currentData().toString(), secondId);
     QCOMPARE(chart->curveStyle(secondId).pointShape, MonitorPointShape::Square);
 
-    page.tableWidget()->selectRow(1);
+    page.tableWidget()->selectColumn(2);
     QCOMPARE(chart->curveIds(), QStringList{secondId});
-    selection->select(page.tableWidget()->model()->index(0, 0),
-                      QItemSelectionModel::Select | QItemSelectionModel::Rows);
+    selection->select(page.tableWidget()->model()->index(0, 1),
+                      QItemSelectionModel::Select | QItemSelectionModel::Columns);
     choice->setCurrentIndex(choice->findData(firstId));
     QCOMPARE(chart->selectedCurve(), firstId);
     QCOMPARE(chart->curveStyle(firstId).pointShape, MonitorPointShape::Diamond);
@@ -369,12 +403,12 @@ void ResultAdaptersTest::polynomialFitOnCfyUsesSelectedDegree()
     QString error;
     QVERIFY2(page.loadFile(QStringLiteral(AEROSIM_RESULT_FIXTURE_DIR "/su2_history_steady.csv"), &error),
              qPrintable(error));
-    int row = 0;
-    while (row < page.tableWidget()->rowCount()
-           && page.tableWidget()->item(row, 0)->text() != QStringLiteral("CFy"))
-        ++row;
-    QVERIFY(row < page.tableWidget()->rowCount());
-    page.tableWidget()->selectRow(row);
+    int column = 1;
+    while (column < page.tableWidget()->columnCount()
+           && page.tableWidget()->horizontalHeaderItem(column)->text() != QStringLiteral("CFy"))
+        ++column;
+    QVERIFY(column < page.tableWidget()->columnCount());
+    page.tableWidget()->selectColumn(column);
     auto *chart = view->chart();
     QCOMPARE(chart->curveIds().size(), 1);
     const QString id = chart->curveIds().first();
@@ -403,7 +437,7 @@ void ResultAdaptersTest::polynomialFitOnCfyUsesSelectedDegree()
         QVERIFY(yMaximum() + 1e-10 >= point.y());
 
     page.tableWidget()->clearSelection();
-    page.tableWidget()->selectRow(row);
+    page.tableWidget()->selectColumn(column);
     QVERIFY(yMaximum() > rawMaximum + 0.04);
     method->setCurrentIndex(method->findText(QStringLiteral(u"仅散点")));
     QCOMPARE(yMaximum(), rawMaximum);
@@ -456,6 +490,72 @@ void ResultAdaptersTest::forceSummaryComparesCasesByCoefficient()
     page.clearData();
     QVERIFY(!coefficient->isVisibleTo(&page));
     QCOMPARE(table->rowCount(), 0);
+}
+
+void ResultAdaptersTest::clickingLegendRenamesOnlyThatCurve()
+{
+    aerosim::ResultTable table;
+    table.datasetId = QStringLiteral("legend-test");
+    table.axisValues = {0.0, 1.0, 2.0};
+    table.variables = {{QStringLiteral("CD"), QStringLiteral("1"), false},
+                       {QStringLiteral("CL"), QString(), false}};
+    table.samples.insert(QStringLiteral("CD"), {0.1, 0.2, 0.3});
+    table.samples.insert(QStringLiteral("CL"), {0.5, 0.6, 0.7});
+    const QStringList keys{QStringLiteral("CD"), QStringLiteral("CL")};
+    aerosim::QwtResultCurveView view;
+    view.resize(750, 420);
+    view.show();
+    view.replaceSeries(table, keys, QStringLiteral("X"));
+    auto *panel = view.settingsPanel();
+    QVERIFY(panel && panel->isWindow());
+    QVERIFY(!panel->isVisible());
+    auto *editor = panel->findChild<QLineEdit *>(QStringLiteral("resultCurveLegendName"));
+    QVERIFY(editor);
+    const auto clickLegend = [&view, panel, editor](const QString &caption, const QString &name) {
+        auto *plot = view.chart()->findChild<QwtPlot *>();
+        QVERIFY(plot && plot->legend());
+        QwtLegendLabel *entry = nullptr;
+        for (auto *label : plot->legend()->findChildren<QwtLegendLabel *>()) {
+            if (label->text().text() == caption) {
+                entry = label;
+                break;
+            }
+        }
+        QVERIFY(entry);
+        QTest::mouseClick(entry, Qt::LeftButton);
+        QApplication::processEvents();
+        QVERIFY(panel->isVisible());
+        QCOMPARE(editor->text(), caption);
+        editor->selectAll();
+        QTest::keyClick(editor, Qt::Key_Backspace);
+        if (!name.isEmpty())
+            QTest::keyClicks(editor, name);
+        QTest::keyClick(editor, Qt::Key_Return);
+        panel->close();
+        QVERIFY(!panel->isVisible());
+    };
+    const auto defaults = view.chart()->legendLabels();
+    QCOMPARE(defaults, (QStringList{QStringLiteral("CD (1)"), QStringLiteral("CL")}));
+    clickLegend(defaults.first(), QStringLiteral("Drag coefficient"));
+    QCOMPARE(view.chart()->legendLabels().first(), QStringLiteral("Drag coefficient"));
+    QCOMPARE(view.chart()->legendLabels().last(), QStringLiteral("CL"));
+    view.clearSeries();
+    view.replaceSeries(table, keys, QStringLiteral("X"));
+    QCOMPARE(view.chart()->legendLabels().first(), QStringLiteral("Drag coefficient"));
+    clickLegend(QStringLiteral("Drag coefficient"), QString());
+    QCOMPARE(view.chart()->legendLabels(), defaults);
+
+    auto *plot = view.chart()->findChild<QwtPlot *>();
+    QVERIFY(plot);
+    QWidget *canvas = plot->canvas();
+    const QPoint sample(qRound(plot->canvasMap(QwtAxis::XBottom).transform(1.0)),
+                        qRound(plot->canvasMap(QwtAxis::YLeft).transform(0.2)));
+    QHelpEvent hover(QEvent::ToolTip, sample, canvas->mapToGlobal(sample));
+    QApplication::sendEvent(canvas, &hover);
+    QVERIFY(QToolTip::text().contains(QStringLiteral("CD (1)")));
+    QVERIFY(QToolTip::text().contains(QStringLiteral("X: 1")));
+    QVERIFY(QToolTip::text().contains(QStringLiteral("Y: 0.2")));
+    QToolTip::hideText();
 }
 
 QTEST_MAIN(ResultAdaptersTest)

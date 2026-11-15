@@ -9,7 +9,7 @@ namespace aerosim {
 // This is the only place where the pages meet the monitor reader. Keeping the
 // conversion here rather than in the reader means the reader keeps exactly the
 // interface it already had -- MonitorLog, one vector per column -- while the
-// pages get the transposed view they present.
+// pages get the common result table representation.
 class MonitorResultDataSource final : public ResultDataSource {
 public:
     MonitorResultDataSource() = default;
