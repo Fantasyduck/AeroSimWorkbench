@@ -94,7 +94,7 @@ UiLayoutConfig（`modules/ui/include/aerosim/ui/UiLayoutConfig.h`）按**三层*
 
 ### 3.2 根布局与边距所有权
 
-**约定：统一外边距由页面根布局负责，中央容器不添加外边距。** 页面根布局只应用一次 `pageMargins()`；内部区块再用 `sectionSpacing/panelSpacing/controlSpacing` 组织，二者明确区分。
+**约定：统一外边距由页面根布局负责，中央容器不添加外边距。** 普通表单/说明页面的根布局只应用一次 `pageMargins()`；内部区块再用 `sectionSpacing/panelSpacing/controlSpacing` 组织，二者明确区分。
 
 标准根布局通过框架助手创建：
 
@@ -106,6 +106,8 @@ root->addStretch();
 ```
 
 `createPageRootLayout` 已设置 `pageMargins()` 与 `panelSpacing()`。内部如需更紧凑布局，可使用更小间距的局部 QHBoxLayout/QGridLayout，但不改变根外边距。
+
+网格、VTK 视口、画布或多分隔条工作台属于**沉浸式工作台页**：若页头、画布或状态条需要贴合中央容器边缘，使用 `createWorkbenchRootLayout(page)`。该根布局固定为零外边距和零间距；页头直接加入根布局，正文再包入一个 content wrapper，并由 wrapper **恰好一次**应用 `pageMargins()`。这不是缩小普通表单间距的捷径。
 
 ### 3.3 控件尺寸策略
 

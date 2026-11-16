@@ -17,10 +17,12 @@
 #include <QAction>
 #include <QApplication>
 #include <QDockWidget>
+#include <QLabel>
 #include <QMainWindow>
 #include <QSize>
 #include <QSettings>
 #include <QStackedWidget>
+#include <QSplitter>
 #include <QTextStream>
 #include <QTreeWidget>
 #include <QTreeWidgetItem>
@@ -66,6 +68,11 @@ void testConfig()
     check(controlHeight() == 28, "control height");
     check(sectionTitleHeight() == 28, "section title height");
     check(pageMargins() == QMargins(24, 20, 24, 20), "page margins");
+    QWidget workbench;
+    auto *workbenchLayout = createWorkbenchRootLayout(&workbench);
+    check(workbenchLayout->contentsMargins() == QMargins(0, 0, 0, 0),
+          "workbench root has no outer margins");
+    check(workbenchLayout->spacing() == 0, "workbench root has no outer spacing");
     // clampRatio behaviour.
     check(clampRatio(-1.0) == 0.10, "clampRatio lower bound");
     check(clampRatio(2.0) == 0.45, "clampRatio upper bound");
@@ -162,6 +169,25 @@ void testMainWindow()
     auto *central = window.findChild<QStackedWidget *>(QStringLiteral("centralWorkspace"));
     check(central != nullptr, "central stacked container present");
     if (central) check(window.centralWidget() == central, "central stack is the central widget");
+    // A real immersive page keeps its chrome edge-to-edge while its splitter
+    // remains inside a separately padded content wrapper.
+    auto *meshPage = central && central->count() ? central->widget(0) : nullptr;
+    auto *meshHeader = meshPage ? meshPage->findChild<QWidget *>(QStringLiteral("meshManagementHeader")) : nullptr;
+    auto *meshContent = meshPage ? meshPage->findChild<QWidget *>(QStringLiteral("meshWorkspaceContent")) : nullptr;
+    auto *meshSplitter = meshPage ? meshPage->findChild<QSplitter *>(QStringLiteral("meshWorkspaceMainSplitter")) : nullptr;
+    auto *viewportHost = meshPage ? meshPage->findChild<QWidget *>(QStringLiteral("viewportSlot")) : nullptr;
+    auto *viewportEmptyState = viewportHost
+        ? viewportHost->findChild<QLabel *>(QString(), Qt::FindDirectChildrenOnly) : nullptr;
+    if (meshPage && meshHeader && meshContent && meshSplitter) {
+        check(meshHeader->pos().y() == 0, "mesh header is flush with workbench top");
+        check(meshHeader->width() == meshPage->width(), "mesh header spans workbench width");
+        check(meshSplitter->pos().x() == pageMargins().left(), "mesh splitter has content left padding");
+        check(meshSplitter->pos().y() == pageMargins().top(), "mesh splitter has content top padding");
+    } else {
+        check(false, "mesh workbench chrome and content exist");
+    }
+    check(viewportEmptyState && !viewportEmptyState->isVisible(),
+          "mesh viewport empty state is hidden behind the workbench");
     // Switching the central page must not resize the main window itself.
     if (central && central->count() > 1) {
         const QSize sizeBefore = window.size();

@@ -1,4 +1,5 @@
 #include "aerosim/ui/TrajectorySettingsPage.h"
+#include "aerosim/ui/UiLayoutConfig.h"
 
 #include <QFrame>
 #include <QGroupBox>
@@ -33,9 +34,10 @@ TrajectorySettingsPage::TrajectorySettingsPage(QWidget *parent)
         "QGroupBox { font-weight:600; margin-top:8px; }"
         "QGroupBox::title { subcontrol-origin:margin; left:8px; padding:0 3px; }"));
 
-    auto *pageLayout = new QVBoxLayout(this);
-    pageLayout->setContentsMargins(8, 8, 8, 8);
-    pageLayout->setSpacing(6);
+    // Unified framework root layout: single outer margin from pageMargins(),
+    // panel spacing between the header and the scroll body. The container never
+    // adds a second margin (see UI-Development-Guidelines.md §3.2).
+    auto *pageLayout = uimetrics::createPageRootLayout(this);
 
     auto *header = new QWidget(this);
     header->setObjectName(QStringLiteral("trajectorySettingsHeader"));
