@@ -154,8 +154,8 @@ MainWindow::MainWindow(QWidget *parent) : SARibbonMainWindow(initializeRibbonRes
 {
     setObjectName(QStringLiteral("AeroSimMainWindow"));
     setWindowTitle(uiText(u"AeroSimWorkbench \u00b7 \u4eff\u771f\u5de5\u4f5c\u53f0\uff08Mock \u670d\u52a1\uff09"));
-    resize(1440, 960);
-    setMinimumSize(1000, 720);
+    resize(uimetrics::defaultWindowSize());
+    setMinimumSize(uimetrics::minimumWindowSize());
     setDockNestingEnabled(true);
     createWorkspace();
     createRibbon();
@@ -239,7 +239,7 @@ void MainWindow::createRibbon()
                 connect(action, &QAction::triggered, this, &MainWindow::saveUserLayout);
             } else if (route == "layout-restore") {
                 action->setObjectName(QStringLiteral("restoreUserLayoutAction"));
-                QSettings settings(QStringLiteral("AeroSimWorkbench"), QStringLiteral("UiLayout"));
+                QSettings settings(layoutSettingsOrg_, layoutSettingsApp_);
                 action->setEnabled(settings.value(QStringLiteral("UserLayout/version")).toInt() == 1);
                 restoreUserLayoutAction_ = action;
                 connect(action, &QAction::triggered, this, &MainWindow::restoreUserLayout);
@@ -568,7 +568,7 @@ void MainWindow::createWorkspace()
         auto *page = new QWidget(workspaceStack_);
         page->setObjectName(objectName);
         auto *layout = new QVBoxLayout(page);
-        layout->setContentsMargins(24, 20, 24, 20);
+        layout->setContentsMargins(uimetrics::pageMargins());
         auto *heading = new QLabel(title, page);
         heading->setObjectName(QStringLiteral("workspacePageTitle"));
         QFont font = heading->font();
@@ -627,26 +627,14 @@ void MainWindow::createWorkspace()
         QStringLiteral("postprocessOverviewPage"), uiText(u"\u540e\u5904\u7406\u5206\u6790"),
         uiText(u"\u8be5\u6a21\u5757\u529f\u80fd\u5f85\u63a5\u5165\u3002\u5df2\u6709\u540e\u5904\u7406\u5de5\u4f5c\u53f0\u4e0e\u76f8\u5173\u4ee3\u7801\u4fdd\u6301\u4e0d\u53d8\uff0c\u672c\u9875\u4e0d\u521b\u5efa\u7b2c\u4e8c\u4e2a VTK \u89c6\u53e3\u6216\u6267\u884c\u540e\u5904\u7406\u7b97\u6cd5\u3002"));
     qobject_cast<QVBoxLayout *>(postprocessOverviewPage_->layout())->addStretch();
-    // The monitor page is retained as a reusable assembly slot for the
-    // visualization module while calculation pages remain the two task pages.
-    // The live monitoring page is a real page fed by task events and monitor
-    // samples. It sits beside the mock task-monitor page above instead of
-    // replacing it: the placeholder carries its own navigation entry and the
-    // window-level tests pin its object names and log behaviour.
+    // The live monitoring page is kept as a hidden, reusable curve host for the
+    // visualization module. It is no longer a workspace-tree navigation
+    // destination; the window only feeds it task events (see displayTaskEvent)
+    // and the assembly layer injects the curve widget. Because it is not
+    // registered in workspacePages_, navigation can never open it.
     monitorPage_ = new ComputeMonitorPage(workspaceStack_);
-    computeMonitorPage_ = monitorPage_;
-    workspaceStack_->addWidget(computeMonitorPage_);
-    workspacePages_.insert(QStringLiteral("compute-monitor"), computeMonitorPage_);
-    // Keep the legacy task-monitor destination available for task events and
-    // service integration. The calculation workbench itself still exposes only
-    // the two task pages above; this is a separate monitoring destination.
-    taskMonitorPage_ = createWorkspacePage(
-        QStringLiteral("taskMonitorPage"), uiText(u"\u4efb\u52a1\u76d1\u63a7"),
-        uiText(u"\u4efb\u52a1\u8fd0\u884c\u65e5\u5fd7\u4e0e\u8fdb\u5ea6\u6458\u8981\u3002"));
-    workspacePages_.insert(QStringLiteral("task-monitor"), taskMonitorPage_);
     for (auto *page : {parameterWorkspacePage_, dataProcessPage_, postprocessOverviewPage_})
         workspaceStack_->addWidget(page);
-    workspaceStack_->addWidget(taskMonitorPage_);
     workspacePages_.insert(QStringLiteral("viewport"), viewportPage_);
     workspacePages_.insert(QStringLiteral("trajectory-settings"), trajectorySettingsPage_);
     workspacePages_.insert(QStringLiteral("parameters"), parameterWorkspacePage_);
@@ -682,7 +670,7 @@ void MainWindow::createWorkspace()
 
     projectDock_ = new QDockWidget(uiText(u"\u5de5\u4f5c\u533a\u6811"), this);
     projectDock_->setObjectName(QStringLiteral("projectDock"));
-    projectDock_->setMinimumWidth(220);
+    projectDock_->setMinimumWidth(uimetrics::projectDockMinimumWidth());
     projectDock_->setFeatures(QDockWidget::DockWidgetMovable);
     projectDock_->setAllowedAreas(Qt::LeftDockWidgetArea);
     projectDock_->installEventFilter(this);
@@ -716,12 +704,10 @@ void MainWindow::createWorkspace()
     auto *intelligentModule = addNavigationItem(root, uiText(u"\u667a\u80fd\u6570\u636e\u5904\u7406"), {}, QStringLiteral("module-intelligent-data"), QStringLiteral("module"));
     addNavigationItem(intelligentModule, uiText(u"\u7ed3\u679c\u6570\u636e\u8868"), QStringLiteral("result-data-table"), QStringLiteral("result-data-table"), QStringLiteral("feature"));
     addNavigationItem(intelligentModule, uiText(u"\u7ed3\u679c\u6c47\u603b\u8868"), QStringLiteral("result-summary-table"), QStringLiteral("result-summary-table"), QStringLiteral("feature"));
-    // Monitoring is kept as an independent destination so the calculation
-    // module remains the deliberately small single/multiple task entry point.
-    auto *monitorModule = addNavigationItem(root, uiText(u"\u8ba1\u7b97\u76d1\u63a7"), {}, QStringLiteral("module-compute-monitor"), QStringLiteral("module"));
-    addNavigationItem(monitorModule, uiText(u"\u5b9e\u65f6\u76d1\u63a7"), QStringLiteral("compute-monitor"), QStringLiteral("compute-monitor"), QStringLiteral("feature"));
-    auto *taskGroup = addNavigationItem(monitorModule, uiText(u"\u4efb\u52a1\u5217\u8868"), {}, QStringLiteral("monitor-tasks"), QStringLiteral("group"));
-    addNavigationItem(taskGroup, QStringLiteral("Task_001"), QStringLiteral("task"), QStringLiteral("Task_001"), QStringLiteral("task"));
+    // The standalone compute-monitoring ("实时监控 / 任务列表") navigation entry
+    // has been removed from the workspace tree. The live monitoring page remains
+    // only as a hidden curve host for the visualization module; the calculation
+    // module stays the deliberately small single/multiple task entry point.
     addNavigationItem(root, uiText(u"\u540e\u5904\u7406\u5206\u6790"), {}, QStringLiteral("module-postprocess-analysis"), QStringLiteral("module"));
     root->setExpanded(true);
     preprocessModule->setExpanded(true);
@@ -748,7 +734,7 @@ void MainWindow::createWorkspace()
     propertyDock_->setObjectName(QStringLiteral("propertyDock"));
     // Leave enough room for the project tree to grow while keeping the
     // property editor usable beside it.
-    propertyDock_->setMinimumWidth(180);
+    propertyDock_->setMinimumWidth(uimetrics::propertyDockMinimumWidth());
     // The property editor is part of the workbench layout.  Keeping it docked
     // prevents a close/float action from making every later selection reopen a
     // floating window and leaves the left dock splitter available for resizing.
@@ -998,7 +984,7 @@ void MainWindow::showWorkspacePage(const QString &pageId)
                 parameterDockHidden_ = true;
             }
             propertyDock_->hide();
-            resizeDocks({projectDock_}, {260}, Qt::Horizontal);
+            resizeDocks({projectDock_}, {uimetrics::embeddedPageDockWidth()}, Qt::Horizontal);
         } else if (parameterDockHidden_) {
             parameterDockHidden_ = false;
             if (propertyDockVisibleBeforeParameter_ && !meshWorkspaceActive_)
@@ -1016,14 +1002,10 @@ void MainWindow::showWorkspacePage(const QString &pageId)
     }
 }
 
-void MainWindow::showComputeMonitor()
+void MainWindow::setLayoutSettingsScope(const QString &organization, const QString &application)
 {
-    if (!monitorPage_) return;
-    // Reuse the shared page switch instead of toggling the stack here: leaving
-    // a parameter page has to restore the property dock, and that state lives in
-    // showWorkspacePage().
-    selectPage(QStringLiteral("compute-monitor"));
-    showWorkspacePage(QStringLiteral("compute-monitor"));
+    layoutSettingsOrg_ = organization;
+    layoutSettingsApp_ = application;
 }
 
 void MainWindow::showModuleWorkspace(const QString &moduleId)
@@ -1050,7 +1032,7 @@ void MainWindow::setMeshWorkspaceActive(bool active)
         if (propertyDock_) propertyDock_->hide();
         projectDock_->setMinimumWidth(projectDockWidth_);
         resizeDocks({projectDock_}, {projectDockWidth_}, Qt::Horizontal);
-        projectDock_->setMinimumWidth(220);
+        projectDock_->setMinimumWidth(uimetrics::projectDockMinimumWidth());
         // Collapse the global output once for the initial mesh layout. Later
         // navigation must preserve the user's explicit expand/collapse choice.
         if (!meshOutputInitialCollapseApplied_) {
@@ -1063,8 +1045,8 @@ void MainWindow::setMeshWorkspaceActive(bool active)
             propertyDock_->show();
             projectDock_->setMinimumWidth(projectDockWidth_);
             resizeDocks({projectDock_, propertyDock_},
-                        {projectDockWidth_, 180}, Qt::Horizontal);
-            projectDock_->setMinimumWidth(220);
+                        {projectDockWidth_, uimetrics::propertyDockMinimumWidth()}, Qt::Horizontal);
+            projectDock_->setMinimumWidth(uimetrics::projectDockMinimumWidth());
         }
     }
 }
@@ -1112,8 +1094,8 @@ void MainWindow::showParameterDialog(const QString &pageId, const QString &title
     workspacePages_.insert(workspaceId, dialog);
     workspacePageModules_.insert(workspaceId, QStringLiteral("module-parameters"));
     auto *layout = new QVBoxLayout(dialog);
-    layout->setContentsMargins(24, 20, 24, 20);
-    layout->setSpacing(12);
+    layout->setContentsMargins(uimetrics::pageMargins());
+    layout->setSpacing(uimetrics::panelSpacing());
     auto *heading = new QLabel(title, dialog);
     heading->setObjectName(QStringLiteral("parameterHeading"));
     QFont headingFont = heading->font();
@@ -1274,7 +1256,6 @@ void MainWindow::selectPage(const QString &pageId)
         {"parameters", uiText(u"\u53c2\u6570\u8bbe\u7f6e")}, {"calculation-overview", uiText(u"\u8ba1\u7b97")},
         {"intelligent-data", uiText(u"\u667a\u80fd\u6570\u636e\u5904\u7406")}, {"postprocess-overview", uiText(u"\u540e\u5904\u7406\u5206\u6790")},
         {"result-data-table", uiText(u"\u7ed3\u679c\u6570\u636e\u8868")}, {"result-summary-table", uiText(u"\u7ed3\u679c\u6c47\u603b\u8868")},
-        {"compute-monitor", uiText(u"实时监控")},
         {"viewport", uiText(u"\u7f51\u683c\u7ba1\u7406")}, {"trajectory-settings", uiText(u"\u5f39\u9053\u8bbe\u7f6e")},
         {"single-calculation", uiText(u"\u5355\u6b21\u8ba1\u7b97")},
         {"batch-calculation", uiText(u"\u6279\u91cf\u8ba1\u7b97")}};
@@ -1359,10 +1340,11 @@ void MainWindow::restoreLayout()
     setCorner(Qt::BottomLeftCorner, Qt::BottomDockWidgetArea);
     setCorner(Qt::BottomRightCorner, Qt::BottomDockWidgetArea);
     for (auto *dock : {projectDock_, propertyDock_, outputDock_}) dock->show();
-    resizeDocks({projectDock_, propertyDock_}, {250, 330}, Qt::Horizontal);
+    resizeDocks({projectDock_, propertyDock_},
+                {uimetrics::projectDockWidth(), uimetrics::propertyDockDefaultWidth()}, Qt::Horizontal);
     if (outputCollapsed_) setOutputCollapsed(false);
-    resizeDocks({outputDock_}, {140}, Qt::Vertical);
-    expandedOutputHeight_ = 140;
+    resizeDocks({outputDock_}, {uimetrics::outputExpandedHeight()}, Qt::Vertical);
+    expandedOutputHeight_ = uimetrics::outputExpandedHeight();
     ribbonBar()->setMinimumMode(false);
     if (auto *meshPage = qobject_cast<MeshManagementPage *>(viewportPage_))
         meshPage->restoreDefaultLayout();
@@ -1370,7 +1352,7 @@ void MainWindow::restoreLayout()
     batchCalculationPage_->restoreDefaultLayout();
     if (meshWorkspaceActive_) {
         propertyDock_->hide();
-        resizeDocks({projectDock_}, {260}, Qt::Horizontal);
+        resizeDocks({projectDock_}, {uimetrics::projectDockWidth()}, Qt::Horizontal);
         projectDockWidth_ = projectDock_->width();
     }
     setOutputCollapsed(true);
@@ -1379,7 +1361,7 @@ void MainWindow::restoreLayout()
 
 void MainWindow::saveUserLayout()
 {
-    QSettings settings(QStringLiteral("AeroSimWorkbench"), QStringLiteral("UiLayout"));
+    QSettings settings(layoutSettingsOrg_, layoutSettingsApp_);
     settings.beginGroup(QStringLiteral("UserLayout"));
     settings.remove(QString());
     settings.setValue(QStringLiteral("version"), 1);
@@ -1397,10 +1379,8 @@ void MainWindow::saveUserLayout()
     if (auto *meshPage = qobject_cast<MeshManagementPage *>(viewportPage_))
         settings.setValue(QStringLiteral("meshLayout"), meshPage->layoutState());
 
-    QScreen *screen = QGuiApplication::screenAt(frameGeometry().center());
-    if (!screen) screen = QGuiApplication::primaryScreen();
-    if (screen) {
-        const QRect available = screen->availableGeometry();
+    if (uimetrics::screenOf(this)) {
+        const QRect available = uimetrics::availableRect(this);
         const QRect windowRect = isMaximized() ? normalGeometry() : geometry();
         settings.setValue(QStringLiteral("windowWidthRatio"), double(windowRect.width()) / qMax(1, available.width()));
         settings.setValue(QStringLiteral("windowHeightRatio"), double(windowRect.height()) / qMax(1, available.height()));
@@ -1417,7 +1397,7 @@ void MainWindow::saveUserLayout()
 
 void MainWindow::restoreUserLayout()
 {
-    QSettings settings(QStringLiteral("AeroSimWorkbench"), QStringLiteral("UiLayout"));
+    QSettings settings(layoutSettingsOrg_, layoutSettingsApp_);
     settings.beginGroup(QStringLiteral("UserLayout"));
     if (settings.value(QStringLiteral("version")).toInt() != 1) {
         settings.endGroup();
@@ -1429,10 +1409,14 @@ void MainWindow::restoreUserLayout()
     const QByteArray mainWindowState = settings.value(QStringLiteral("mainWindowState")).toByteArray();
     const bool maximized = settings.value(QStringLiteral("maximized")).toBool();
     const bool ribbonMinimum = settings.value(QStringLiteral("ribbonMinimum")).toBool();
-    const double projectRatio = qBound(0.12, settings.value(QStringLiteral("projectDockRatio"), 0.18).toDouble(), 0.35);
-    const double propertyRatio = qBound(0.18, settings.value(QStringLiteral("propertyDockRatio"), 0.23).toDouble(), 0.38);
-    const double outputRatio = qBound(0.10, settings.value(QStringLiteral("outputHeightRatio"), 0.15).toDouble(), 0.45);
-    const double expandedOutputRatio = qBound(0.10, settings.value(QStringLiteral("expandedOutputRatio"), 0.15).toDouble(), 0.45);
+    const double projectRatio = uimetrics::clampProjectDockRatio(
+        settings.value(QStringLiteral("projectDockRatio"), uimetrics::defaultProjectDockRatio()).toDouble());
+    const double propertyRatio = uimetrics::clampPropertyDockRatio(
+        settings.value(QStringLiteral("propertyDockRatio"), uimetrics::defaultPropertyDockRatio()).toDouble());
+    const double outputRatio = uimetrics::clampOutputRatio(
+        settings.value(QStringLiteral("outputHeightRatio"), uimetrics::defaultOutputHeightRatio()).toDouble());
+    const double expandedOutputRatio = uimetrics::clampOutputRatio(
+        settings.value(QStringLiteral("expandedOutputRatio"), uimetrics::defaultExpandedOutputRatio()).toDouble());
     const bool outputCollapsed = settings.value(QStringLiteral("outputCollapsed")).toBool();
     const QVariantMap meshLayout = settings.value(QStringLiteral("meshLayout")).toMap();
     const QVariantMap singleCalculationLayout = settings.value(QStringLiteral("singleCalculationLayout")).toMap();
@@ -1452,8 +1436,7 @@ void MainWindow::restoreUserLayout()
         statusBar()->showMessage(uiText(u"\u5df2\u4fdd\u5b58\u7684\u5e03\u5c40\u65e0\u6548\uff0c\u5df2\u4fdd\u7559\u5f53\u524d\u754c\u9762"), 5000);
         return;
     }
-    QScreen *screen = QGuiApplication::screenAt(frameGeometry().center());
-    if (!screen) screen = QGuiApplication::primaryScreen();
+    QScreen *screen = uimetrics::screenOf(this);
     if (!maximized && screen) {
         const QRect available = screen->availableGeometry();
         const int targetWidth = qMin(available.width(), qMax(minimumWidth(), qRound(available.width() * widthRatio)));
@@ -1502,23 +1485,16 @@ void MainWindow::restoreUserLayout()
 void MainWindow::constrainToAvailableScreen()
 {
     if (isMaximized()) return;
-    QScreen *target = nullptr;
-    for (auto *screen : QGuiApplication::screens()) {
-        if (screen->availableGeometry().intersects(frameGeometry())) {
-            target = screen;
-            break;
-        }
+    if (auto *target = uimetrics::screenOf(this)) {
+        const QRect available = uimetrics::availableRect(this);
+        const int targetWidth = qMin(available.width(), qMax(minimumWidth(), width()));
+        const int targetHeight = qMin(available.height(), qMax(minimumHeight(), height()));
+        const int maxX = available.right() - targetWidth + 1;
+        const int maxY = available.bottom() - targetHeight + 1;
+        const int targetX = maxX <= available.left() ? available.left() : qBound(available.left(), x(), maxX);
+        const int targetY = maxY <= available.top() ? available.top() : qBound(available.top(), y(), maxY);
+        setGeometry(targetX, targetY, targetWidth, targetHeight);
     }
-    if (!target) target = QGuiApplication::primaryScreen();
-    if (!target) return;
-    const QRect available = target->availableGeometry();
-    const int targetWidth = qMin(available.width(), qMax(minimumWidth(), width()));
-    const int targetHeight = qMin(available.height(), qMax(minimumHeight(), height()));
-    const int maxX = available.right() - targetWidth + 1;
-    const int maxY = available.bottom() - targetHeight + 1;
-    const int targetX = maxX <= available.left() ? available.left() : qBound(available.left(), x(), maxX);
-    const int targetY = maxY <= available.top() ? available.top() : qBound(available.top(), y(), maxY);
-    setGeometry(targetX, targetY, targetWidth, targetHeight);
 }
 
 bool MainWindow::eventFilter(QObject *watched, QEvent *event)
@@ -1641,44 +1617,9 @@ void MainWindow::displayTaskEvent(const TaskEvent &event)
     appendLog(level, QStringLiteral("Task"),
               (event.errorCode.isEmpty() ? QString() : event.errorCode + QLatin1Char(' ')) + event.message,
               event.taskId);
-    // Keep the independent monitoring tree in sync with service-backed task
-    // events. This does not add children to the calculation task module; it
-    // only gives the monitor page a selectable task entry.
-    if (tasks_ && projectTree_) {
-        const TaskRecord known = tasks_->record(event.taskId);
-        if (!known.taskId.isEmpty()) {
-            QTreeWidgetItem *monitorGroup = nullptr;
-            QTreeWidgetItem *batchItem = nullptr;
-            QTreeWidgetItem *taskItem = nullptr;
-            for (QTreeWidgetItemIterator it(projectTree_); *it; ++it) {
-                auto *candidate = *it;
-                const QString id = candidate->data(0, ObjectIdRole).toString();
-                if (id == QStringLiteral("monitor-tasks")) monitorGroup = candidate;
-                else if (id == known.batchId) batchItem = candidate;
-                else if (id == event.taskId) taskItem = candidate;
-            }
-            if (!monitorGroup) {
-                QTreeWidgetItem *module = nullptr;
-                for (QTreeWidgetItemIterator it(projectTree_); *it; ++it) {
-                    if ((*it)->data(0, ObjectIdRole).toString() == QStringLiteral("module-compute-monitor")) {
-                        module = *it;
-                        break;
-                    }
-                }
-                if (module)
-                    monitorGroup = addNavigationItem(module, uiText(u"\u4efb\u52a1\u5217\u8868"), {},
-                                                      QStringLiteral("monitor-tasks"), QStringLiteral("group"));
-            }
-            if (!known.batchId.isEmpty() && !batchItem && monitorGroup)
-                batchItem = addNavigationItem(monitorGroup, known.batchId, {}, known.batchId, QStringLiteral("group"));
-            auto *parent = batchItem ? batchItem : monitorGroup;
-            if (!taskItem && parent)
-                addNavigationItem(parent, event.taskId, QStringLiteral("task"), event.taskId, QStringLiteral("task"));
-        }
-    }
-    // Feed the live monitoring page as a second consumer. Its task set is its
-    // own, so this adds a listener without changing what the task tree and log
-    // table above already show for the same event.
+    // The monitoring navigation tree has been removed from the workspace, so
+    // task events no longer grow a tree under it. The live monitoring page is
+    // still fed below as the reusable curve host for the visualization module.
     if (monitorPage_) {
         // The page rejects events whose attempt does not match the attempt it
         // holds, which is what keeps a stale delivery from attaching itself to

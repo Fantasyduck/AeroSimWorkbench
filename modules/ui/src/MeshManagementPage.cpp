@@ -1,4 +1,5 @@
 #include "aerosim/ui/MeshManagementPage.h"
+#include "aerosim/ui/UiLayoutConfig.h"
 
 #include <QAction>
 #include <QActionGroup>
@@ -356,9 +357,10 @@ MeshManagementPage::MeshManagementPage(QWidget *viewportHost, QWidget *parent)
         "QGroupBox { font-weight:600; margin-top:8px; }"
         "QGroupBox::title { subcontrol-origin:margin; left:8px; padding:0 3px; }"));
 
-    auto *pageLayout = new QVBoxLayout(this);
-    pageLayout->setContentsMargins(8, 8, 8, 8);
-    pageLayout->setSpacing(6);
+    // A mesh/viewport page is an immersive workbench rather than a document
+    // form: its title strip must meet the central workspace edge. The content
+    // wrapper below owns the standard page padding exactly once.
+    auto *pageLayout = uimetrics::createWorkbenchRootLayout(this);
 
     auto *header = new QWidget(this);
     header->setObjectName(QStringLiteral("meshManagementHeader"));
@@ -373,8 +375,14 @@ MeshManagementPage::MeshManagementPage(QWidget *viewportHost, QWidget *parent)
     headerLayout->addWidget(scope);
     pageLayout->addWidget(header);
 
+    auto *content = new QWidget(this);
+    content->setObjectName(QStringLiteral("meshWorkspaceContent"));
+    auto *contentLayout = new QVBoxLayout(content);
+    contentLayout->setContentsMargins(uimetrics::pageMargins());
+    contentLayout->setSpacing(0);
+
     // The reference places the log below the viewport in the right column.
-    mainSplitter_ = new QSplitter(Qt::Horizontal, this);
+    mainSplitter_ = new QSplitter(Qt::Horizontal, content);
     mainSplitter_->setObjectName(QStringLiteral("meshWorkspaceMainSplitter"));
     mainSplitter_->setChildrenCollapsible(false);
     settingsSplitter_ = new QSplitter(Qt::Vertical, mainSplitter_);
@@ -713,7 +721,8 @@ MeshManagementPage::MeshManagementPage(QWidget *viewportHost, QWidget *parent)
     mainSplitter_->setStretchFactor(0, 1);
     mainSplitter_->setStretchFactor(1, 1);
     mainSplitter_->setSizes({670, 330});
-    pageLayout->addWidget(mainSplitter_, 1);
+    contentLayout->addWidget(mainSplitter_, 1);
+    pageLayout->addWidget(content, 1);
 
     connect(importMeshButton_, &QPushButton::clicked, this, &MeshManagementPage::addMesh);
     connect(deleteMeshButton_, &QPushButton::clicked, this, &MeshManagementPage::removeCurrentMesh);
