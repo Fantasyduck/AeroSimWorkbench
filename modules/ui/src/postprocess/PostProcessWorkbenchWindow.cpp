@@ -630,7 +630,7 @@ void PostProcessWorkbenchWindow::openImportDialog() {
     dialog->setObjectName(QStringLiteral("postProcessImportDataDialog"));
     dialog->setAttribute(Qt::WA_DeleteOnClose); dialog->setWindowTitle(uiText(u"导入可视化数据")); dialog->resize(680, 410);
     auto *layout = new QVBoxLayout(dialog);
-    auto *hint = new QLabel(dataServiceAvailable_ ? uiText(u"选择一个或多个 CGNS 网格或流场文件。") : uiText(u"读取服务尚未接入。"), dialog); hint->setWordWrap(true); layout->addWidget(hint);
+    auto *hint = new QLabel(dataServiceAvailable_ ? uiText(u"选择一个或多个 CGNS、VTK 或 Tecplot ASCII 网格或流场文件。") : uiText(u"读取服务尚未接入。"), dialog); hint->setWordWrap(true); layout->addWidget(hint);
     auto *files = new QListWidget(dialog); files->setObjectName(QStringLiteral("postProcessImportFileList"));
     files->setSelectionMode(QAbstractItemView::ExtendedSelection); layout->addWidget(files, 1);
     auto *row = new QHBoxLayout; auto *add = new QPushButton(uiText(u"添加文件…"), dialog); auto *remove = new QPushButton(uiText(u"移除所选"), dialog);
@@ -638,7 +638,7 @@ void PostProcessWorkbenchWindow::openImportDialog() {
     row->addWidget(add); row->addWidget(remove); row->addStretch(); layout->addLayout(row);
     connect(add, &QPushButton::clicked, dialog, [dialog, files] {
         const QStringList selected = QFileDialog::getOpenFileNames(dialog, uiText(u"选择可视化数据"), QString(),
-            uiText(u"CGNS 文件 (*.cgns);;所有文件 (*)"));
+            uiText(u"可视化数据 (*.cgns *.vtk *.vti *.vtu *.vts *.vtr *.vtp *.vtm *.tec *.dat);;CGNS 文件 (*.cgns);;VTK 文件 (*.vtk *.vti *.vtu *.vts *.vtr *.vtp *.vtm);;Tecplot ASCII (*.tec *.dat);;所有文件 (*)"));
         for (const QString &path : selected) {
             bool duplicate = false;
             for (int i = 0; i < files->count(); ++i) if (files->item(i)->data(Qt::UserRole).toString() == path) { duplicate = true; break; }
@@ -653,7 +653,7 @@ void PostProcessWorkbenchWindow::openImportDialog() {
     for (int i = 0; i < datasetTree_->topLevelItemCount(); ++i)
         if (!datasetTree_->topLevelItem(i)->data(0, Qt::UserRole).toString().startsWith(QStringLiteral("pending"))) { hasData = true; break; }
     modeRow->setVisible(hasData); layout->addWidget(modeRow);
-    auto *status = new QLabel(dataServiceAvailable_ ? uiText(u"选择 CGNS 文件；读取成功后显示数据。") : uiText(u"读取服务尚未接入；提交后文件会显示为等待读取。"), dialog); status->setWordWrap(true); status->setObjectName(QStringLiteral("postProcessImportStatus")); layout->addWidget(status);
+    auto *status = new QLabel(dataServiceAvailable_ ? uiText(u"选择 CGNS、VTK 或 Tecplot ASCII 文件；读取成功后显示数据。") : uiText(u"读取服务尚未接入；提交后文件会显示为等待读取。"), dialog); status->setWordWrap(true); status->setObjectName(QStringLiteral("postProcessImportStatus")); layout->addWidget(status);
     auto *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, dialog); buttons->button(QDialogButtonBox::Ok)->setText(uiText(u"导入")); layout->addWidget(buttons);
     connect(buttons, &QDialogButtonBox::rejected, dialog, &QDialog::reject);
     connect(buttons, &QDialogButtonBox::accepted, dialog, [this, dialog, files, mode, status, hasData] {
@@ -1143,7 +1143,7 @@ void PostProcessWorkbenchWindow::presentImportedData(const QVariantList &dataset
         for (const QVariant &rv : dataset.value("regions").toList()) {
             const QVariantMap region=rv.toMap();
             QVariantMap context; context["sourceId"]=dataset.value("id"); context["sourceName"]=dataset.value("name");
-            context["regionId"]=region.value("id"); context["dimension"]=region.value("dimension"); context["topology"]=uiText(u"CGNS 网格"); context["frames"]=1;
+            context["regionId"]=region.value("id"); context["dimension"]=region.value("dimension"); context["topology"]=uiText(u"导入网格"); context["frames"]=1;
             QStringList scalars, vectors;
             for (const QVariant &fv:region.value("fields").toList()) { const auto f=fv.toMap(); if(f.value("components").toInt()==1) scalars << f.value("name").toString(); else if(f.value("components").toInt()==3) vectors << f.value("name").toString(); }
             context["scalars"]=scalars; context["vectors"]=vectors; context["field"]=QString(); context["components"]=0;
@@ -1167,8 +1167,8 @@ void PostProcessWorkbenchWindow::presentImportedData(const QVariantList &dataset
         root->setExpanded(true);
     }
     showNavigationPanel(1); if(first) { datasetTree_->setCurrentItem(first); updateDataSelection(first,0); }
-    if (sessionContext_) sessionContext_->setText(uiText(u"已加载 CGNS 数据"));
-    appendMessage(uiText(u"CGNS 数据读取完成。"));
+    if (sessionContext_) sessionContext_->setText(uiText(u"已加载结果数据"));
+    appendMessage(uiText(u"结果数据读取完成。"));
 }
 
 void PostProcessWorkbenchWindow::updateSelectionActions() {

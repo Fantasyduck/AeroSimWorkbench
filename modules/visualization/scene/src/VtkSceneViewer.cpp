@@ -306,9 +306,10 @@ void VtkSceneViewer::bindWorkbench(PostProcessWorkbenchWindow *workbench) {
             workbench->presentImportedData(description,mode=="replace");
         });
         watcher->setFuture(QtConcurrent::run([paths] {
-            BatchResult batch; auto adapter=createCgnsAdapter();
+            BatchResult batch; auto cgns=createCgnsAdapter(); auto vtk=createVtkDataAdapter();
             for(const auto &path:paths) {
-                if(!adapter->accepts(path)) { batch.error=QStringLiteral("Unsupported data format: ")+path; break; }
+                DataAdapter *adapter=cgns->accepts(path) ? cgns.get() : vtk.get();
+                if(!adapter->accepts(path)) { batch.error=QStringLiteral("Unsupported data format (Tecplot binary is not supported): ")+path; break; }
                 const auto result=adapter->read(path); if(!result.ok()) { batch.error=result.error; break; }
                 batch.datasets.append(result.dataset);
             }

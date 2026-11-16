@@ -27,7 +27,7 @@ find_package(Qt5 5.12.12 EXACT REQUIRED COMPONENTS Core)
 # or a CGNS-less desktop build). A missing dependency is reported instead of
 # being fatal; modules/visualization/scene falls back to probing CGNS itself
 # when this target does not exist, and AEROSIM_MESH_HAS_CGNS stays undefined.
-find_package(VTK 8.2.0 EXACT QUIET COMPONENTS vtkCommonCore vtkCommonDataModel)
+find_package(VTK 8.2.0 EXACT QUIET COMPONENTS vtkCommonCore vtkCommonDataModel vtkIOLegacy vtkIOXML vtkIOGeometry)
 set(AEROSIM_CGNS_ROOT "" CACHE PATH "CGNS installation or build prefix")
 find_path(AEROSIM_CGNS_INCLUDE_DIR cgnslib.h
     HINTS "${AEROSIM_CGNS_ROOT}/include" "${AEROSIM_CGNS_ROOT}/src")
@@ -35,7 +35,7 @@ find_library(AEROSIM_CGNS_LIBRARY NAMES cgnsdll cgns
     HINTS "${AEROSIM_CGNS_ROOT}/lib" "${AEROSIM_CGNS_ROOT}/src/Debug")
 
 if(VTK_FOUND AND AEROSIM_CGNS_INCLUDE_DIR AND AEROSIM_CGNS_LIBRARY)
-    add_library(aerosim_visualization_data STATIC src/CgnsAdapter.cpp)
+    add_library(aerosim_visualization_data STATIC src/CgnsAdapter.cpp src/VtkDataAdapter.cpp)
     option(AEROSIM_BUILD_PARAVIEW_CGNS_READER "Build experimental ParaView CGNS backend" OFF)
     if(AEROSIM_BUILD_PARAVIEW_CGNS_READER)
         find_package(VTK 8.2.0 EXACT REQUIRED COMPONENTS vtkCommonCore vtkCommonDataModel vtkCommonExecutionModel vtkParallelCore vtkFiltersExtraction vtkpugixml)
@@ -58,7 +58,7 @@ if(VTK_FOUND AND AEROSIM_CGNS_INCLUDE_DIR AND AEROSIM_CGNS_LIBRARY)
         endif()
     endif()
     target_include_directories(aerosim_visualization_data PUBLIC include ${VTK_INCLUDE_DIRS} PRIVATE "${AEROSIM_CGNS_INCLUDE_DIR}")
-    target_link_libraries(aerosim_visualization_data PUBLIC Qt5::Core ${VTK_LIBRARIES} PRIVATE "${AEROSIM_CGNS_LIBRARY}")
+    target_link_libraries(aerosim_visualization_data PUBLIC Qt5::Core ${VTK_LIBRARIES} vtkIOLegacy vtkIOXML vtkIOGeometry PRIVATE "${AEROSIM_CGNS_LIBRARY}")
     if(WIN32 AND AEROSIM_CGNS_LIBRARY MATCHES "cgnsdll")
         target_compile_definitions(aerosim_visualization_data PRIVATE USE_DLL)
     endif()
@@ -66,6 +66,16 @@ if(VTK_FOUND AND AEROSIM_CGNS_INCLUDE_DIR AND AEROSIM_CGNS_LIBRARY)
         target_compile_options(aerosim_visualization_data PRIVATE /utf-8)
     endif()
     if(BUILD_TESTING OR AEROSIM_BUILD_TESTS OR CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
+        add_executable(aerosim_vtk_data_adapter_test ../tests/VtkDataAdapterTest.cpp)
+        target_link_libraries(aerosim_vtk_data_adapter_test PRIVATE aerosim_visualization_data)
+        set(AEROSIM_READER_TEST_DATA_DIR "" CACHE PATH "Directory containing public VTK reader test data")
+        if(AEROSIM_READER_TEST_DATA_DIR)
+            add_test(NAME vtk_tecplot_adapter_import COMMAND aerosim_vtk_data_adapter_test
+                "${AEROSIM_READER_TEST_DATA_DIR}/ironProt.vtk"
+                "${AEROSIM_READER_TEST_DATA_DIR}/flow.tec"
+                "${AEROSIM_READER_TEST_DATA_DIR}/cellcentered.tec"
+                "${CMAKE_CURRENT_SOURCE_DIR}/../../../tests/fixtures/postprocess/cube_t00.vtk")
+        endif()
         add_executable(aerosim_cgns_adapter_test ../tests/CgnsAdapterTest.cpp)
         target_include_directories(aerosim_cgns_adapter_test PRIVATE ${VTK_INCLUDE_DIRS})
         target_link_libraries(aerosim_cgns_adapter_test PRIVATE aerosim_visualization_data)
