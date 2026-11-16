@@ -1,6 +1,7 @@
 #include "aerosim/ui/UiLayoutConfig.h"
 
 #include <QGuiApplication>
+#include <QVBoxLayout>
 #include <QWidget>
 #include <QWindow>
 
@@ -46,6 +47,15 @@ qreal scaleFactor(const QWidget *widget)
 {
     const qreal dpi = logicalDpi(widget);
     return dpi > 0.0 ? dpi / 96.0 : 1.0;
+}
+
+QVBoxLayout *createPageRootLayout(QWidget *parent)
+{
+    auto *layout = new QVBoxLayout(parent);
+    layout->setContentsMargins(pageMargins());
+    layout->setSpacing(panelSpacing());
+    layout->setSizeConstraint(QLayout::SetDefaultConstraint);
+    return layout;
 }
 
 } // namespace uimetrics
