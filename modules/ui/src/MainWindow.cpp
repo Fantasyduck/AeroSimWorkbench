@@ -239,7 +239,7 @@ void MainWindow::createRibbon()
                 connect(action, &QAction::triggered, this, &MainWindow::saveUserLayout);
             } else if (route == "layout-restore") {
                 action->setObjectName(QStringLiteral("restoreUserLayoutAction"));
-                QSettings settings(QStringLiteral("AeroSimWorkbench"), QStringLiteral("UiLayout"));
+                QSettings settings(layoutSettingsOrg_, layoutSettingsApp_);
                 action->setEnabled(settings.value(QStringLiteral("UserLayout/version")).toInt() == 1);
                 restoreUserLayoutAction_ = action;
                 connect(action, &QAction::triggered, this, &MainWindow::restoreUserLayout);
@@ -1002,6 +1002,12 @@ void MainWindow::showWorkspacePage(const QString &pageId)
     }
 }
 
+void MainWindow::setLayoutSettingsScope(const QString &organization, const QString &application)
+{
+    layoutSettingsOrg_ = organization;
+    layoutSettingsApp_ = application;
+}
+
 void MainWindow::showModuleWorkspace(const QString &moduleId)
 {
     const QString pageId = moduleLastPages_.value(moduleId);
@@ -1355,7 +1361,7 @@ void MainWindow::restoreLayout()
 
 void MainWindow::saveUserLayout()
 {
-    QSettings settings(QStringLiteral("AeroSimWorkbench"), QStringLiteral("UiLayout"));
+    QSettings settings(layoutSettingsOrg_, layoutSettingsApp_);
     settings.beginGroup(QStringLiteral("UserLayout"));
     settings.remove(QString());
     settings.setValue(QStringLiteral("version"), 1);
@@ -1391,7 +1397,7 @@ void MainWindow::saveUserLayout()
 
 void MainWindow::restoreUserLayout()
 {
-    QSettings settings(QStringLiteral("AeroSimWorkbench"), QStringLiteral("UiLayout"));
+    QSettings settings(layoutSettingsOrg_, layoutSettingsApp_);
     settings.beginGroup(QStringLiteral("UserLayout"));
     if (settings.value(QStringLiteral("version")).toInt() != 1) {
         settings.endGroup();
@@ -1403,10 +1409,14 @@ void MainWindow::restoreUserLayout()
     const QByteArray mainWindowState = settings.value(QStringLiteral("mainWindowState")).toByteArray();
     const bool maximized = settings.value(QStringLiteral("maximized")).toBool();
     const bool ribbonMinimum = settings.value(QStringLiteral("ribbonMinimum")).toBool();
-    const double projectRatio = qBound(0.12, settings.value(QStringLiteral("projectDockRatio"), uimetrics::defaultProjectDockRatio()).toDouble(), 0.35);
-    const double propertyRatio = qBound(0.18, settings.value(QStringLiteral("propertyDockRatio"), uimetrics::defaultPropertyDockRatio()).toDouble(), 0.38);
-    const double outputRatio = qBound(0.10, settings.value(QStringLiteral("outputHeightRatio"), uimetrics::defaultOutputHeightRatio()).toDouble(), 0.45);
-    const double expandedOutputRatio = qBound(0.10, settings.value(QStringLiteral("expandedOutputRatio"), uimetrics::defaultExpandedOutputRatio()).toDouble(), 0.45);
+    const double projectRatio = uimetrics::clampProjectDockRatio(
+        settings.value(QStringLiteral("projectDockRatio"), uimetrics::defaultProjectDockRatio()).toDouble());
+    const double propertyRatio = uimetrics::clampPropertyDockRatio(
+        settings.value(QStringLiteral("propertyDockRatio"), uimetrics::defaultPropertyDockRatio()).toDouble());
+    const double outputRatio = uimetrics::clampOutputRatio(
+        settings.value(QStringLiteral("outputHeightRatio"), uimetrics::defaultOutputHeightRatio()).toDouble());
+    const double expandedOutputRatio = uimetrics::clampOutputRatio(
+        settings.value(QStringLiteral("expandedOutputRatio"), uimetrics::defaultExpandedOutputRatio()).toDouble());
     const bool outputCollapsed = settings.value(QStringLiteral("outputCollapsed")).toBool();
     const QVariantMap meshLayout = settings.value(QStringLiteral("meshLayout")).toMap();
     const QVariantMap singleCalculationLayout = settings.value(QStringLiteral("singleCalculationLayout")).toMap();

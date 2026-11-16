@@ -50,6 +50,17 @@ public:
     void displayWorkflow(const WorkflowViewV2 &view);
     void displayTaskEvent(const TaskEvent &event);
 
+    // Redirect where the layout/extras preferences are persisted. Defaults to
+    // ("AeroSimWorkbench", "UiLayout"); the framework regression tests call
+    // this with an isolated scope so they never read or overwrite the real user
+    // layout. Must be set before triggering save/restore.
+    void setLayoutSettingsScope(const QString &organization, const QString &application);
+
+    // Redirect where the layout/extras preferences are persisted. Defaults to
+    // ("AeroSimWorkbench", "UiLayout"); the framework regression tests call
+    // this with an isolated scope so they never read or overwrite the real user
+    // layout. Must be set before triggering save/restore.
+
     // The live monitoring page is retained as a reusable assembly slot for the
     // visualization module's curve host, but it is no longer a workspace-tree
     // navigation destination in the main window (that entry has been removed).
@@ -159,6 +170,9 @@ private:
     bool propertyDockVisibleBeforeCalculation_ = true;
     bool outputDockVisibleBeforeCalculation_ = true;
     int projectDockWidth_ = uimetrics::projectDockWidth();
+    // Persistence scope for layout/extras (see setLayoutSettingsScope).
+    QString layoutSettingsOrg_ = QStringLiteral("AeroSimWorkbench");
+    QString layoutSettingsApp_ = QStringLiteral("UiLayout");
     // Embedded parameter editors hide the shared property dock; remember the
     // previous visibility so main's non-mesh pages restore it afterwards.
     bool parameterDockHidden_ = false;
