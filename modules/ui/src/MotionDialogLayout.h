@@ -1,10 +1,8 @@
 #pragma once
+#include "aerosim/ui/UiLayoutConfig.h"
 #include <QBoxLayout>
 #include <QDialog>
-#include <QGuiApplication>
 #include <QResizeEvent>
-#include <QScreen>
-#include <QWindow>
 
 namespace aerosim {
 namespace motionLayout {
@@ -24,14 +22,9 @@ protected:
     }
 };
 inline void fit(QDialog *dialog, const QSize &preferred) {
-    QScreen *screen = nullptr;
-    if (dialog->parentWidget()) {
-        auto *window = dialog->parentWidget()->window();
-        if (window->windowHandle()) screen = window->windowHandle()->screen();
-    }
-    if (!screen) screen = QGuiApplication::primaryScreen();
+    QScreen *screen = uimetrics::screenOf(dialog);
     if (!screen) { dialog->resize(preferred); return; }
-    const QRect available = screen->availableGeometry();
+    const QRect available = uimetrics::availableRect(dialog);
     const QSize limit(qMax(1, available.width() - 48), qMax(1, available.height() - 80));
     dialog->resize(preferred.boundedTo(limit));
     dialog->move(available.center() - QPoint(dialog->width() / 2, dialog->height() / 2));
