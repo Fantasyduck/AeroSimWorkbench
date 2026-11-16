@@ -1,6 +1,7 @@
 #pragma once
 
 #include "aerosim/ui/IntegrationPorts.h"
+#include "aerosim/ui/UiLayoutConfig.h"
 #include <SARibbonMainWindow.h>
 #include <QHash>
 #include <QPointer>
@@ -49,12 +50,21 @@ public:
     void displayWorkflow(const WorkflowViewV2 &view);
     void displayTaskEvent(const TaskEvent &event);
 
-    // The live monitoring page is created with the workspace but is reachable
-    // only through its own navigation entry, so the placeholder monitor page and
-    // its mock-driven assertions stay untouched. The assembly layer fills the
-    // page's curve slot; the window only exposes it.
+    // Redirect where the layout/extras preferences are persisted. Defaults to
+    // ("AeroSimWorkbench", "UiLayout"); the framework regression tests call
+    // this with an isolated scope so they never read or overwrite the real user
+    // layout. Must be set before triggering save/restore.
+    void setLayoutSettingsScope(const QString &organization, const QString &application);
+
+    // Redirect where the layout/extras preferences are persisted. Defaults to
+    // ("AeroSimWorkbench", "UiLayout"); the framework regression tests call
+    // this with an isolated scope so they never read or overwrite the real user
+    // layout. Must be set before triggering save/restore.
+
+    // The live monitoring page is retained as a reusable assembly slot for the
+    // visualization module's curve host, but it is no longer a workspace-tree
+    // navigation destination in the main window (that entry has been removed).
     ComputeMonitorPage *monitorPage() const { return monitorPage_; }
-    void showComputeMonitor();
 
     // The two pages under 智能数据处理. They are created with the workspace but
     // stay behind abstract result ports, so the window never learns what a
@@ -118,8 +128,6 @@ private:
     CalculationTaskPage *batchCalculationPage_ = nullptr;
     QWidget *dataProcessPage_ = nullptr;
     QWidget *postprocessOverviewPage_ = nullptr;
-    QWidget *computeMonitorPage_ = nullptr;
-    QWidget *taskMonitorPage_ = nullptr;
     ComputeMonitorPage *monitorPage_ = nullptr;
     ResultDataTablePage *resultDataTablePage_ = nullptr;
     ResultSummaryTablePage *resultSummaryTablePage_ = nullptr;
@@ -152,7 +160,7 @@ private:
     QWidget *outputBody_ = nullptr;
     QString currentPage_;
     QString outputScope_ = QStringLiteral("current-project");
-    int expandedOutputHeight_ = 140;
+    int expandedOutputHeight_ = uimetrics::outputExpandedHeight();
     bool outputCollapsed_ = false;
     bool projectEditingEnabled_ = false;
     bool syncingRibbonTree_ = false;
@@ -161,7 +169,10 @@ private:
     bool propertyDockVisibleBeforeMesh_ = true;
     bool propertyDockVisibleBeforeCalculation_ = true;
     bool outputDockVisibleBeforeCalculation_ = true;
-    int projectDockWidth_ = 260;
+    int projectDockWidth_ = uimetrics::projectDockWidth();
+    // Persistence scope for layout/extras (see setLayoutSettingsScope).
+    QString layoutSettingsOrg_ = QStringLiteral("AeroSimWorkbench");
+    QString layoutSettingsApp_ = QStringLiteral("UiLayout");
     // Embedded parameter editors hide the shared property dock; remember the
     // previous visibility so main's non-mesh pages restore it afterwards.
     bool parameterDockHidden_ = false;
