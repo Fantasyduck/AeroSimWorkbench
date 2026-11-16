@@ -97,8 +97,6 @@ int main(int argc, char *argv[])
     if (!window.resultDataTablePage()->setCurveView(new aerosim::QwtResultCurveView))
         QTextStream(stderr) << "Failed to insert result curve view\n";
 #endif
-    if (app.arguments().contains(QStringLiteral("--monitor")))
-        window.showComputeMonitor();
 #ifdef AEROSIM_HAS_MESH_VIEWER
     if (!smoke && qgetenv("AEROSIM_ENABLE_MESH_VIEWER") != "0"
         && !aerosim::installMeshViewer(window)) {

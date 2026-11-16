@@ -1,4 +1,5 @@
 #include "aerosim/ui/CalculationTaskPage.h"
+#include "aerosim/ui/UiLayoutConfig.h"
 
 #include <QCheckBox>
 #include <QComboBox>
@@ -68,7 +69,7 @@ QLabel *sectionTitle(const QString &text, QWidget *parent)
 {
     auto *label = new QLabel(text, parent);
     label->setProperty("calculationSection", true);
-    label->setMinimumHeight(28);
+    label->setMinimumHeight(uimetrics::sectionTitleHeight());
     label->setMargin(6);
     return label;
 }
@@ -212,8 +213,8 @@ QWidget *CalculationTaskPage::createSingleSettings()
 {
     auto *panel = new QWidget(this);
     auto *layout = new QVBoxLayout(panel);
-    layout->setContentsMargins(12, 12, 12, 12);
-    layout->setSpacing(12);
+    layout->setContentsMargins(uimetrics::panelSpacing(), uimetrics::panelSpacing(), uimetrics::panelSpacing(), uimetrics::panelSpacing());
+    layout->setSpacing(uimetrics::panelSpacing());
     auto *execution = new QGroupBox(uiText(u"\u6267\u884c\u65b9\u5f0f"), panel);
     auto *executionLayout = new QHBoxLayout(execution);
     executionLayout->addWidget(new QLabel(uiText(u"\u8fd0\u884c\u6a21\u5f0f\uff1a"), execution));
