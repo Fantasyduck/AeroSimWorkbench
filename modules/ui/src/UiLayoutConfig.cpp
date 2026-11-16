@@ -58,5 +58,14 @@ QVBoxLayout *createPageRootLayout(QWidget *parent)
     return layout;
 }
 
+QVBoxLayout *createWorkbenchRootLayout(QWidget *parent)
+{
+    auto *layout = new QVBoxLayout(parent);
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(0);
+    layout->setSizeConstraint(QLayout::SetDefaultConstraint);
+    return layout;
+}
+
 } // namespace uimetrics
 } // namespace aerosim

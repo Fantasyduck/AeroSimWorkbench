@@ -194,11 +194,19 @@ qreal logicalDpi(const QWidget *widget);
 // sizes; this is only for rare pixel-perfect targets.
 qreal scaleFactor(const QWidget *widget);
 
-// Create the standard root layout for a central feature page: a QVBoxLayout
-// with pageMargins() applied. This is the single, framework-owned way pages set
-// their root margin so the central container and the page never both add the
-// same margin. The caller owns the returned layout and must assign it to page.
+// Create the standard root layout for document/form central pages: a
+// QVBoxLayout with pageMargins() applied. This is the framework-owned way
+// ordinary pages set their root margin so the central container and the page
+// never both add the same margin. The caller owns the returned layout and must
+// assign it to page.
 QVBoxLayout *createPageRootLayout(QWidget *parent);
+
+// Create the root layout for an immersive workbench page (for example a
+// viewport, canvas or multi-splitter workspace). Its page chrome may touch the
+// central-container edges, so it deliberately has no outer margin or spacing.
+// Put pageMargins() on the workbench's content wrapper instead. Do not use
+// this for ordinary forms merely to make them denser.
+QVBoxLayout *createWorkbenchRootLayout(QWidget *parent);
 
 } // namespace uimetrics
 } // namespace aerosim
