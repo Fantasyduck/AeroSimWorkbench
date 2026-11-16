@@ -18,7 +18,12 @@ for file in "${qt}/lib/cmake/Qt5/Qt5Config.cmake" "${ribbon}/src/SARibbonBar/SAR
     fi
 done
 
-cmake -S "${root}" -B "${build}" \
+reader_args=()
+if [[ "${AEROSIM_CGNS_BACKEND:-}" == paraview ]]; then
+    reader_args+=("-DAEROSIM_BUILD_PARAVIEW_CGNS_READER=ON")
+fi
+
+cmake -S "${root}" -B "${build}" "${reader_args[@]}" \
     -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
     -DCMAKE_OSX_ARCHITECTURES=x86_64 -DCMAKE_BUILD_TYPE=Debug \
     -DCMAKE_PREFIX_PATH="${qt}" -DSARIBBON_SOURCE_DIR="${ribbon}" \

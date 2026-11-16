@@ -1138,6 +1138,7 @@ void PostProcessWorkbenchWindow::presentImportedData(const QVariantList &dataset
         if(!first) first=root;
         root->setData(0,Qt::UserRole,QStringLiteral("dataset")); root->setToolTip(0,dataset.value("path").toString());
         QVariantMap rootContext; rootContext["sourceId"]=dataset.value("id"); root->setData(0,Qt::UserRole+3,rootContext);
+        root->setData(0,Qt::UserRole+1,dataset.value("id").toString());
         root->setFlags(root->flags() | Qt::ItemIsUserCheckable); root->setCheckState(0,Qt::Checked);
         for (const QVariant &rv : dataset.value("regions").toList()) {
             const QVariantMap region=rv.toMap();
@@ -1419,6 +1420,7 @@ void PostProcessWorkbenchWindow::openObjectStyle() {
     const QString name = selectedName_;
     const QVariantMap regionContext = selectedContext_;
     const bool realRegion = !regionContext.value("regionId").toString().isEmpty();
+    const bool realDataset = selectedKind_ == QStringLiteral("dataset") && !regionContext.value("sourceId").toString().isEmpty();
     const QVariantMap draft = styleDrafts_.value(id);
     auto *dialog = new QDialog(this);
     styleDialog_ = dialog;
@@ -1444,6 +1446,11 @@ void PostProcessWorkbenchWindow::openObjectStyle() {
             if (item->data(0, Qt::UserRole+1).toString() == id) regionVisible = item->checkState(0) == Qt::Checked;
         }
     }
+    if (realDataset) for (int i = 0; i < datasetTree_->topLevelItemCount(); ++i) {
+        auto *root = datasetTree_->topLevelItem(i);
+        if (root->data(0,Qt::UserRole+3).toMap().value("sourceId") == regionContext.value("sourceId"))
+            regionVisible = root->checkState(0) == Qt::Checked;
+    }
     visible->setChecked(regionVisible);
     auto *representation = new QComboBox(dialog);
     representation->setObjectName(QStringLiteral("objectStyleRepresentation"));
@@ -1459,16 +1466,36 @@ void PostProcessWorkbenchWindow::openObjectStyle() {
     form->addRow(visible); form->addRow(uiText(u"显示方式"), representation);
     form->addRow(uiText(u"颜色"), color); form->addRow(uiText(u"不透明度"), opacity);
     layout->addLayout(form);
-    auto *hint = new QLabel(realRegion ? uiText(u"设置将应用到当前区域。") : uiText(u"当前保存的是此对象的界面草稿。"), dialog);
+    auto *hint = new QLabel(realDataset ? uiText(u"设置将应用到此结果集的所有区域；应用后仍可单独调整区域。") : realRegion ? uiText(u"设置将应用到当前区域。") : uiText(u"当前保存的是此对象的界面草稿。"), dialog);
     hint->setObjectName(QStringLiteral("mutedText")); hint->setWordWrap(true);
     layout->addWidget(hint); layout->addStretch();
     auto *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, dialog);
-    buttons->button(QDialogButtonBox::Ok)->setText(realRegion ? uiText(u"应用") : uiText(u"保存草稿"));
+    buttons->button(QDialogButtonBox::Ok)->setText((realRegion || realDataset) ? uiText(u"应用") : uiText(u"保存草稿"));
     buttons->button(QDialogButtonBox::Cancel)->setText(uiText(u"取消")); layout->addWidget(buttons);
     connect(buttons, &QDialogButtonBox::rejected, dialog, &QDialog::reject);
-    connect(buttons, &QDialogButtonBox::accepted, dialog, [this, dialog, id, name, regionContext, realRegion, visible, color, opacity, representation] {
+    connect(buttons, &QDialogButtonBox::accepted, dialog, [this, dialog, id, name, regionContext, realRegion, realDataset, visible, color, opacity, representation] {
         styleDrafts_[id] = {{"visible", visible->isChecked()}, {"representation", representation->currentIndex()},
                             {"color", color->currentIndex()}, {"opacity", opacity->value()}};
+        if (realDataset) {
+            const QString datasetId = regionContext.value("sourceId").toString();
+            for (int i = 0; i < datasetTree_->topLevelItemCount(); ++i) {
+                auto *root = datasetTree_->topLevelItem(i);
+                if (root->data(0,Qt::UserRole).toString() != QStringLiteral("dataset") ||
+                    root->data(0,Qt::UserRole+3).toMap().value("sourceId").toString() != datasetId) continue;
+                if (visible->isChecked()) root->setCheckState(0,Qt::Checked);
+                for (int j = 0; j < root->childCount(); ++j) {
+                    auto *region = root->child(j);
+                    const QString regionId = region->data(0,Qt::UserRole+3).toMap().value("regionId").toString();
+                    if (regionId.isEmpty()) continue;
+                    styleDrafts_[region->data(0,Qt::UserRole+1).toString()] = styleDrafts_.value(id);
+                    emit regionStyleChanged(datasetId,regionId,styleDrafts_.value(id));
+                    region->setCheckState(0, visible->isChecked() ? Qt::Checked : Qt::Unchecked);
+                }
+                break;
+            }
+            appendMessage(uiText(u"已更新结果集“%1”的所有区域样式。").arg(name));
+            dialog->accept(); return;
+        }
         if (realRegion) {
             emit regionStyleChanged(regionContext.value("sourceId").toString(), regionContext.value("regionId").toString(), styleDrafts_.value(id));
             for (int i = 0; i < datasetTree_->topLevelItemCount(); ++i) {

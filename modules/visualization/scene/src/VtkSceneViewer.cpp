@@ -135,11 +135,11 @@ public:
                         display.mapper->ScalarVisibilityOn(); display.mapper->SetScalarMode(association=="cell" ? VTK_SCALAR_MODE_USE_CELL_FIELD_DATA : VTK_SCALAR_MODE_USE_POINT_FIELD_DATA);
                         display.mapper->SelectColorArray(name.constData());
                         const QString rangeKey = association + QStringLiteral(":") + field;
-                        const double *dataRange = array->GetRange();
+                        double dataRange[2]; array->GetRange(dataRange, array->GetNumberOfComponents() == 1 ? 0 : -1);
                         const auto stored = display.ranges.value(rangeKey, qMakePair(dataRange[0], dataRange[1]));
                         const double range[] = {stored.first, stored.second};
                         display.mapper->SetScalarRange(range[0], range[1]);
-                        auto lookup=vtkSmartPointer<vtkLookupTable>::New(); lookup->SetRange(range[0],range[1]);
+                        auto lookup=vtkSmartPointer<vtkLookupTable>::New(); lookup->SetRange(range[0],range[1]); lookup->SetVectorModeToMagnitude();
                         lookup->SetHueRange(0.667,0.0); lookup->Build();
                         display.mapper->SetLookupTable(lookup); display.mapper->UseLookupTableScalarRangeOn();
                         QPixmap bar(18,128); QPainter painter(&bar);

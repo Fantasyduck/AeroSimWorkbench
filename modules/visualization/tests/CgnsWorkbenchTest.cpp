@@ -13,6 +13,8 @@
 #include <QListWidget>
 #include <QFileInfo>
 #include <QComboBox>
+#include <QCheckBox>
+#include <QSpinBox>
 #include <QMessageBox>
 #include <QToolButton>
 #include <QTemporaryDir>
@@ -104,6 +106,33 @@ int main(int argc,char **argv) {
         if(countVisible()!=dataset->childCount()-1 || firstRegion->checkState(0)!=Qt::Unchecked) { qCritical()<<"Dataset toggle did not preserve region state"; app.exit(23); return; }
         firstRegion->setCheckState(0,Qt::Checked);
         if(countVisible()!=dataset->childCount()) { qCritical()<<"Checking region did not restore actor"; app.exit(24); return; }
+        // Apply a dataset style through the real dialog and verify every actor,
+        // the child drafts, and subsequent individual overrides.
+        auto *datasetStyleAction=window.findChild<QAction *>(QStringLiteral("postProcessObjectStyleAction"));
+        const auto applyStyle=[&](QTreeWidgetItem *item,int representation,int opacity,int color,bool visible) {
+            tree->setCurrentItem(item); if(!datasetStyleAction || !datasetStyleAction->isEnabled()) return false;
+            datasetStyleAction->trigger();
+            auto *dialog=window.findChild<QDialog *>(QStringLiteral("postProcessObjectStyleDialog"));
+            auto *rep=dialog ? dialog->findChild<QComboBox *>(QStringLiteral("objectStyleRepresentation")) : nullptr;
+            auto *opacityBox=dialog ? dialog->findChild<QSpinBox *>(QStringLiteral("objectStyleOpacity")) : nullptr;
+            auto *colorBox=dialog ? dialog->findChild<QComboBox *>(QStringLiteral("objectStyleColor")) : nullptr;
+            auto *visibility=dialog ? dialog->findChild<QCheckBox *>(QStringLiteral("objectStyleVisible")) : nullptr;
+            auto *buttons=dialog ? dialog->findChild<QDialogButtonBox *>() : nullptr;
+            if(!rep || !opacityBox || !colorBox || !visibility || !buttons) return false;
+            rep->setCurrentIndex(representation); opacityBox->setValue(opacity); colorBox->setCurrentIndex(color); visibility->setChecked(visible);
+            buttons->button(QDialogButtonBox::Ok)->click(); QCoreApplication::sendPostedEvents(nullptr,QEvent::DeferredDelete); return true;
+        };
+        if(!applyStyle(dataset,1,40,1,true)) { qCritical()<<"Dataset style dialog failed"; app.exit(50); return; }
+        for(int i=0;i<dataset->childCount();++i) {
+            auto *a=vtkActor::SafeDownCast(actors->GetItemAsObject(i));
+            if(!a || a->GetProperty()->GetRepresentation()!=VTK_WIREFRAME || std::abs(a->GetProperty()->GetOpacity()-.4)>1e-9 || std::abs(a->GetProperty()->GetColor()[2]-.78)>1e-9) { qCritical()<<"Dataset style missed region"<<i; app.exit(51); return; }
+        }
+        if(!applyStyle(firstRegion,3,65,0,true)) { app.exit(52); return; }
+        auto *firstActor=vtkActor::SafeDownCast(actors->GetItemAsObject(0));
+        auto *otherActor=vtkActor::SafeDownCast(actors->GetItemAsObject(1));
+        if(!firstActor || !otherActor || firstActor->GetProperty()->GetRepresentation()!=VTK_POINTS || otherActor->GetProperty()->GetRepresentation()!=VTK_WIREFRAME) { qCritical()<<"Individual override affected other regions"; app.exit(53); return; }
+        if(!applyStyle(dataset,0,100,0,false) || countVisible()!=0) { qCritical()<<"Dataset style did not hide all regions"; app.exit(54); return; }
+        if(!applyStyle(dataset,0,100,0,true) || countVisible()!=dataset->childCount()) { qCritical()<<"Dataset style did not show all regions"; app.exit(55); return; }
         QTreeWidgetItem *zone=nullptr;
         for(int i=0;i<dataset->childCount();++i) if(dataset->child(i)->text(0).contains(QStringLiteral("wing_up"))) zone=dataset->child(i);
         if(!zone) { qCritical()<<"Wing region missing"; app.exit(9); return; }

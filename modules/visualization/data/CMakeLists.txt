@@ -36,6 +36,27 @@ find_library(AEROSIM_CGNS_LIBRARY NAMES cgnsdll cgns
 
 if(VTK_FOUND AND AEROSIM_CGNS_INCLUDE_DIR AND AEROSIM_CGNS_LIBRARY)
     add_library(aerosim_visualization_data STATIC src/CgnsAdapter.cpp)
+    option(AEROSIM_BUILD_PARAVIEW_CGNS_READER "Build experimental ParaView CGNS backend" OFF)
+    if(AEROSIM_BUILD_PARAVIEW_CGNS_READER)
+        find_package(VTK 8.2.0 EXACT REQUIRED COMPONENTS vtkCommonCore vtkCommonDataModel vtkCommonExecutionModel vtkParallelCore vtkFiltersExtraction vtkpugixml)
+        set(_pv_cgns "${CMAKE_CURRENT_SOURCE_DIR}/third_party/paraview-5.6.3")
+        target_sources(aerosim_visualization_data PRIVATE src/ParaViewCgnsAdapter.cpp
+            "${_pv_cgns}/vtkCGNSReader.cxx" "${_pv_cgns}/vtkCGNSReaderInternal.cxx"
+            "${_pv_cgns}/vtkCGNSSubsetInclusionLattice.cxx" "${_pv_cgns}/cgio_helpers.cxx"
+            "${_pv_cgns}/vtkSubsetInclusionLattice.cxx" "${_pv_cgns}/vtkPVInformationKeys.cxx")
+        target_include_directories(aerosim_visualization_data PRIVATE "${_pv_cgns}")
+        target_compile_definitions(aerosim_visualization_data PRIVATE AEROSIM_HAS_PARAVIEW_CGNS_READER=1)
+        target_link_libraries(aerosim_visualization_data PRIVATE ${VTK_LIBRARIES})
+        if(BUILD_TESTING OR AEROSIM_BUILD_TESTS)
+            add_executable(aerosim_paraview_cgns_adapter_test ../tests/ParaViewCgnsAdapterTest.cpp)
+            target_include_directories(aerosim_paraview_cgns_adapter_test PRIVATE "${AEROSIM_CGNS_INCLUDE_DIR}")
+            target_link_libraries(aerosim_paraview_cgns_adapter_test PRIVATE aerosim_visualization_data "${AEROSIM_CGNS_LIBRARY}")
+            if(WIN32 AND AEROSIM_CGNS_LIBRARY MATCHES "cgnsdll")
+                target_compile_definitions(aerosim_paraview_cgns_adapter_test PRIVATE USE_DLL)
+            endif()
+            add_test(NAME paraview_cgns_adapter COMMAND aerosim_paraview_cgns_adapter_test)
+        endif()
+    endif()
     target_include_directories(aerosim_visualization_data PUBLIC include ${VTK_INCLUDE_DIRS} PRIVATE "${AEROSIM_CGNS_INCLUDE_DIR}")
     target_link_libraries(aerosim_visualization_data PUBLIC Qt5::Core ${VTK_LIBRARIES} PRIVATE "${AEROSIM_CGNS_LIBRARY}")
     if(WIN32 AND AEROSIM_CGNS_LIBRARY MATCHES "cgnsdll")
