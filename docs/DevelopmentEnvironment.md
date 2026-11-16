@@ -60,7 +60,32 @@ build-windows\Debug\aerosim_cli.exe --mock-once
 build-windows\Debug\aerosim_gui.exe
 ```
 
-默认脚本配置、编译全部当前模块并运行 CTest。仅编译公共契约或 Mock 等目标：
+默认脚本配置、编译全部当前模块并运行 CTest。
+
+### 工作台快速构建入口
+
+`scripts\build-workbench-windows.cmd full [run]` 构建带曲线的工作台，`no-qwt [run]` 关闭 Qwt 绘图；两种模式都需要分析模块使用的 Eigen。加 `run` 会启动构建后已部署运行库的工作台。
+
+首次构建可在 VS2017 x64 开发者命令提示符中配置本机依赖位置后运行：
+
+```bat
+set "AEROSIM_QT_ROOT=<Qt 5.12.12 msvc2017_64 目录>"
+set "AEROSIM_SARIBBON_SOURCE_DIR=<SARibbon 2.9.3 源码目录>"
+set "AEROSIM_QWT_ROOT=<Qwt 安装或源码目录>"
+set "AEROSIM_EIGEN_ROOT=<包含 Eigen/Dense 或 eigen/Dense 的目录>"
+scripts\build-workbench-windows.cmd full run
+```
+
+该入口按以下规则选择本机工具和配置。
+
+- CMake 优先使用 `AEROSIM_CMAKE_EXE`，然后读取现有构建缓存中的 CMake 位置，最后从 `PATH` 查找。开发基线为 CMake 3.18.2。
+- 依赖变量传递到 CMake；未设置的变量由现有构建缓存或 CMake 的标准查找机制处理。`AEROSIM_WINDOWS_SEED_CACHE` 仅在调用者显式设置时使用。
+- 新构建默认选择 VS2017 x64 和 Debug；可用 `AEROSIM_WINDOWS_GENERATOR` 显式选择其他生成器。已有构建复用原生成器；若尚未进入开发者环境，会尝试根据缓存中的 MSVC 编译器位置初始化其对应的已安装工具集。新建 Ninja 构建需要开发者环境中可用的编译器和 Ninja。
+- 可通过 `AEROSIM_WINDOWS_VS_DIR` 显式指定 VS 安装目录并调用其中的 `vcvars64.bat`，默认选择 v141 对应的 `14.1` 工具集。`AEROSIM_WINDOWS_VCVARS_VER` 可用于显式指定已验证的其他工具集；依赖必须与所选编译器、架构和配置兼容。
+- `AEROSIM_WINDOWS_BUILD_DIR` 指定构建目录，也兼容通用的 `AEROSIM_BUILD_DIR`；默认位于当前源码的 `build-windows`。启动时支持 Ninja 的根目录和 Visual Studio 的 `Debug` 子目录。
+- 原有 `AEROSIM_WINDOWS_TOOLS_DIR` 仍可由调用者显式提供，以兼容其下的 `cmake-3.18.2-win64-x64` 和 `Qt/5.12.12/msvc2017_64` 布局。
+
+### 单目标构建
 
 ```bat
 scripts\build-windows.cmd aerosim_contracts Debug

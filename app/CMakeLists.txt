@@ -52,4 +52,8 @@ if(AEROSIM_BUILD_GUI)
     endif()
     set_target_properties(aerosim_postprocess PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/postprocess")
+
+    include("${CMAKE_CURRENT_LIST_DIR}/../cmake/WindowsQtRuntime.cmake")
+    aerosim_deploy_qt_runtime(aerosim_gui)
+    aerosim_deploy_qt_runtime(aerosim_postprocess)
 endif()

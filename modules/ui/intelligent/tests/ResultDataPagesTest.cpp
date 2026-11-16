@@ -11,6 +11,11 @@
 #include <QTableWidget>
 #include <QTest>
 #include <QTreeWidget>
+#include <QFile>
+#include <QFileDialog>
+#include <QTemporaryDir>
+#include <QPixmap>
+#include <QTimer>
 
 #include <cmath>
 
@@ -89,6 +94,10 @@ private slots:
     void untickingAVariableDropsItsColumnAndItsCurve();
     void failedLoadKeepsThePreviousResult();
     void summaryReportsRangeAndLastValue();
+    void summaryReadsArbitraryCsvFields();
+    void summaryCombinesDifferentCsvColumns();
+    void summaryRejectsMalformedCsvAtomically();
+    void summaryComparesDynamicWallFields();
     void curveSlotAcceptsExactlyOneView();
     void selectingColumnsDrawsImmediatelyBelowTable();
     void switchingXAxisUsesTheSelectedColumn();
@@ -213,7 +222,7 @@ void ResultDataPagesTest::summaryReportsRangeAndLastValue()
     aerosim::ResultSummaryTablePage page;
     page.setDataSource(&source);
     QString error;
-    QVERIFY(page.loadFile(QStringLiteral("C:/tmp/stub.csv"), &error));
+    QVERIFY(page.loadFile(QStringLiteral("C:/tmp/stub.dat"), &error));
 
     // One row per variable, and one aggregate per variable.
     QCOMPARE(page.tableWidget()->rowCount(), 2);
@@ -312,6 +321,182 @@ void ResultDataPagesTest::clearingSelectionClearsCurves()
     QVERIFY(page.loadFile(QStringLiteral("next.csv"), &error));
     QCOMPARE(view->replacements, replacements);
     QVERIFY(page.tableWidget()->selectedItems().isEmpty());
+}
+
+void ResultDataPagesTest::summaryReadsArbitraryCsvFields()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString path = directory.filePath(QStringLiteral("measurements.csv"));
+    QFile file(path);
+    QVERIFY(file.open(QIODevice::WriteOnly));
+    const QByteArray contents = QByteArray::fromHex("efbbbf")
+        + QStringLiteral(u"\"温度 (K)\",\"Pressure, Pa\",备注,状态\r\n"
+                         "300,1.01e5,\"位置 A, 入口\",正常\r\n"
+                         "310,,\"第一行\r\n第二行 \"\"引号\"\"\",\r\n").toUtf8();
+    QCOMPARE(file.write(contents), qint64(contents.size()));
+    file.close();
+
+    aerosim::ResultSummaryTablePage page;
+    QSignalSpy loaded(&page, &aerosim::ResultSummaryTablePage::fileLoaded);
+    QString error;
+    QVERIFY2(page.loadFile(path, &error), qPrintable(error));
+    QVERIFY(error.isEmpty());
+    QCOMPARE(loaded.count(), 1);
+    auto *table = page.tableWidget();
+    QCOMPARE(table->rowCount(), 2);
+    QCOMPARE(table->columnCount(), 5);
+    QCOMPARE(table->horizontalHeaderItem(1)->text(), QStringLiteral(u"温度 (K)"));
+    QCOMPARE(table->horizontalHeaderItem(2)->text(), QStringLiteral("Pressure, Pa"));
+    QCOMPARE(table->item(0, 2)->text(), QStringLiteral("1.01e5"));
+    QCOMPARE(table->item(0, 3)->text(), QStringLiteral(u"位置 A, 入口"));
+    QCOMPARE(table->item(1, 2)->text(), QStringLiteral(u"—"));
+    QCOMPARE(table->item(1, 3)->text(), QStringLiteral(u"第一行\n第二行 \"引号\""));
+    QVERIFY(!page.findChild<QComboBox *>(QStringLiteral("forceSummaryCoefficient"))->isVisibleTo(&page));
+    auto *button = page.findChild<QPushButton *>(QStringLiteral("resultSummaryCsvOpenButton"));
+    QVERIFY(button && button->isEnabled());
+    QCOMPARE(button->text(), QStringLiteral(u"打开 CSV…"));
+    page.resize(900, 500);
+    page.show();
+    QCoreApplication::processEvents();
+    QVERIFY(!page.grab().isNull());
+    const bool nativeDialogsDisabled = qApp->testAttribute(Qt::AA_DontUseNativeDialogs);
+    qApp->setAttribute(Qt::AA_DontUseNativeDialogs);
+    QTimer::singleShot(0, &page, [&path] {
+        for (QWidget *widget : QApplication::topLevelWidgets()) {
+            auto *dialog = qobject_cast<QFileDialog *>(widget);
+            if (dialog) {
+                dialog->selectFile(path);
+                QMetaObject::invokeMethod(dialog, "accept", Qt::QueuedConnection);
+            }
+        }
+    });
+    QTimer::singleShot(3000, &page, [] {
+        for (QWidget *widget : QApplication::topLevelWidgets()) {
+            auto *dialog = qobject_cast<QFileDialog *>(widget);
+            if (dialog)
+                dialog->reject();
+        }
+    });
+    QTest::mouseClick(button, Qt::LeftButton);
+    qApp->setAttribute(Qt::AA_DontUseNativeDialogs, nativeDialogsDisabled);
+    QCOMPARE(loaded.count(), 2);
+    QCOMPARE(table->horizontalHeaderItem(1)->text(), QStringLiteral(u"温度 (K)"));
+}
+
+void ResultDataPagesTest::summaryCombinesDifferentCsvColumns()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString first = directory.filePath(QStringLiteral("first.csv"));
+    const QString second = directory.filePath(QStringLiteral("second.csv"));
+    QFile file(first);
+    QVERIFY(file.open(QIODevice::WriteOnly));
+    file.write("Temperature,Pressure\n300,101325\n");
+    file.close();
+    file.setFileName(second);
+    QVERIFY(file.open(QIODevice::WriteOnly));
+    file.write("pressure,Efficiency,Case\n99000,0.85,case-b\n98000,0.90\n");
+    file.close();
+
+    aerosim::ResultSummaryTablePage page;
+    QString error;
+    QVERIFY2(page.loadCsvFiles({first, second}, &error), qPrintable(error));
+    auto *table = page.tableWidget();
+    QCOMPARE(table->rowCount(), 3);
+    QCOMPARE(table->columnCount(), 5);
+    QCOMPARE(table->horizontalHeaderItem(2)->text(), QStringLiteral("Pressure"));
+    QCOMPARE(table->item(1, 0)->text(), QStringLiteral("second.csv"));
+    QCOMPARE(table->item(0, 3)->text(), QStringLiteral(u"—"));
+    QCOMPARE(table->item(1, 1)->text(), QStringLiteral(u"—"));
+    QCOMPARE(table->item(1, 2)->text(), QStringLiteral("99000"));
+    QCOMPARE(table->item(1, 4)->text(), QStringLiteral("case-b"));
+    QCOMPARE(table->item(2, 4)->text(), QStringLiteral(u"—"));
+    QVERIFY(!table->item(1, 2)->flags().testFlag(Qt::ItemIsEditable));
+    page.clearData();
+    QCOMPARE(table->rowCount(), 0);
+    QCOMPARE(table->columnCount(), 0);
+}
+
+void ResultDataPagesTest::summaryRejectsMalformedCsvAtomically()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString good = directory.filePath(QStringLiteral("good.csv"));
+    const QString bad = directory.filePath(QStringLiteral("bad.csv"));
+    QFile file(good);
+    QVERIFY(file.open(QIODevice::WriteOnly));
+    file.write("Temperature\n300\n\"\"\n");
+    file.close();
+    aerosim::ResultSummaryTablePage page;
+    QString error;
+    QVERIFY2(page.loadCsvFiles({good}, &error), qPrintable(error));
+    QCOMPARE(page.tableWidget()->rowCount(), 2);
+    QSignalSpy loaded(&page, &aerosim::ResultSummaryTablePage::fileLoaded);
+    const QList<QByteArray> malformed{
+        "A,a\n1,2\n", "A,\n1,2\n", "A,B\n1,2,3\n",
+        "A,B\n1,\"open\n", "A,B\n1,\"value\"x\n", "A,B\n1,un\"quoted\n",
+        "A,B\n", ""};
+    for (const QByteArray &contents : malformed) {
+        file.setFileName(bad);
+        QVERIFY(file.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        file.write(contents);
+        file.close();
+        QVERIFY(!page.loadCsvFiles({good, bad}, &error));
+        QVERIFY(!error.isEmpty());
+        QCOMPARE(page.tableWidget()->rowCount(), 2);
+        QCOMPARE(page.tableWidget()->item(0, 1)->text(), QStringLiteral("300"));
+    }
+    QVERIFY(!page.loadCsvFiles({}, &error));
+    QVERIFY(!page.loadCsvFiles({directory.filePath(QStringLiteral("absent.csv"))}, &error));
+    QCOMPARE(loaded.count(), 0);
+}
+
+void ResultDataPagesTest::summaryComparesDynamicWallFields()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString first = directory.filePath(QStringLiteral("first.csv"));
+    const QString second = directory.filePath(QStringLiteral("second.csv"));
+    QFile file(first);
+    QVERIFY(file.open(QIODevice::WriteOnly));
+    file.write("wallname,Temperature,Cl,Note\nwall-a,300,0.1,first\n");
+    file.close();
+    file.setFileName(second);
+    QVERIFY(file.open(QIODevice::WriteOnly));
+    file.write("wallname,Pressure,Temperature\nwall-b,100000,320\n");
+    file.close();
+    aerosim::ResultSummaryTablePage page;
+    QString error;
+    QVERIFY2(page.loadForceFiles({first, second}, &error), qPrintable(error));
+    auto *field = page.findChild<QComboBox *>(QStringLiteral("forceSummaryCoefficient"));
+    auto *view = page.findChild<QComboBox *>(QStringLiteral("resultSummaryCsvView"));
+    QVERIFY(field && view);
+    QCOMPARE(field->count(), 4);
+    QCOMPARE(field->currentText(), QStringLiteral("Temperature"));
+    QCOMPARE(page.tableWidget()->item(0, 5)->text(), QStringLiteral("300"));
+    field->setCurrentIndex(field->findText(QStringLiteral("Pressure")));
+    QCOMPARE(page.tableWidget()->item(0, 5)->text(), QStringLiteral(u"—"));
+    QCOMPARE(page.tableWidget()->item(1, 6)->text(), QStringLiteral("100000"));
+    field->setCurrentIndex(field->findText(QStringLiteral("Note")));
+    QCOMPARE(page.tableWidget()->item(0, 5)->text(), QStringLiteral("first"));
+    view->setCurrentIndex(0);
+    QCOMPARE(page.tableWidget()->columnCount(), 6);
+    QCOMPARE(page.tableWidget()->horizontalHeaderItem(1)->text(), QStringLiteral("wallname"));
+    QCOMPARE(page.tableWidget()->item(1, 5)->text(), QStringLiteral("100000"));
+    QVERIFY(!field->isVisibleTo(&page));
+    view->setCurrentIndex(1);
+    QCOMPARE(page.tableWidget()->item(0, 5)->text(), QStringLiteral("first"));
+
+    // Duplicate wall names are valid records and stay available in detail view.
+    file.setFileName(second);
+    QVERIFY(file.open(QIODevice::WriteOnly | QIODevice::Truncate));
+    file.write("wallname,Temperature\nwall-a,300\nwall-a,310\n");
+    file.close();
+    QVERIFY2(page.loadFile(second, &error), qPrintable(error));
+    QCOMPARE(page.tableWidget()->rowCount(), 2);
+    QVERIFY(!view->isVisibleTo(&page));
+    QCOMPARE(page.tableWidget()->item(1, 2)->text(), QStringLiteral("310"));
 }
 
 QTEST_MAIN(ResultDataPagesTest)

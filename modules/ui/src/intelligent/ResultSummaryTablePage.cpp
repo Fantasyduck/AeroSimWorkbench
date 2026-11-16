@@ -1,16 +1,15 @@
 #include "aerosim/ui/intelligent/ResultSummaryTablePage.h"
 
 #include <QComboBox>
-#include <QFile>
 #include <QFileDialog>
 #include <QFileInfo>
-#include <QTextStream>
 #include <QFont>
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QLabel>
 #include <QPushButton>
 #include <QRegularExpression>
+#include <QSignalBlocker>
 #include <QTableWidget>
 #include <QVBoxLayout>
 #include <cmath>
@@ -18,9 +17,6 @@
 namespace aerosim {
 namespace {
 
-const QStringList kCoefficients{
-    QStringLiteral("Cl"), QStringLiteral("Cd"), QStringLiteral("Cx"), QStringLiteral("Cy"),
-    QStringLiteral("Cz"), QStringLiteral("Cmx"), QStringLiteral("Cmy"), QStringLiteral("Cmz")};
 const QString kAllWall = QStringLiteral("ALL_WALL");
 const QString kMissing = QStringLiteral(u"—");
 
@@ -61,15 +57,16 @@ void ResultSummaryTablePage::buildUi()
     outer->setContentsMargins(8, 8, 8, 8);
 
     auto *bar = new QHBoxLayout;
-    auto *forceButton = new QPushButton(QStringLiteral(u"打开气动力 CSV…"), this);
+    auto *forceButton = new QPushButton(QStringLiteral(u"打开 CSV…"), this);
+    forceButton->setObjectName(QStringLiteral("resultSummaryCsvOpenButton"));
     connect(forceButton, &QPushButton::clicked, this, [this] {
         const QStringList paths = QFileDialog::getOpenFileNames(
-            this, QStringLiteral(u"打开气动力结果"), QString(),
-            QStringLiteral(u"气动力结果 (*_force.csv);;CSV (*.csv)"));
+            this, QStringLiteral(u"打开结果 CSV"), QString(),
+            QStringLiteral("CSV (*.csv);;所有文件 (*)"));
         if (paths.isEmpty())
             return;
         QString error;
-        if (!loadForceFiles(paths, &error))
+        if (!loadCsvFiles(paths, &error))
             status_->setText(error);
     });
     bar->addWidget(forceButton);
@@ -87,12 +84,18 @@ void ResultSummaryTablePage::buildUi()
     forceControls_ = new QWidget(this);
     auto *forceOptions = new QHBoxLayout(forceControls_);
     forceOptions->setContentsMargins(0, 0, 0, 0);
-    auto *coefficientLabel = new QLabel(QStringLiteral(u"系数"), forceControls_);
+    csvView_ = new QComboBox(this);
+    csvView_->setObjectName(QStringLiteral("resultSummaryCsvView"));
+    csvView_->addItems({QStringLiteral(u"数据明细"), QStringLiteral(u"按壁面对比")});
+    csvView_->hide();
+    bar->addWidget(csvView_);
+    connect(csvView_, QOverload<int>::of(&QComboBox::currentIndexChanged),
+            this, &ResultSummaryTablePage::showCsvView);
+    auto *coefficientLabel = new QLabel(QStringLiteral(u"字段"), forceControls_);
     coefficient_ = new QComboBox(forceControls_);
     coefficient_->setObjectName(QStringLiteral("forceSummaryCoefficient"));
     coefficient_->setAccessibleName(coefficientLabel->text());
     coefficientLabel->setBuddy(coefficient_);
-    coefficient_->addItems(kCoefficients);
     forceOptions->addWidget(coefficientLabel);
     forceOptions->addWidget(coefficient_);
     bar->addWidget(forceControls_);
@@ -127,8 +130,13 @@ void ResultSummaryTablePage::setDataSource(ResultDataSource *source)
 
 bool ResultSummaryTablePage::loadFile(const QString &path, QString *error)
 {
-    if (path.endsWith(QStringLiteral("_force.csv"), Qt::CaseInsensitive))
-        return loadForceFiles({path}, error);
+    if (path.endsWith(QStringLiteral(".csv"), Qt::CaseInsensitive))
+        return loadCsvFiles({path}, error);
+    return loadHistoryFile(path, error);
+}
+
+bool ResultSummaryTablePage::loadHistoryFile(const QString &path, QString *error)
+{
     if (source_ == nullptr) {
         if (error)
             *error = QStringLiteral(u"当前构建未启用结果读取器，无法打开文件。");
@@ -152,6 +160,10 @@ bool ResultSummaryTablePage::loadFile(const QString &path, QString *error)
 
     forceCases_.clear();
     forceWalls_.clear();
+    csvTables_.clear();
+    csvColumns_.clear();
+    comparisonFields_.clear();
+    csvView_->hide();
     forceControls_->hide();
     table_ = loaded;
     sourceLabel_->setText(path);
@@ -164,111 +176,176 @@ bool ResultSummaryTablePage::loadFile(const QString &path, QString *error)
 
 bool ResultSummaryTablePage::loadForceFiles(const QStringList &paths, QString *error)
 {
-    QStringList columns{QStringLiteral("BC index"), QStringLiteral("wallname")};
-    columns += kCoefficients;
+    return loadCsvFiles(paths, error);
+}
+
+bool ResultSummaryTablePage::loadCsvFiles(const QStringList &paths, QString *error)
+{
+    if (paths.isEmpty()) {
+        if (error)
+            *error = QStringLiteral(u"请至少选择一个 CSV 文件。");
+        return false;
+    }
+    QVector<CsvResultTable> tables;
+    QStringList columns;
+    QStringList columnKeys;
+    for (const QString &path : paths) {
+        CsvResultTable loaded;
+        if (!CsvResultReader::read(path, &loaded, error))
+            return false;
+        for (const QString &column : loaded.columns) {
+            const QString key = column.toCaseFolded();
+            if (!columnKeys.contains(key)) {
+                columns.append(column);
+                columnKeys.append(key);
+            }
+        }
+        tables.append(loaded);
+    }
+
+    // A wall comparison is available only when each record has a unique wall
+    // within its file. Repeated walls (e.g. time histories) remain in detail view.
     QVector<ForceCase> cases;
     QStringList walls;
-    QStringList filenames;
-    bool hasTotal = false;
-    const auto fail = [error](const QString &message) {
-        if (error)
-            *error = message;
-        return false;
-    };
-    for (const QString &path : paths) {
-        const QString filename = QFileInfo(path).fileName();
-        QString caseName = QFileInfo(path).completeBaseName();
-        if (caseName.endsWith(QStringLiteral("_force"), Qt::CaseInsensitive))
-            caseName.chop(6);
+    QStringList fields;
+    bool comparable = true;
+    for (const CsvResultTable &csv : tables) {
+        QStringList keys;
+        for (const QString &column : csv.columns)
+            keys.append(column.toCaseFolded());
+        const int wallIndex = keys.indexOf(QStringLiteral("wallname"));
+        if (wallIndex < 0) {
+            comparable = false;
+            break;
+        }
         ForceCase result;
-        result.name = caseName;
-        const auto condition = kCaseCondition.match(caseName);
+        result.name = QFileInfo(csv.sourcePath).completeBaseName();
+        if (result.name.endsWith(QStringLiteral("_force"), Qt::CaseInsensitive))
+            result.name.chop(6);
+        const auto condition = kCaseCondition.match(result.name);
         if (condition.hasMatch()) {
             result.mach = condition.captured(1);
             result.alpha = condition.captured(3);
             result.beta = condition.captured(4);
-            auto fields = kReferenceField.globalMatch(condition.captured(2));
+            auto references = kReferenceField.globalMatch(condition.captured(2));
             QStringList reference;
-            while (fields.hasNext()) {
-                const auto field = fields.next();
+            while (references.hasNext()) {
+                const auto field = references.next();
                 reference.append(QStringLiteral("%1:%2").arg(field.captured(1), field.captured(2)));
             }
             result.reference = reference.join(QStringLiteral(", "));
         }
-        QFile file(path);
-        if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
-            return fail(QStringLiteral(u"无法打开 %1：%2").arg(filename, file.errorString()));
-        QTextStream input(&file);
-        input.setCodec("UTF-8");
-        QStringList headers = input.readLine().split(QLatin1Char(','));
-        for (QString &header : headers)
-            header = header.trimmed().toCaseFolded();
-        QVector<int> indices;
-        for (const QString &column : columns) {
-            const QString key = column.toCaseFolded();
-            const int index = headers.indexOf(key);
-            if (index < 0 || headers.lastIndexOf(key) != index)
-                return fail(QStringLiteral(u"%1 的列缺失或重复：%2").arg(filename, column));
-            indices.append(index);
-        }
-
-        int lineNumber = 1;
-        while (!input.atEnd()) {
-            const QString line = input.readLine();
-            ++lineNumber;
-            if (line.trimmed().isEmpty())
-                continue;
-            const QStringList cells = line.split(QLatin1Char(','));
-            QStringList row;
-            bool valid = cells.size() == headers.size();
-            for (int i = 0; valid && i < indices.size(); ++i) {
-                const QString cell = cells.at(indices.at(i)).trimmed();
-                if (i < 2) {
-                    valid = !cell.isEmpty();
-                } else {
-                    bool numeric = false;
-                    const double value = cell.toDouble(&numeric);
-                    valid = numeric && std::isfinite(value);
-                }
-                row.append(cell);
-            }
-            if (!valid)
-                return fail(QStringLiteral(u"%1 第 %2 行含有无效的壁面或系数。")
-                                .arg(filename).arg(lineNumber));
-            QString wall = row.at(1);
-            if (wall.compare(kAllWall, Qt::CaseInsensitive) == 0) {
+        for (const QStringList &row : csv.rows) {
+            QString wall = row.at(wallIndex).trimmed();
+            if (wall.compare(kAllWall, Qt::CaseInsensitive) == 0)
                 wall = kAllWall;
-                hasTotal = true;
-            } else if (!walls.contains(wall)) {
-                walls.append(wall);
+            if (wall.isEmpty() || result.valuesByWall.contains(wall)) {
+                comparable = false;
+                break;
             }
-            if (result.coefficientsByWall.contains(wall))
-                return fail(QStringLiteral(u"%1 第 %2 行的壁面重复：%3").arg(filename).arg(lineNumber).arg(wall));
-            result.coefficientsByWall.insert(wall, row.mid(2));
+            QHash<QString, QString> values;
+            for (int column = 0; column < keys.size(); ++column)
+                values.insert(keys.at(column), row.at(column));
+            result.valuesByWall.insert(wall, values);
+            if (!walls.contains(wall))
+                walls.append(wall);
         }
-        if (input.status() != QTextStream::Ok || result.coefficientsByWall.isEmpty())
-            return fail(QStringLiteral(u"%1 没有可读取的气动力结果。").arg(filename));
+        if (!comparable)
+            break;
         cases.append(result);
-        filenames.append(filename);
     }
-    if (cases.isEmpty())
-        return fail(QStringLiteral(u"请至少选择一个气动力 CSV 文件。"));
-
-    if (hasTotal)
+    for (int column = 0; column < columns.size(); ++column) {
+        if (columnKeys.at(column) != QStringLiteral("wallname")
+            && columnKeys.at(column) != QStringLiteral("bc index"))
+            fields.append(columns.at(column));
+    }
+    comparable = comparable && !fields.isEmpty();
+    if (!comparable) {
+        cases.clear();
+        walls.clear();
+        fields.clear();
+    }
+    if (walls.removeOne(kAllWall))
         walls.append(kAllWall);
+
+    // Commit all parsed files together so a failed import preserves the view.
+    const QString selectedField = coefficient_->currentText();
     table_.clear();
+    csvTables_ = tables;
+    csvColumns_ = columns;
     forceCases_ = cases;
     forceWalls_ = walls;
-    sourceLabel_->setText(filenames.size() == 1 ? filenames.first()
-        : QStringLiteral(u"已导入 %1 个气动力文件").arg(filenames.size()));
+    comparisonFields_ = fields;
+    {
+        const QSignalBlocker blocker(coefficient_);
+        coefficient_->clear();
+        coefficient_->addItems(fields);
+        const int previous = coefficient_->findText(selectedField, Qt::MatchFixedString);
+        if (previous >= 0)
+            coefficient_->setCurrentIndex(previous);
+    }
+    {
+        const QSignalBlocker blocker(csvView_);
+        csvView_->setCurrentIndex(comparable ? 1 : 0);
+    }
+    csvView_->setVisible(comparable);
+    sourceLabel_->setText(tables.size() == 1 ? QFileInfo(paths.first()).fileName()
+        : QStringLiteral(u"已导入 %1 个 CSV 文件").arg(tables.size()));
     sourceLabel_->setToolTip(paths.join(QLatin1Char('\n')));
-    forceControls_->show();
-    populateForceTable();
+    showCsvView();
     if (error)
         error->clear();
     for (const QString &path : paths)
         emit fileLoaded(path);
     return true;
+}
+
+void ResultSummaryTablePage::showCsvView()
+{
+    const bool comparison = !forceCases_.isEmpty() && csvView_->currentIndex() == 1;
+    forceControls_->setVisible(comparison);
+    if (comparison)
+        populateForceTable();
+    else
+        populateCsvTable();
+}
+
+void ResultSummaryTablePage::populateCsvTable()
+{
+    int count = 0;
+    for (const CsvResultTable &csv : csvTables_)
+        count += csv.rows.size();
+    tableWidget_->clear();
+    tableWidget_->setRowCount(count);
+    tableWidget_->setColumnCount(csvColumns_.size() + 1);
+    tableWidget_->setHorizontalHeaderLabels(QStringList{QStringLiteral(u"来源文件")} + csvColumns_);
+    int tableRow = 0;
+    for (const CsvResultTable &csv : csvTables_) {
+        QStringList keys;
+        for (const QString &column : csv.columns)
+            keys.append(column.toCaseFolded());
+        QVector<int> indices;
+        for (const QString &column : csvColumns_)
+            indices.append(keys.indexOf(column.toCaseFolded()));
+        for (const QStringList &row : csv.rows) {
+            auto *source = readOnlyItem(QFileInfo(csv.sourcePath).fileName());
+            source->setToolTip(csv.sourcePath);
+            tableWidget_->setItem(tableRow, 0, source);
+            for (int column = 0; column < indices.size(); ++column) {
+                const int index = indices.at(column);
+                const QString value = index < 0 ? QString() : row.at(index);
+                auto *item = readOnlyItem(value.isEmpty() ? kMissing : value);
+                // Preserve the source text as well as its display value.
+                item->setData(Qt::UserRole, value);
+                tableWidget_->setItem(tableRow, column + 1, item);
+            }
+            ++tableRow;
+        }
+    }
+    tableWidget_->horizontalHeader()->setSectionResizeMode(QHeaderView::ResizeToContents);
+    tableWidget_->horizontalHeader()->setStretchLastSection(true);
+    status_->setText(QStringLiteral(u"%1 个文件 · %2 条记录 · %3 个字段 · — 表示缺少数据")
+                         .arg(csvTables_.size()).arg(count).arg(csvColumns_.size()));
 }
 
 void ResultSummaryTablePage::populateForceTable()
@@ -292,9 +369,11 @@ void ResultSummaryTablePage::populateForceTable()
         }
         for (int column = 0; column < forceWalls_.size(); ++column) {
             const QString &wall = forceWalls_.at(column);
-            const auto values = result.coefficientsByWall.constFind(wall);
-            auto *item = readOnlyItem(values == result.coefficientsByWall.constEnd()
-                                      ? kMissing : values.value().at(coefficientIndex));
+            const auto values = result.valuesByWall.constFind(wall);
+            const QString key = comparisonFields_.at(coefficientIndex).toCaseFolded();
+            const QString value = values == result.valuesByWall.constEnd()
+                ? QString() : values.value().value(key);
+            auto *item = readOnlyItem(value.isEmpty() ? kMissing : value);
             item->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
             if (wall == kAllWall) {
                 QFont font = item->font();
@@ -308,7 +387,7 @@ void ResultSummaryTablePage::populateForceTable()
     header->setSectionResizeMode(QHeaderView::ResizeToContents);
     header->setStretchLastSection(true);
     status_->setText(QStringLiteral(u"%1 个工况 · %2 · ALL_WALL 为全壁面合计 · — 表示缺少数据")
-                         .arg(forceCases_.size()).arg(kCoefficients.at(coefficientIndex)));
+                         .arg(forceCases_.size()).arg(comparisonFields_.at(coefficientIndex)));
 }
 
 void ResultSummaryTablePage::clearData()
@@ -316,6 +395,11 @@ void ResultSummaryTablePage::clearData()
     table_.clear();
     forceCases_.clear();
     forceWalls_.clear();
+    csvTables_.clear();
+    csvColumns_.clear();
+    comparisonFields_.clear();
+    csvView_->hide();
+    coefficient_->clear();
     forceControls_->hide();
     tableWidget_->clear();
     tableWidget_->setRowCount(0);
@@ -382,7 +466,7 @@ void ResultSummaryTablePage::populateTable()
 void ResultSummaryTablePage::updateStatus()
 {
     if (table_.isEmpty()) {
-        status_->setText(QStringLiteral(u"选择一个或多个气动力 CSV 查看壁面系数，也可以打开历史文件查看采样统计。"));
+        status_->setText(QStringLiteral(u"选择一个或多个 CSV 查看实际字段，也可以打开历史文件查看采样统计。"));
         return;
     }
 
@@ -406,8 +490,8 @@ void ResultSummaryTablePage::chooseFile()
     if (path.isEmpty())
         return;
     QString error;
-    if (!loadFile(path, &error))
-        sourceLabel_->setText(error);
+    if (!loadHistoryFile(path, &error))
+        status_->setText(error);
 }
 
 } // namespace aerosim

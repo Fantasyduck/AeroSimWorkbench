@@ -17,6 +17,8 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
 endif()
 
 add_library(aerosim_intelligent_data STATIC
+    ../src/intelligent/CsvResultReader.cpp
+    ../include/aerosim/ui/intelligent/CsvResultReader.h
     ../src/intelligent/ResultDataTablePage.cpp
     ../src/intelligent/ResultSummaryTablePage.cpp
     ../include/aerosim/ui/intelligent/ResultDataSource.h
@@ -31,7 +33,7 @@ endif()
 # The concrete reader needs the monitor data/analysis layers, and those only
 # exist when the visualization module was configured. The pages above keep
 # talking to the abstract ResultDataSource, so turning visualization off still
-# builds and tests the workbench -- it just cannot open a file.
+# builds and tests the workbench. CSV summaries use the independent reader above.
 if(TARGET aerosim_monitor_analysis)
     add_library(aerosim_intelligent_source STATIC
         ../src/intelligent/MonitorResultDataSource.cpp

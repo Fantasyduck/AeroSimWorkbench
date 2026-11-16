@@ -1,5 +1,13 @@
 # Windows 第一阶段骨架部署
 
+## 构建目录直接启动
+
+Windows 下构建 `aerosim_gui` 或 `aerosim_postprocess` 后，会自动调用所选 Qt SDK 的 `windeployqt`，按当前 Debug/Release 配置将 Qt DLL、平台及图像插件部署到 EXE 所在目录，同时生成相对路径的 `qt.conf` 和复制可用的 Qt 中文翻译。构建完成后可从该目录双击 EXE。Visual Studio 多配置构建的程序位于对应的 `Debug` 或 `Release` 子目录。
+
+若运行库文件被移走，可执行 `cmake --build <构建目录> --config Debug --target aerosim_gui_deploy` 重新部署；独立后处理窗口使用 `aerosim_postprocess_deploy`。部署工具随所选 Qt SDK 提供，构建环境应包含对应的 Visual Studio 编译器环境，以便部署编译器运行库。Debug 构建用于开发机验证，完整 Release 技术栈仍需匹配的 VTK Release 依赖和目标机验收。
+
+## 历史 Release 骨架打包流程
+
 以 Visual Studio 2017 x64、Qt 5.12.12 `msvc2017_64`、CMake 3.18+ 为例。命令在开发者命令提示符中运行；`F:\AeroSimWorkbench` 为源码目录。此过程以 **Release 只部署不链接 VTK 的 Qt 骨架**；正式 VTK 8.2/SARibbon 集成当前只在 Debug 配置下验证，不能按下述 Release 命令部署完整技术栈。
 
 ```bat

@@ -11,6 +11,7 @@ endif()
 
 option(AEROSIM_BUILD_GUI "Build the SARibbon main window" ON)
 option(AEROSIM_BUILD_TESTS "Build and register skeleton smoke tests" ON)
+option(AEROSIM_BUILD_MACHINE_LEARNING "Build the Eigen-based machine learning backend" OFF)
 
 option(AEROSIM_BUILD_STACK_PROBE "Build the optional Qt/VTK/SARibbon compatibility probe" OFF)
 # Visualization is on by default: the monitor page gets its real curve widget
@@ -34,6 +35,10 @@ endif()
 add_subdirectory(contracts)
 add_subdirectory(modules/workflow)
 add_subdirectory(mocks/services)
+
+if(AEROSIM_BUILD_MACHINE_LEARNING)
+    add_subdirectory(modules/machine_learning)
+endif()
 
 # Visualization is configured before the UI so that modules/ui can see
 # aerosim_monitor_charts and opt into the concrete curve widget. The UI never

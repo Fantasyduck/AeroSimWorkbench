@@ -2,14 +2,19 @@
 setlocal
 
 rem Build and launch the post-processing workspace from this checkout.
-rem Defaults match the validated Windows Debug environment; callers may override
-rem either variable before invoking this script.
+rem Dependency locations are supplied by the caller, as in build-windows.cmd.
 cd /d "%~dp0.."
 
 if not defined AEROSIM_BUILD_DIR set "AEROSIM_BUILD_DIR=%CD%\build-windows"
 
-if not defined AEROSIM_QT_ROOT set "AEROSIM_QT_ROOT=C:\Qt\5.12.12\msvc2017_64"
-if not defined AEROSIM_SARIBBON_SOURCE_DIR set "AEROSIM_SARIBBON_SOURCE_DIR=C:\Users\huangzb\SARibbon"
+if not defined AEROSIM_QT_ROOT (
+    echo Set AEROSIM_QT_ROOT to the Qt 5.12.12 msvc2017_64 directory.
+    exit /b 2
+)
+if not defined AEROSIM_SARIBBON_SOURCE_DIR (
+    echo Set AEROSIM_SARIBBON_SOURCE_DIR to the SARibbon 2.9.3 source directory.
+    exit /b 2
+)
 
 if not exist "%AEROSIM_QT_ROOT%\bin\windeployqt.exe" (
     echo [ERROR] Qt Debug deployment tool was not found: %AEROSIM_QT_ROOT%
