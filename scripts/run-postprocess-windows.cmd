@@ -5,7 +5,15 @@ rem Build and launch the post-processing workspace from this checkout.
 rem Dependency locations are supplied by the caller, as in build-windows.cmd.
 cd /d "%~dp0.."
 
+rem Load optional machine-local dependency paths before configuring PATH.
+if exist "%CD%\aerosim-windows.local.cmd" call "%CD%\aerosim-windows.local.cmd"
+set "AEROSIM_BUILD_VISUALIZATION=ON"
+
 if not defined AEROSIM_BUILD_DIR set "AEROSIM_BUILD_DIR=%CD%\build-windows"
+rem Visualization dependencies are supplied by the caller; keep them on the
+rem launched process PATH as well as in the build subprocess.
+if defined AEROSIM_VTK_BIN set "PATH=%AEROSIM_VTK_BIN%;%PATH%"
+if defined AEROSIM_CGNS_ROOT set "PATH=%AEROSIM_CGNS_ROOT%\bin;%PATH%"
 
 if not defined AEROSIM_QT_ROOT (
     echo Set AEROSIM_QT_ROOT to the Qt 5.12.12 msvc2017_64 directory.

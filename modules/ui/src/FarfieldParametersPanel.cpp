@@ -43,7 +43,6 @@ FarfieldParametersPanel::FarfieldParametersPanel(QWidget *parent) : QWidget(pare
     type_->addItem(uiText(u"静压和静温"), "static-temperature-pressure");
     type_->addItem(uiText(u"总压和总温"), "total-temperature-pressure");
     type_->addItem(uiText(u"高度"), "altitude");
-    type_->setMaximumWidth(280);
     form_->addRow(uiText(u"选择参数"), type_);
     const auto number = [this](const QString &key, const QString &label, double minimum, double maximum) {
         auto *editor = new FarfieldSpinBox(this);
@@ -51,7 +50,6 @@ FarfieldParametersPanel::FarfieldParametersPanel(QWidget *parent) : QWidget(pare
         editor->setDecimals(6);
         editor->setRange(minimum, maximum);
         editor->setSingleStep(0.1);
-        editor->setMaximumWidth(180);
         editor->setKeyboardTracking(false);
         numbers_.insert(key, editor);
         form_->addRow(label, editor);

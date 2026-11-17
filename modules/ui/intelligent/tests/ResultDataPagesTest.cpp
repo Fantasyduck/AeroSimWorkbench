@@ -232,7 +232,8 @@ void ResultDataPagesTest::summaryReportsRangeAndLastValue()
     QVERIFY(std::abs(page.tableWidget()->item(0, 3)->text().toDouble() - 0.01) < 1e-9);
     QVERIFY(std::abs(page.tableWidget()->item(0, 4)->text().toDouble() - 0.08) < 1e-9);
     QVERIFY(std::abs(page.tableWidget()->item(0, 6)->text().toDouble() - 0.01) < 1e-9);
-    QCOMPARE(page.tableWidget()->item(1, 7)->text(), QStringLiteral("残差"));
+    QCOMPARE(page.tableWidget()->item(1, 7)->text(),
+             QString::fromUtf16(reinterpret_cast<const ushort *>(u"\u6b8b\u5dee")));
 }
 
 void ResultDataPagesTest::curveSlotAcceptsExactlyOneView()

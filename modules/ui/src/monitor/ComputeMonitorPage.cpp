@@ -1,4 +1,5 @@
 #include "aerosim/ui/monitor/ComputeMonitorPage.h"
+#include "aerosim/ui/UiLayoutConfig.h"
 
 #include <QHeaderView>
 #include <QFont>
@@ -65,7 +66,8 @@ ComputeMonitorPage::ComputeMonitorPage(QWidget *parent) : QWidget(parent)
     setObjectName("computeMonitorPage");
     setFont(QFont(QStringLiteral("Microsoft YaHei UI"), 9));
     auto *layout = new QVBoxLayout(this);
-    layout->setContentsMargins(8, 8, 8, 8);
+    layout->setContentsMargins(uimetrics::controlSpacing(), uimetrics::controlSpacing(),
+                               uimetrics::controlSpacing(), uimetrics::controlSpacing());
     auto *split = new QSplitter(Qt::Horizontal, this);
     split->setObjectName("monitorHorizontalSplit");
     split->setChildrenCollapsible(false);

@@ -1,9 +1,12 @@
 #include "aerosim/ui/MeshManagementPage.h"
+#include "aerosim/ui/UiLayoutConfig.h"
 
 #include <QAction>
 #include <QActionGroup>
+#include <QApplication>
 #include <QButtonGroup>
 #include <QCheckBox>
+#include <QColorDialog>
 #include <QComboBox>
 #include <QDateTime>
 #include <QDoubleSpinBox>
@@ -19,8 +22,11 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
+#include <QMainWindow>
 #include <QIcon>
+#include <QItemSelectionModel>
 #include <QMenu>
+#include <QMouseEvent>
 #include <QPainter>
 #include <QPixmap>
 #include <QPlainTextEdit>
@@ -28,6 +34,7 @@
 #include <QPushButton>
 #include <QQuaternion>
 #include <QRadioButton>
+#include <QResizeEvent>
 #include <QScrollArea>
 #include <QSignalBlocker>
 #include <QSlider>
@@ -36,12 +43,15 @@
 #include <QTabWidget>
 #include <QTableWidget>
 #include <QTableWidgetItem>
+#include <QToolBar>
 #include <QToolButton>
 #include <QVBoxLayout>
 #include <QVector3D>
 #include <algorithm>
 #include <array>
 #include <cstddef>
+#include <functional>
+#include <utility>
 
 namespace aerosim {
 namespace {
@@ -63,20 +73,17 @@ QString uiText(const char16_t (&value)[N])
     return QString::fromUtf16(reinterpret_cast<const ushort *>(value), int(N) - 1);
 }
 
-QToolButton *addViewButton(QVBoxLayout *layout, QWidget *parent, const QString &name,
-                           const QString &label, const QIcon &icon, bool enabled = true)
+QAction *addViewAction(QToolBar *toolbar, const QString &name, const QString &label,
+                       const QIcon &icon, bool enabled = true)
 {
-    auto *button = new QToolButton(parent);
-    button->setObjectName(name);
-    button->setAccessibleName(label);
-    button->setToolTip(label);
-    button->setIcon(icon);
-    button->setIconSize(QSize(24, 24));
-    button->setFixedSize(32, 31);
-    button->setEnabled(enabled);
-    button->setAutoRaise(true);
-    layout->addWidget(button, 0, Qt::AlignHCenter);
-    return button;
+    auto *action = toolbar->addAction(icon, label);
+    action->setObjectName(name);
+    action->setEnabled(enabled);
+    if (auto *widget = toolbar->widgetForAction(action)) {
+        widget->setObjectName(name);
+        widget->setAccessibleName(label);
+    }
+    return action;
 }
 
 QIcon cubeIcon(int face, bool edges = false)
@@ -127,35 +134,39 @@ QIcon toolbarIcon(const QString &name)
     return QIcon(pixmap);
 }
 
-void addToolbarSeparator(QVBoxLayout *layout, QWidget *parent)
-{
-    auto *line = new QFrame(parent);
-    line->setObjectName(QStringLiteral("meshToolbarSeparator"));
-    line->setFixedSize(25, 1);
-    layout->addSpacing(4);
-    layout->addWidget(line, 0, Qt::AlignHCenter);
-    layout->addSpacing(4);
-}
-
 QString meshCanvasBackground(int mode)
 {
     const QString gradient = mode == 1
         ? QStringLiteral("stop:0 #2f3b49,stop:1 #4a5a6d")
         : mode == 2
         ? QStringLiteral("stop:0 #565c77,stop:1 #ffffff")
-        : QStringLiteral("stop:0 #8491f7,stop:1 #fbfbfd");
+        : QStringLiteral("stop:0 #b8a9e3,stop:1 #f8f5fc");
     return QStringLiteral("#meshViewerCanvas { background:qlineargradient("
                           "x1:0,y1:0,x2:0,y2:1,%1); }").arg(gradient);
 }
 
 // Project the six signed world axes into camera space. Drawing far endpoints
 // first leaves the facing axis labelled when it overlaps the opposite end.
+const std::array<QVector3D, 3> worldAxes = {{QVector3D(1, 0, 0), QVector3D(0, 1, 0), QVector3D(0, 0, 1)}};
+
 class AxisTriad final : public QWidget {
 public:
-    explicit AxisTriad(QWidget *parent = nullptr) : QWidget(parent)
+    AxisTriad(QWidget *parent, std::function<QString()> target,
+              std::function<void(const QString &, int, int)> orbit,
+              std::function<void(const QString &, const QString &, const QVector3D &)> snap)
+        : QWidget(parent), target_(std::move(target)), orbit_(std::move(orbit)), snap_(std::move(snap))
     {
+        setObjectName(QStringLiteral("axisIndicator"));
+        setFixedSize(88, 88);
         setAttribute(Qt::WA_TransparentForMouseEvents);
-        setAccessibleName(QString::fromUtf8("世界坐标轴 XYZ"));
+        setAccessibleName(QString::fromUtf8("三维方向球 XYZ"));
+    }
+
+    void enableInteraction()
+    {
+        setAttribute(Qt::WA_TransparentForMouseEvents, false);
+        setCursor(Qt::OpenHandCursor);
+        setToolTip(QString::fromUtf8("选中网格后拖动旋转该网格，点击轴端点转 90°。点击视口空白处可取消选中。"));
     }
 
     void setView(const QVector3D &from, const QVector3D &up)
@@ -165,44 +176,73 @@ public:
     }
 
 protected:
+    void mousePressEvent(QMouseEvent *event) override
+    {
+        if (event->button() != Qt::LeftButton) return QWidget::mousePressEvent(event);
+        const auto offset = QPointF(event->pos()) - center();
+        if (QPointF::dotProduct(offset, offset) > 44 * 44) return QWidget::mousePressEvent(event);
+        pressed_ = true;
+        dragging_ = false;
+        targetId_ = target_();
+        lastPos_ = pressPos_ = event->pos();
+        setCursor(Qt::ClosedHandCursor);
+        event->accept();
+    }
+
+    void mouseMoveEvent(QMouseEvent *event) override
+    {
+        if (!pressed_) return QWidget::mouseMoveEvent(event);
+        if (!dragging_ && (event->pos() - pressPos_).manhattanLength() < QApplication::startDragDistance())
+            return;
+        dragging_ = true;
+        const auto delta = event->pos() - lastPos_;
+        lastPos_ = event->pos();
+        orbit_(targetId_, delta.x(), delta.y());
+        event->accept();
+    }
+
+    void mouseReleaseEvent(QMouseEvent *event) override
+    {
+        if (!pressed_ || event->button() != Qt::LeftButton) return QWidget::mouseReleaseEvent(event);
+        pressed_ = false;
+        setCursor(Qt::OpenHandCursor);
+        if (!dragging_) {
+            const auto points = endpoints();
+            for (auto end = points.crbegin(); end != points.crend(); ++end) {
+                const auto offset = QPointF(event->pos()) - end->tip;
+                if (QPointF::dotProduct(offset, offset) <= end->radius * end->radius) {
+                    const auto axis = worldAxes[end->axis];
+                    snap_(targetId_, QString::fromLatin1(end->command), end->positive ? axis : -axis);
+                    break;
+                }
+            }
+        }
+        event->accept();
+    }
+
     void paintEvent(QPaintEvent *) override
     {
         QPainter painter(this);
         painter.setRenderHint(QPainter::Antialiasing, true);
-        const QPointF origin(width() * 0.5, height() * 0.5);
-        const qreal radius = qMin(width(), height()) * 0.38;
-        const std::array<QVector3D, 3> axes = {{QVector3D(1, 0, 0), QVector3D(0, 1, 0), QVector3D(0, 0, 1)}};
         const std::array<QColor, 3> colors = {{QColor("#c84437"), QColor("#e7b827"), QColor("#a5cd8a")}};
-        struct Endpoint { QVector3D direction; int axis; bool positive; };
-        std::array<Endpoint, 6> endpoints;
-        for (int i = 0; i < int(axes.size()); ++i) {
-            const auto direction = worldToView_.rotatedVector(axes[i]);
-            endpoints[2 * i] = {-direction, i, false};
-            endpoints[2 * i + 1] = {direction, i, true};
-        }
-        std::stable_sort(endpoints.begin(), endpoints.end(), [](const Endpoint &a, const Endpoint &b) {
-            return a.direction.z() < b.direction.z();
-        });
+        const auto points = endpoints();
         QFont labelFont = font();
         labelFont.setBold(true);
         labelFont.setPixelSize(12);
         painter.setFont(labelFont);
-        for (const auto &end : endpoints) {
-            const QPointF tip = origin + QPointF(end.direction.x(), -end.direction.y()) * radius;
+        for (const auto &end : points) {
             QColor lineColor = colors[end.axis];
             lineColor.setAlpha(105);
             painter.setPen(QPen(lineColor, 1.6, Qt::SolidLine, Qt::RoundCap));
-            painter.drawLine(origin, tip);
+            painter.drawLine(center(), end.tip);
         }
-        for (const auto &end : endpoints) {
-            const QPointF tip = origin + QPointF(end.direction.x(), -end.direction.y()) * radius;
-            const qreal tipRadius = end.direction.z() > 0.75f ? 9.5 : 8.0;
+        for (const auto &end : points) {
             painter.setPen(Qt::NoPen);
             painter.setBrush(end.positive ? colors[end.axis] : colors[end.axis].darker(120));
-            painter.drawEllipse(tip, tipRadius, tipRadius);
-            if (end.positive || end.direction.z() > 0.75f) {
+            painter.drawEllipse(end.tip, end.radius, end.radius);
+            if (end.positive || end.depth > 0.75f) {
                 painter.setPen(QColor("#121212"));
-                painter.drawText(QRectF(tip.x() - 9, tip.y() - 9, 18, 18),
+                painter.drawText(QRectF(end.tip.x() - 9, end.tip.y() - 9, 18, 18),
                                  Qt::AlignCenter, (end.positive ? QString() : QStringLiteral("-"))
                                      + QStringLiteral("XYZ").mid(end.axis, 1));
             }
@@ -210,7 +250,70 @@ protected:
     }
 
 private:
+    struct Endpoint {
+        QPointF tip;
+        qreal radius;
+        float depth;
+        int axis;
+        bool positive;
+        const char *command;
+    };
+
+    QPointF center() const { return QPointF(width() * 0.5, height() * 0.5); }
+
+    std::array<Endpoint, 6> endpoints() const
+    {
+        const std::array<const char *, 6> commands = {{"left", "right", "front", "back", "bottom", "top"}};
+        const qreal radius = qMin(width(), height()) * 0.38;
+        std::array<Endpoint, 6> points;
+        for (int i = 0; i < int(points.size()); ++i) {
+            const bool positive = i % 2 != 0;
+            const auto direction = worldToView_.rotatedVector(positive ? worldAxes[i / 2] : -worldAxes[i / 2]);
+            points[i] = {center() + QPointF(direction.x(), -direction.y()) * radius,
+                         direction.z() > 0.75f ? 9.5 : 8.0, direction.z(), i / 2, positive, commands[i]};
+        }
+        std::stable_sort(points.begin(), points.end(), [](const Endpoint &a, const Endpoint &b) {
+            return a.depth < b.depth;
+        });
+        return points;
+    }
+
+    std::function<QString()> target_;
+    std::function<void(const QString &, int, int)> orbit_;
+    std::function<void(const QString &, const QString &, const QVector3D &)> snap_;
+    QString targetId_;
     QQuaternion worldToView_;
+    QPoint pressPos_;
+    QPoint lastPos_;
+    bool pressed_ = false;
+    bool dragging_ = false;
+};
+
+class MeshCanvas final : public QFrame {
+public:
+    explicit MeshCanvas(QWidget *parent) : QFrame(parent) {}
+
+    void setOrientationControl(QWidget *control)
+    {
+        control_ = control;
+        positionControl();
+        control_->raise();
+    }
+
+protected:
+    void resizeEvent(QResizeEvent *event) override
+    {
+        QFrame::resizeEvent(event);
+        if (control_) positionControl();
+    }
+
+private:
+    void positionControl()
+    {
+        control_->move(9, qMax(0, height() - control_->height() - 16));
+    }
+
+    QWidget *control_ = nullptr;
 };
 }
 
@@ -233,22 +336,17 @@ MeshManagementPage::MeshManagementPage(QWidget *viewportHost, QWidget *parent)
         "QSplitter::handle:vertical { height:5px; }"
         "QSplitter::handle:hover { background:#b9cde4; }"
         "#meshViewerPanel { background:#ffffff; border:0; }"
-        "#meshViewerToolbar, #meshViewerToolbarScroll { background:#ffffff; border:0; }"
+        "#meshViewerToolbar { background:#ffffff; border:0; }"
         "#meshViewerToolbar QToolButton { border:0; border-radius:0; padding:0; }"
         "#meshViewerToolbar QToolButton:hover, #meshViewerToolbar QToolButton:focus { background:#e3e5f7; }"
         "#meshViewerToolbar QToolButton:checked { background:#edeef9; }"
         "#meshViewerToolbar QToolButton::menu-indicator { image:none; }"
-        "#meshViewerToolbarScroll QScrollBar:vertical { width:6px; background:#ffffff; }"
-        "#meshViewerToolbarScroll QScrollBar::handle:vertical { background:#bcb9d6; min-height:18px; }"
-        "#meshViewerToolbarScroll QScrollBar::add-line:vertical, "
-        "#meshViewerToolbarScroll QScrollBar::sub-line:vertical { height:0; }"
-        "#meshToolbarSeparator { background:#d6d5e0; }"
-        "#meshCanvasOverlay, QWidget#viewportSlot { background:transparent; }"
+        "QWidget#viewportSlot { background:transparent; }"
         "#meshTable { border:1px solid #d5dde6; background:#ffffff; gridline-color:#e4eaf1; "
         "alternate-background-color:#f7f9fc; selection-background-color:#dceafd; selection-color:#25364c; }"
         "#meshTable QHeaderView::section { background:#eef3f9; color:#25364c; border:0; "
         "border-right:1px solid #d5dde6; border-bottom:1px solid #d5dde6; padding:4px 6px; }"
-        "#meshCountLabel, #meshViewerStatus { color:#637083; }"
+        "#meshScopeLabel, #meshCountLabel, #meshViewerStatus { color:#637083; }"
         "#meshViewerStatus { background:#f5f7fa; border-top:1px solid #d5dde6; }"
         "#meshWorkspaceTabs, #meshWorkspaceTabs QTabBar { background:#2b285f; }"
         "#meshWorkspaceTabs::pane { border:0; background:#ffffff; }"
@@ -259,9 +357,10 @@ MeshManagementPage::MeshManagementPage(QWidget *viewportHost, QWidget *parent)
         "QGroupBox { font-weight:600; margin-top:8px; }"
         "QGroupBox::title { subcontrol-origin:margin; left:8px; padding:0 3px; }"));
 
-    auto *pageLayout = new QVBoxLayout(this);
-    pageLayout->setContentsMargins(8, 8, 8, 8);
-    pageLayout->setSpacing(6);
+    // A mesh/viewport page is an immersive workbench rather than a document
+    // form: its title strip must meet the central workspace edge. The content
+    // wrapper below owns the standard page padding exactly once.
+    auto *pageLayout = uimetrics::createWorkbenchRootLayout(this);
 
     auto *header = new QWidget(this);
     header->setObjectName(QStringLiteral("meshManagementHeader"));
@@ -272,12 +371,18 @@ MeshManagementPage::MeshManagementPage(QWidget *viewportHost, QWidget *parent)
     headerLayout->addWidget(title);
     headerLayout->addStretch();
     auto *scope = new QLabel(uiText(u"\u524d\u7aef Mock \u4ea4\u4e92 \u00b7 \u672a\u8fde\u63a5\u771f\u5b9e\u7f51\u683c\u6570\u636e"), header);
-    scope->setObjectName(QStringLiteral("meshCountLabel"));
+    scope->setObjectName(QStringLiteral("meshScopeLabel"));
     headerLayout->addWidget(scope);
     pageLayout->addWidget(header);
 
+    auto *content = new QWidget(this);
+    content->setObjectName(QStringLiteral("meshWorkspaceContent"));
+    auto *contentLayout = new QVBoxLayout(content);
+    contentLayout->setContentsMargins(uimetrics::pageMargins());
+    contentLayout->setSpacing(0);
+
     // The reference places the log below the viewport in the right column.
-    mainSplitter_ = new QSplitter(Qt::Horizontal, this);
+    mainSplitter_ = new QSplitter(Qt::Horizontal, content);
     mainSplitter_->setObjectName(QStringLiteral("meshWorkspaceMainSplitter"));
     mainSplitter_->setChildrenCollapsible(false);
     settingsSplitter_ = new QSplitter(Qt::Vertical, mainSplitter_);
@@ -404,7 +509,7 @@ MeshManagementPage::MeshManagementPage(QWidget *viewportHost, QWidget *parent)
     objectLayout->addWidget(propertyScroll, 2);
     propertyScroll->setVisible(properties->isChecked());
 
-    // Reference tab strip: 网格视图 / 单工况 / 后处理.
+    // The preprocessing workspace contains only the mesh view.
     workspaceTabs_ = new QTabWidget(settingsSplitter_);
     workspaceTabs_->setObjectName(QStringLiteral("meshWorkspaceTabs"));
     workspaceTabs_->setDocumentMode(false);
@@ -415,12 +520,13 @@ MeshManagementPage::MeshManagementPage(QWidget *viewportHost, QWidget *parent)
     auto *viewerLayout = new QVBoxLayout(viewerPanel);
     viewerLayout->setContentsMargins(0, 0, 0, 0);
     viewerLayout->setSpacing(0);
-    auto *canvasRow = new QHBoxLayout;
-    canvasRow->setContentsMargins(0, 0, 0, 0);
-    canvasRow->setSpacing(0);
-    viewerLayout->addLayout(canvasRow, 1);
+    viewportWindow_ = new QMainWindow(viewerPanel);
+    viewportWindow_->setWindowFlags(Qt::Widget);
+    viewportWindow_->setObjectName(QStringLiteral("meshViewportWindow"));
+    viewportWindow_->setContextMenuPolicy(Qt::PreventContextMenu);
+    viewerLayout->addWidget(viewportWindow_, 1);
 
-    auto *canvas = new QFrame(viewerPanel);
+    auto *canvas = new MeshCanvas(viewportWindow_);
     canvas->setObjectName(QStringLiteral("meshViewerCanvas"));
     canvas->setStyleSheet(meshCanvasBackground(0));
     auto *canvasLayout = new QGridLayout(canvas);
@@ -430,33 +536,32 @@ MeshManagementPage::MeshManagementPage(QWidget *viewportHost, QWidget *parent)
         placeholder->hide();
     canvasLayout->addWidget(viewportHost, 0, 0);
 
-    auto *overlay = new QWidget(canvas);
-    overlay->setObjectName(QStringLiteral("meshCanvasOverlay"));
-    overlay->setAttribute(Qt::WA_TransparentForMouseEvents);
-    auto *overlayLayout = new QGridLayout(overlay);
-    overlayLayout->setContentsMargins(9, 9, 9, 16);
-    auto *axis = new AxisTriad(overlay);
+    auto *axis = new AxisTriad(canvas,
+        [this] {
+            const int row = selectedRow();
+            return row < 0 ? QString() : meshes_[row].id;
+        },
+        [this](const QString &id, int dx, int dy) {
+            if (id.isEmpty()) emit boundaryOrbitRequested(dx, dy);
+            else emit boundaryDragRotationRequested(id, dx, dy);
+        },
+        [this](const QString &id, const QString &command, const QVector3D &rotationAxis) {
+            if (id.isEmpty()) emit boundaryViewRequested(command);
+            else emit boundaryAxisRotationRequested(id, rotationAxis);
+        });
     axisIndicator_ = axis;
-    axis->setObjectName(QStringLiteral("axisIndicator"));
-    axis->setFixedSize(88, 88);
-    overlayLayout->addWidget(axis, 0, 0, Qt::AlignLeft | Qt::AlignBottom);
-    canvasLayout->addWidget(overlay, 0, 0);
-    overlay->raise();
-    canvasRow->addWidget(canvas, 1);
+    canvas->setOrientationControl(axis);
+    viewportWindow_->setCentralWidget(canvas);
 
-    auto *toolbarScroll = new QScrollArea(viewerPanel);
-    toolbarScroll->setObjectName(QStringLiteral("meshViewerToolbarScroll"));
-    toolbarScroll->setFrameShape(QFrame::NoFrame);
-    toolbarScroll->setWidgetResizable(true);
-    toolbarScroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-    toolbarScroll->setFixedWidth(39);
-    auto *toolbar = new QWidget(toolbarScroll);
+    viewToolbar_ = new QToolBar(QString::fromUtf8("网格视图工具栏"), viewportWindow_);
+    auto *toolbar = viewToolbar_;
     toolbar->setObjectName(QStringLiteral("meshViewerToolbar"));
-    auto *tools = new QVBoxLayout(toolbar);
-    tools->setContentsMargins(0, 6, 0, 2);
-    tools->setSpacing(0);
-    toolbarScroll->setWidget(toolbar);
-    canvasRow->addWidget(toolbarScroll);
+    toolbar->setIconSize(QSize(24, 24));
+    toolbar->setAllowedAreas(Qt::AllToolBarAreas);
+    toolbar->setMovable(true);
+    toolbar->setFloatable(false);
+    toolbar->setToolTip(QString::fromUtf8("拖动工具栏手柄可停靠到视口上、下、左、右"));
+    viewportWindow_->addToolBar(Qt::RightToolBarArea, toolbar);
 
     struct PresetView {
         const char *command;
@@ -474,11 +579,11 @@ MeshManagementPage::MeshManagementPage(QWidget *viewportHost, QWidget *parent)
     }};
     const auto addPreset = [&](const PresetView &view, const QIcon &icon) {
         const QString command = QString::fromLatin1(view.command);
-        auto *button = addViewButton(tools, toolbar, QStringLiteral("boundaryView_") + command,
+        auto *action = addViewAction(toolbar, QStringLiteral("boundaryView_") + command,
                                      QString::fromUtf8(view.label), icon);
-        connect(button, &QToolButton::clicked, this, [this, axis, view, command] {
-            axis->setView(view.from, view.up);
+        connect(action, &QAction::triggered, this, [this, axis, view, command] {
             if (boundaryMode_) emit boundaryViewRequested(command);
+            else axis->setView(view.from, view.up);
         });
     };
     const std::array<int, 6> faces = {{0, 3, 1, 4, 2, 5}};
@@ -487,10 +592,10 @@ MeshManagementPage::MeshManagementPage(QWidget *viewportHost, QWidget *parent)
     addPreset({"iso", "等轴测", {1, -1, 1}, {0, 0, 1}}, cubeIcon(6));
 
     const auto addRenderCommand = [&](const QString &command, const QString &label, const QIcon &icon) {
-        auto *button = addViewButton(tools, toolbar, QStringLiteral("boundaryView_") + command,
+        auto *action = addViewAction(toolbar, QStringLiteral("boundaryView_") + command,
                                      label, icon, false);
-        button->setProperty("boundaryCommand", command);
-        connect(button, &QToolButton::clicked, this, [this, command] {
+        action->setProperty("boundaryCommand", command);
+        connect(action, &QAction::triggered, this, [this, command] {
             if (boundaryMode_) emit boundaryViewRequested(command);
         });
     };
@@ -498,44 +603,45 @@ MeshManagementPage::MeshManagementPage(QWidget *viewportHost, QWidget *parent)
                      toolbarIcon(QStringLiteral("view-zoom-in")));
     addRenderCommand(QStringLiteral("fit"), QString::fromUtf8("适合大小"),
                      toolbarIcon(QStringLiteral("view-fit")));
-    addToolbarSeparator(tools, toolbar);
+    toolbar->addSeparator();
 
-    auto *displayModes = new QButtonGroup(toolbar);
+    auto *displayModes = new QActionGroup(toolbar);
+    displayModes->setExclusive(true);
     const auto addDisplayMode = [&](const QString &name, int index, const QIcon &icon) {
-        auto *button = addViewButton(tools, toolbar, name, displayModeEditor_->itemText(index), icon);
-        connect(button, &QToolButton::clicked, this, [this, index] {
+        auto *action = addViewAction(toolbar, name, displayModeEditor_->itemText(index), icon);
+        connect(action, &QAction::triggered, this, [this, index] {
             if (displayModeEditor_->isEnabled()) displayModeEditor_->setCurrentIndex(index);
         });
-        connect(displayModeEditor_, QOverload<int>::of(&QComboBox::currentIndexChanged), button,
-                [button, index](int current) { button->setChecked(current == index); });
-        button->setCheckable(true);
-        displayModes->addButton(button, index);
-        button->setChecked(displayModeEditor_->currentIndex() == index);
+        connect(displayModeEditor_, QOverload<int>::of(&QComboBox::currentIndexChanged), action,
+                [action, index](int current) { action->setChecked(current == index); });
+        action->setCheckable(true);
+        displayModes->addAction(action);
+        action->setChecked(displayModeEditor_->currentIndex() == index);
     };
     addDisplayMode(QStringLiteral("meshSurfaceEdgesButton"), 2, cubeIcon(6, true));
     addDisplayMode(QStringLiteral("meshSurfaceButton"), 0, cubeIcon(6));
     addDisplayMode(QStringLiteral("meshWireframeButton"), 1, cubeIcon(-1));
     addRenderCommand(QStringLiteral("out"), QString::fromUtf8("缩小"),
                      toolbarIcon(QStringLiteral("view-zoom-out")));
-    addToolbarSeparator(tools, toolbar);
+    toolbar->addSeparator();
 
-    auto *axisButton = addViewButton(tools, toolbar, QStringLiteral("meshAxisButton"),
+    auto *axisAction = addViewAction(toolbar, QStringLiteral("meshAxisButton"),
         QString::fromUtf8("显示坐标轴"), toolbarIcon(QStringLiteral("view-rotate")));
-    axisButton->setCheckable(true);
-    axisButton->setChecked(true);
-    connect(axisButton, &QToolButton::toggled, axis, &QWidget::setVisible);
+    axisAction->setCheckable(true);
+    axisAction->setChecked(true);
+    connect(axisAction, &QAction::toggled, axis, &QWidget::setVisible);
     addPreset({"reset", "重置视图", {0, 0, 1}, {0, 1, 0}},
               toolbarIcon(QStringLiteral("view-front")));
-    addToolbarSeparator(tools, toolbar);
+    toolbar->addSeparator();
     addRenderCommand(QStringLiteral("center"), QString::fromUtf8("旋转中心"),
                      toolbarIcon(QStringLiteral("workbench")));
 
-    auto *backgroundButton = addViewButton(tools, toolbar, QStringLiteral("meshBackgroundMode"),
+    auto *backgroundAction = addViewAction(toolbar, QStringLiteral("meshBackgroundMode"),
         QString::fromUtf8("视口背景"), toolbarIcon(QStringLiteral("settings")));
-    auto *backgroundMenu = new QMenu(backgroundButton);
+    auto *backgroundMenu = new QMenu(toolbar);
     auto *backgroundModes = new QActionGroup(backgroundMenu);
     backgroundModes->setExclusive(true);
-    const QStringList backgroundLabels = {QString::fromUtf8("蓝白渐变"), QString::fromUtf8("深色"),
+    const QStringList backgroundLabels = {QString::fromUtf8("淡紫渐变"), QString::fromUtf8("深色"),
                                           QString::fromUtf8("灰白渐变")};
     for (int i = 0; i < backgroundLabels.size(); ++i) {
         auto *action = backgroundMenu->addAction(backgroundLabels.at(i));
@@ -548,9 +654,9 @@ MeshManagementPage::MeshManagementPage(QWidget *viewportHost, QWidget *parent)
             if (boundaryMode_) emit boundaryBackgroundRequested(i);
         });
     }
-    backgroundButton->setMenu(backgroundMenu);
-    backgroundButton->setPopupMode(QToolButton::InstantPopup);
-    tools->addStretch();
+    backgroundAction->setMenu(backgroundMenu);
+    if (auto *button = qobject_cast<QToolButton *>(toolbar->widgetForAction(backgroundAction)))
+        button->setPopupMode(QToolButton::InstantPopup);
 
     viewerStatus_ = new QLabel(viewerPanel);
     viewerStatus_->setObjectName(QStringLiteral("meshViewerStatus"));
@@ -558,39 +664,6 @@ MeshManagementPage::MeshManagementPage(QWidget *viewportHost, QWidget *parent)
     viewerStatus_->hide();
     viewerLayout->addWidget(viewerStatus_);
     workspaceTabs_->addTab(viewerPanel, uiText(u"\u7f51\u683c\u89c6\u56fe"));
-
-    const auto createReservedTab = [this](const QString &heading, const QString &note) {
-        auto *page = new QWidget(workspaceTabs_);
-        auto *layout = new QVBoxLayout(page);
-        layout->setContentsMargins(24, 20, 24, 20);
-        auto *titleLabel = new QLabel(heading, page);
-        QFont headingFont = titleLabel->font();
-        headingFont.setPointSize(headingFont.pointSize() + 3);
-        headingFont.setBold(true);
-        titleLabel->setFont(headingFont);
-        layout->addWidget(titleLabel);
-        auto *noteLabel = new QLabel(note, page);
-        noteLabel->setWordWrap(true);
-        layout->addWidget(noteLabel);
-        layout->addStretch();
-        return page;
-    };
-    workspaceTabs_->addTab(createReservedTab(
-        uiText(u"\u5355\u5de5\u51b5"),
-        uiText(u"\u5355\u5de5\u51b5\u89c6\u56fe\u7528\u4e8e\u663e\u793a\u4e00\u4e2a\u8ba1\u7b97\u5de5\u51b5\u7684\u53c2\u6570\u4e0e\u7ed3\u679c\u3002"
-                  u"\u5f53\u524d\u5de5\u4f5c\u533a\u6ca1\u6709\u53ef\u5c55\u793a\u7684\u771f\u5b9e\u5de5\u51b5\u6570\u636e\uff0c\u8be5\u9875\u4ec5\u4fdd\u7559\u524d\u7aef\u5165\u53e3\u3002")),
-        uiText(u"\u5355\u5de5\u51b5"));
-    auto *postprocessTab = createReservedTab(
-        uiText(u"\u540e\u5904\u7406"),
-        uiText(u"\u540e\u5904\u7406\u5206\u6790\u5728\u72ec\u7acb\u7684\u540e\u5904\u7406\u5de5\u4f5c\u53f0\u4e2d\u5b8c\u6210\u3002"
-                  u"\u53ef\u4ece\u6b64\u5904\u6253\u5f00\u5de5\u4f5c\u53f0\uff1b\u5f53\u524d\u9875\u4e0d\u521b\u5efa\u7b2c\u4e8c\u5957\u540e\u5904\u7406\u89c6\u56fe\u3002"));
-    auto *postprocessLayout = qobject_cast<QVBoxLayout *>(postprocessTab->layout());
-    auto *openPostprocess = new QPushButton(uiText(u"\u6253\u5f00\u540e\u5904\u7406\u5de5\u4f5c\u53f0"), postprocessTab);
-    openPostprocess->setObjectName(QStringLiteral("meshOpenPostprocessButton"));
-    openPostprocess->setToolTip(uiText(u"\u6253\u5f00\u72ec\u7acb\u7684\u540e\u5904\u7406\u5de5\u4f5c\u53f0\u7a97\u53e3"));
-    postprocessLayout->addWidget(openPostprocess, 0, Qt::AlignLeft);
-    connect(openPostprocess, &QPushButton::clicked, this, &MeshManagementPage::postProcessRequested);
-    workspaceTabs_->addTab(postprocessTab, uiText(u"\u540e\u5904\u7406"));
 
     settingsSplitter_->addWidget(workspaceTabs_);
     settingsSplitter_->setStretchFactor(0, 1);
@@ -648,7 +721,8 @@ MeshManagementPage::MeshManagementPage(QWidget *viewportHost, QWidget *parent)
     mainSplitter_->setStretchFactor(0, 1);
     mainSplitter_->setStretchFactor(1, 1);
     mainSplitter_->setSizes({670, 330});
-    pageLayout->addWidget(mainSplitter_, 1);
+    contentLayout->addWidget(mainSplitter_, 1);
+    pageLayout->addWidget(content, 1);
 
     connect(importMeshButton_, &QPushButton::clicked, this, &MeshManagementPage::addMesh);
     connect(deleteMeshButton_, &QPushButton::clicked, this, &MeshManagementPage::removeCurrentMesh);
@@ -675,12 +749,20 @@ MeshManagementPage::MeshManagementPage(QWidget *viewportHost, QWidget *parent)
     connect(colorButton_, &QPushButton::clicked, this, [this] {
         const int row = selectedRow();
         if (row < 0 || row >= meshes_.size()) return;
-        const QVector<QColor> colors = {QColor("#3b82c4"), QColor("#e58b2a"), QColor("#4d9d69"), QColor("#8c63b8")};
-        int index = colors.indexOf(meshes_[row].color);
-        meshes_[row].color = colors[(index + 1) % colors.size()];
+        const QString id = meshes_.at(row).id;
+        QColor color = meshes_.at(row).color;
+        if (boundaryMode_) {
+            color = QColorDialog::getColor(color, this, QString::fromUtf8("设置网格颜色"));
+        } else {
+            const QVector<QColor> colors = {QColor("#3b82c4"), QColor("#e58b2a"), QColor("#4d9d69"), QColor("#8c63b8")};
+            color = colors.at((colors.indexOf(color) + 1) % colors.size());
+        }
+        if (!color.isValid() || row >= meshes_.size() || meshes_.at(row).id != id) return;
+        meshes_[row].color = color;
         emitBoundaryStyle(row);
         refreshEditor();
-        appendHistory(uiText(u"\u4fee\u6539 %1 \u663e\u793a\u989c\u8272\uff08Mock\uff09").arg(meshes_[row].name));
+        appendHistory(QString::fromUtf8("修改 %1 的显示颜色为 %2")
+                      .arg(meshes_.at(row).name, color.name().toUpper()));
     });
     connect(historyCollapseButton_, &QPushButton::clicked, this,
         [this] { setHistoryCollapsed(!historyCollapsed_); });
@@ -725,9 +807,11 @@ MeshManagementPage::MeshManagementPage(QWidget *viewportHost, QWidget *parent)
 void MeshManagementPage::addMesh()
 {
     if (boundaryMode_) {
-        const auto path=QFileDialog::getOpenFileName(this, QString::fromUtf8("导入网格边界"), QString(),
-            QString::fromUtf8("VTK 网格 (*.vtk *.vtu *.vti *.vtp)"));
-        if (!path.isEmpty()) emit boundaryImportRequested(path);
+        QString filter = QString::fromUtf8("VTK 网格 (*.vtk *.vtu *.vti *.vtp)");
+        if (cgnsAvailable_) filter.prepend(QString::fromUtf8("网格 (*.cgns *.vtk *.vtu *.vti *.vtp);;CGNS 网格 (*.cgns);;"));
+        const auto paths = QFileDialog::getOpenFileNames(this, QString::fromUtf8("导入网格"),
+                                                       QString(), filter);
+        if (!paths.isEmpty()) emit boundaryImportRequested(paths);
         return;
     }
     if (meshes_.size() >= 10) return;
@@ -767,19 +851,22 @@ void MeshManagementPage::removeCurrentMesh()
     if (row < 0 || row >= meshes_.size()) return;
     const QString name = meshes_[row].name;
     if (boundaryMode_) emit boundaryRemoveRequested(meshes_[row].id);
-    meshes_.remove(row);
-    meshTable_->removeRow(row);
-    for (int index = 0; index < meshes_.size(); ++index) refreshTableRow(index);
-    if (!meshes_.isEmpty()) meshTable_->setCurrentCell(qMin(row, meshes_.size() - 1), 1);
-    else refreshEditor();
+    {
+        const QSignalBlocker block(meshTable_);
+        meshes_.remove(row);
+        meshTable_->removeRow(row);
+        for (int index = 0; index < meshes_.size(); ++index) refreshTableRow(index);
+        if (!meshes_.isEmpty()) meshTable_->setCurrentCell(qMin(row, meshes_.size() - 1), 1);
+    }
+    refreshEditor();
     appendHistory(uiText(u"\u79fb\u9664\u7f51\u683c %1\uff08\u4ec5\u5f71\u54cd\u5f53\u524d\u754c\u9762\uff09").arg(name));
     updateCount();
 }
 
 void MeshManagementPage::selectMesh(int row)
 {
-    if (row < 0 || row >= meshes_.size()) return;
     refreshEditor();
+    if (row < 0 || row >= meshes_.size()) return;
     appendHistory(uiText(u"\u9009\u62e9\u7f51\u683c %1").arg(meshes_[row].name));
 }
 
@@ -912,6 +999,7 @@ QVariantMap MeshManagementPage::layoutState() const
         ? double(vertical.value(1)) / verticalTotal
         : double(expandedHistoryHeight_) / qMax(1, height()));
     state.insert(QStringLiteral("historyCollapsed"), historyCollapsed_);
+    state.insert(QStringLiteral("meshToolbarArea"), int(viewportWindow_->toolBarArea(viewToolbar_)));
     return state;
 }
 
@@ -922,6 +1010,11 @@ void MeshManagementPage::restoreLayoutState(const QVariantMap &state)
     mainSplitter_->setSizes({qRound(objectRatio * 1000), qRound((1.0 - objectRatio) * 1000)});
     expandedHistoryHeight_ = qBound(90, qRound(qMax(450, height()) * historyRatio), qMax(120, height() / 2));
     setHistoryCollapsed(state.value(QStringLiteral("historyCollapsed"), true).toBool());
+    auto toolbarArea = static_cast<Qt::ToolBarArea>(state.value(QStringLiteral("meshToolbarArea")).toInt());
+    if (toolbarArea != Qt::LeftToolBarArea && toolbarArea != Qt::RightToolBarArea
+        && toolbarArea != Qt::TopToolBarArea && toolbarArea != Qt::BottomToolBarArea)
+        toolbarArea = Qt::RightToolBarArea;
+    viewportWindow_->addToolBar(toolbarArea, viewToolbar_);
 }
 
 void MeshManagementPage::restoreDefaultLayout()
@@ -929,12 +1022,16 @@ void MeshManagementPage::restoreDefaultLayout()
     mainSplitter_->setSizes({670, 330});
     expandedHistoryHeight_ = 150;
     setHistoryCollapsed(true);
+    viewportWindow_->addToolBar(Qt::RightToolBarArea, viewToolbar_);
 }
 
-void MeshManagementPage::enableBoundaryMode()
+void MeshManagementPage::enableBoundaryMode(bool cgnsAvailable)
 {
     if (boundaryMode_) return;
-    boundaryMode_=true;
+    boundaryMode_ = true;
+    cgnsAvailable_ = cgnsAvailable;
+    static_cast<AxisTriad *>(axisIndicator_)->enableInteraction();
+    findChild<QLabel *>(QStringLiteral("meshScopeLabel"))->setText(QString::fromUtf8("三维网格预览"));
     {
         QSignalBlocker block(meshTable_);
         meshTable_->setRowCount(0);
@@ -947,7 +1044,7 @@ void MeshManagementPage::enableBoundaryMode()
     displayGroup->setChecked(true);
     findChild<QScrollArea *>("meshPropertyScroll")->setVisible(true);
     visibleEditor_->setText(QString::fromUtf8("可见"));
-    colorButton_->setToolTip(QString::fromUtf8("切换当前对象颜色"));
+    colorButton_->setToolTip(QString::fromUtf8("自定义当前网格颜色"));
     auto *opacityRow=opacityEditor_->parentWidget();
     if (auto *form=qobject_cast<QFormLayout *>(opacityRow->parentWidget()->layout())) {
         if (auto *label=qobject_cast<QLabel *>(form->labelForField(opacityRow)))
@@ -955,21 +1052,41 @@ void MeshManagementPage::enableBoundaryMode()
     }
     scaleEditor_->setToolTip(QString::fromUtf8("仅缩放显示，不修改原始网格坐标"));
     unitEditor_->setToolTip(QString::fromUtf8("单位标记，不执行坐标或物理量换算"));
-    for (auto *button : findChildren<QToolButton *>()) {
-        if (button->property("boundaryCommand").isValid()) button->setEnabled(true);
+    for (auto *action : viewToolbar_->actions()) {
+        if (action->property("boundaryCommand").isValid()) action->setEnabled(true);
     }
     const auto *canvas = findChild<QFrame *>(QStringLiteral("meshViewerCanvas"));
     emit boundaryBackgroundRequested(canvas->property("backgroundMode").toInt());
     viewerStatus_->setWordWrap(true);
     viewerStatus_->show();
     refreshEditor(); updateCount();
-    viewerStatus_->setText(QString::fromUtf8("请选择 VTK 网格文件；显示全部拓扑边界，原体数据保留用于分析。"));
+    viewerStatus_->setText(QString::fromUtf8("导入后可在视口或列表选中网格，再用 XYZ 方向球旋转。"));
 }
+void MeshManagementPage::setBoundaryCameraOrientation(const QVector3D &from, const QVector3D &up)
+{
+    static_cast<AxisTriad *>(axisIndicator_)->setView(from, up);
+}
+
+void MeshManagementPage::selectBoundary(const QString &id)
+{
+    if (!boundaryMode_) return;
+    if (id.isEmpty()) {
+        meshTable_->selectionModel()->clear();
+        return;
+    }
+    for (int row = 0; row < meshes_.size(); ++row) {
+        if (meshes_[row].id != id) continue;
+        meshTable_->setCurrentCell(row, 1);
+        meshTable_->scrollToItem(meshTable_->item(row, 1));
+        return;
+    }
+}
+
 void MeshManagementPage::beginBoundary(const QString &id,const QString &path)
 {
     MeshUiState state; state.id=id; state.ready=false; state.name=QFileInfo(path).fileName();
     state.summary=QString::fromUtf8("正在后台读取并提取边界…");
-    state.displayMode=displayModeEditor_->itemText(2); state.color=QColor("#3b82c4"); state.unit="m";
+    state.displayMode=displayModeEditor_->itemText(2); state.color=QColor("#bca9e4"); state.unit="m";
     meshes_.append(state);
     const int row = meshTable_->rowCount();
     meshTable_->insertRow(row);

@@ -38,6 +38,11 @@ if(AEROSIM_BUILD_GUI)
         target_link_libraries(aerosim_gui PRIVATE aerosim_visualization_scene)
         target_compile_definitions(aerosim_gui PRIVATE AEROSIM_HAS_VTK_VIEWER=1)
     endif()
+    if(TARGET aerosim_mesh_scene)
+        target_sources(aerosim_gui PRIVATE MeshViewerBinding.cpp)
+        target_link_libraries(aerosim_gui PRIVATE aerosim_mesh_scene)
+        target_compile_definitions(aerosim_gui PRIVATE AEROSIM_HAS_MESH_VIEWER=1)
+    endif()
     set_target_properties(aerosim_gui PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 
     # The standalone workbench has its own EXE and deployment directory so a

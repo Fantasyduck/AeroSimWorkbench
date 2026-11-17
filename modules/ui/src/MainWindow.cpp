@@ -1,4 +1,5 @@
 #include "aerosim/ui/MainWindow.h"
+#include "aerosim/ui/CalculationTaskPage.h"
 #include "aerosim/ui/GoverningEquationsPanel.h"
 #include "aerosim/ui/BoundaryConditionsPanel.h"
 #include "aerosim/ui/MeshMotionPanel.h"
@@ -149,29 +150,7 @@ QTreeWidgetItem *addNavigationItem(QTreeWidgetItem *parent, const QString &text,
     return item;
 }
 
-QIcon statusIcon(TaskStatus status)
-{
-    QColor color(QStringLiteral("#8a94a3"));
-    switch (status) {
-    case TaskStatus::Preparing: color = QColor(QStringLiteral("#d9a300")); break;
-    case TaskStatus::Running: color = QColor(QStringLiteral("#2b78d0")); break;
-    case TaskStatus::Paused: color = QColor(QStringLiteral("#8a5db7")); break;
-    case TaskStatus::Finished: color = QColor(QStringLiteral("#2e9b55")); break;
-    case TaskStatus::Failed: color = QColor(QStringLiteral("#c83c3c")); break;
-    case TaskStatus::Cancelled: color = QColor(QStringLiteral("#68717d")); break;
-    default: break;
-    }
-    QPixmap marker(12, 12);
-    marker.fill(color);
-    return QIcon(marker);
-}
 
-void setTaskItemStatus(QTreeWidgetItem *item, TaskStatus status)
-{
-    item->setData(0, TaskStatusRole, static_cast<int>(status));
-    item->setIcon(0, statusIcon(status));
-    item->setToolTip(0, uiText(u"\u72b6\u6001\uff1a%1\uff08Mock \u754c\u9762\u793a\u4f8b\uff09").arg(taskStatus(status)));
-}
 }
 
 MainWindow::MainWindow(QWidget *parent) : SARibbonMainWindow(initializeRibbonResources(parent))
@@ -194,8 +173,8 @@ MainWindow::MainWindow(QWidget *parent) : SARibbonMainWindow(initializeRibbonRes
 
     setObjectName(QStringLiteral("AeroSimMainWindow"));
     setWindowTitle(uiText(u"AeroSimWorkbench \u00b7 \u4eff\u771f\u5de5\u4f5c\u53f0\uff08Mock \u670d\u52a1\uff09"));
-    resize(1440, 960);
-    setMinimumSize(1000, 720);
+    resize(uimetrics::defaultWindowSize());
+    setMinimumSize(uimetrics::minimumWindowSize());
     setDockNestingEnabled(true);
     createWorkspace();
     createRibbon();
@@ -279,7 +258,7 @@ void MainWindow::createRibbon()
                 connect(action, &QAction::triggered, this, &MainWindow::saveUserLayout);
             } else if (route == "layout-restore") {
                 action->setObjectName(QStringLiteral("restoreUserLayoutAction"));
-                QSettings settings(QStringLiteral("AeroSimWorkbench"), QStringLiteral("UiLayout"));
+                QSettings settings(layoutSettingsOrg_, layoutSettingsApp_);
                 action->setEnabled(settings.value(QStringLiteral("UserLayout/version")).toInt() == 1);
                 restoreUserLayoutAction_ = action;
                 connect(action, &QAction::triggered, this, &MainWindow::restoreUserLayout);
@@ -302,6 +281,10 @@ void MainWindow::createRibbon()
                 auto *dock = route == "dock:project" ? projectDock_
                     : route == "dock:property" ? propertyDock_ : outputDock_;
                 connect(action, &QAction::triggered, this, [this, dock] {
+                    if (calculationWorkspaceActive_ && (dock == propertyDock_ || dock == outputDock_)) {
+                        statusBar()->showMessage(uiText(u"\u8ba1\u7b97\u4efb\u52a1\u4f7f\u7528\u9875\u5185\u8bbe\u7f6e\u9762\u677f\u4e0e\u53f3\u4e0b\u65b9\u65e5\u5fd7\u3002"), 4000);
+                        return;
+                    }
                     if (dock == propertyDock_ && meshWorkspaceActive_) {
                         statusBar()->showMessage(
                             uiText(u"\u7f51\u683c\u663e\u793a\u5c5e\u6027\u5df2\u6574\u5408\u5230\u5f53\u524d\u7f51\u683c\u7ba1\u7406\u9875\u9762"), 4000);
@@ -384,16 +367,15 @@ void MainWindow::createRibbon()
 
     auto *calculation = ribbonBar()->addCategoryPage(uiText(u"\u8ba1\u7b97"));
     calculation->setObjectName(QStringLiteral("calculationCategory"));
-    addGroup(calculation, "conditionGroup", uiText(u"\u5de5\u51b5\u4e0e\u8ba1\u5212"), {
-        {"state", uiText(u"\u5de5\u51b5\u7ba1\u7406"), true, "workspace:states"},
-        {"batch", uiText(u"\u6279\u5904\u7406\u8ba1\u5212"), true, "workspace:batch-plan"}});
-    addGroup(calculation, "calculationGroup", uiText(u"\u5f00\u59cb\u8ba1\u7b97"), {
-        {"run", uiText(u"\u5355\u6b21\u8ba1\u7b97"), true, "run"},
-        {"queue", uiText(u"\u6279\u91cf\u8ba1\u7b97"), true, "workspace:batch-calculation"}});
-    addGroup(calculation, "monitorGroup", uiText(u"\u8ba1\u7b97\u76d1\u63a7"), {
-        {"monitor", uiText(u"\u4efb\u52a1\u76d1\u63a7"), true, "workspace:task-monitor"},
-        {"residual", uiText(u"\u6536\u655b\u66f2\u7ebf"), false, "workspace:task-monitor"},
-        {"log", uiText(u"\u8f93\u51fa"), false, "output:0"}});
+    addGroup(calculation, "calculationGroup", uiText(u"\u8ba1\u7b97\u4efb\u52a1"), {
+        {"run", uiText(u"\u5355\u4efb\u52a1"), true, "workspace:single-calculation"},
+        {"queue", uiText(u"\u591a\u4efb\u52a1"), true, "workspace:batch-calculation"}});
+    // Keep the existing workflow gate for service adapters; the reference UI
+    // submission controls deliberately do not invoke it yet.
+    runAction_ = new QAction(this);
+    runAction_->setObjectName(QStringLiteral("runAction"));
+    runAction_->setEnabled(false);
+    connect(runAction_, &QAction::triggered, this, &MainWindow::submitRun);
 
     auto *data = ribbonBar()->addCategoryPage(uiText(u"\u667a\u80fd\u6570\u636e\u5904\u7406"));
     data->setObjectName(QStringLiteral("intelligentDataCategory"));
@@ -547,21 +529,23 @@ void MainWindow::applyWindowTheme(const QString &requestedId)
         "QWidget[parameterEditor=\"true\"] QPushButton#applyBoundary:disabled { background: %1; color: %6; border-color: %4; }")
         .arg(bg, base, text, border, selected, QStringLiteral("#61748a")));
     setStyleSheet(styleSheet() + QStringLiteral(
-        "QWidget#parameterEditor_control-equations QGroupBox { padding: 16px 18px 14px; }"
+        "QWidget#parameterEditor_control-equations QGroupBox { padding: 12px 16px 10px; }"
         "QWidget#parameterEditor_reference-values QGroupBox { padding: 16px 18px 14px; }"
         "QWidget#parameterEditor_calculation-control QGroupBox { padding: 16px 18px 14px; }"
         "QWidget#parameterEditor_solution-method QGroupBox { padding: 16px 18px 14px; }"
         "QWidget#parameterEditor_solution-method QAbstractSpinBox, QWidget#parameterEditor_solution-method QComboBox { min-height: 22px; max-height: 22px; padding: 2px 6px; }"
-        "QWidget#parameterEditor_output-control QGroupBox { padding: 16px 18px 14px; }"
+        "QWidget#parameterEditor_output-control QGroupBox { padding: 12px 16px 10px; }"
+        "QWidget#parameterEditor_output-control QCheckBox { min-height: 20px; }"
         "QWidget#parameterEditor_output-control QAbstractSpinBox { min-height: 22px; max-height: 22px; padding: 2px 6px; }"
         "QWidget#parameterEditor_initialization QGroupBox { padding: 16px 18px 14px; }"
         "QWidget#parameterEditor_initialization QAbstractSpinBox, QWidget#parameterEditor_initialization QComboBox { min-height: 22px; max-height: 22px; padding: 2px 6px; }"
-        "QWidget#parameterEditor_boundary-conditions QGroupBox { padding: 16px 18px 14px; }"
+        "QWidget#parameterEditor_boundary-conditions QGroupBox { padding: 10px 16px 8px; }"
+        "QWidget#parameterEditor_mesh-motion QAbstractSpinBox, QWidget#parameterEditor_mesh-motion QComboBox, QWidget#parameterEditor_mesh-motion QLineEdit { min-height: 22px; max-height: 22px; padding: 2px 6px; }"
         "QWidget#parameterEditor_boundary-conditions QAbstractSpinBox, QWidget#parameterEditor_boundary-conditions QComboBox, QWidget#parameterEditor_boundary-conditions QLineEdit { min-height: 22px; max-height: 22px; padding: 2px 6px; }"
         "QWidget#parameterEditor_calculation-control QAbstractSpinBox, QWidget#parameterEditor_calculation-control QComboBox { min-height: 22px; max-height: 22px; padding: 2px 6px; }"
         "QWidget#parameterEditor_reference-values QAbstractSpinBox, QWidget#parameterEditor_reference-values QComboBox { min-height: 22px; max-height: 22px; padding: 2px 6px; }"
         "QWidget#parameterEditor_control-equations QAbstractSpinBox { min-height: 22px; max-height: 22px; padding: 2px 6px; }"
-        "QWidget#parameterEditor_control-equations QRadioButton, QWidget#parameterEditor_control-equations QCheckBox { min-height: 28px; }"));
+        "QWidget#parameterEditor_control-equations QRadioButton, QWidget#parameterEditor_control-equations QCheckBox { min-height: 22px; }"));
     const QString editorStyle = QStringLiteral(
         "QPlainTextEdit { background: %1; color: %2; border: 1px solid %3; }")
         .arg(base, text, border);
@@ -592,10 +576,6 @@ void MainWindow::createWorkspace()
     auto *meshPage = new MeshManagementPage(viewport, workspaceStack_);
     viewportPage_ = meshPage;
     workspaceStack_->addWidget(meshPage);
-    // The replicated mesh workspace offers a 后处理 tab that opens the same
-    // standalone post-process workbench as the Ribbon entry.
-    connect(meshPage, &MeshManagementPage::postProcessRequested,
-            this, &MainWindow::openPostProcessRequested);
     // Unified trajectory settings page. The former trajectory leaf pages are
     // consolidated here; the page keeps all of its state in the window and no
     // longer depends on the deleted navigation entries.
@@ -607,7 +587,7 @@ void MainWindow::createWorkspace()
         auto *page = new QWidget(workspaceStack_);
         page->setObjectName(objectName);
         auto *layout = new QVBoxLayout(page);
-        layout->setContentsMargins(24, 20, 24, 20);
+        layout->setContentsMargins(uimetrics::pageMargins());
         auto *heading = new QLabel(title, page);
         heading->setObjectName(QStringLiteral("workspacePageTitle"));
         QFont font = heading->font();
@@ -636,240 +616,16 @@ void MainWindow::createWorkspace()
     qobject_cast<QVBoxLayout *>(parameterWorkspacePage_->layout())->addWidget(parameterCategories);
     qobject_cast<QVBoxLayout *>(parameterWorkspacePage_->layout())->addStretch();
 
-    calculationOverviewPage_ = createWorkspacePage(
-        QStringLiteral("calculationOverviewPage"), uiText(u"\u8ba1\u7b97"),
-        uiText(u"\u8ba1\u7b97\u6a21\u5757\u524d\u7aef\u5165\u53e3\u3002\u53ef\u5728\u5de6\u4fa7\u9009\u62e9\u5de5\u51b5\u7ba1\u7406\u3001\u6279\u5904\u7406\u8ba1\u5212\u3001\u5355\u6b21/\u6279\u91cf\u8ba1\u7b97\u6216\u8ba1\u7b97\u76d1\u63a7\u3002\u5f53\u524d\u6570\u636e\u4e0e\u8fd0\u884c\u72b6\u6001\u5747\u4e3a Mock \u754c\u9762\u793a\u4f8b\uff0c\u4e0d\u542f\u52a8\u771f\u5b9e\u6c42\u89e3\u5668\u3002"));
-    auto *calculationOverviewLayout = qobject_cast<QVBoxLayout *>(calculationOverviewPage_->layout());
-    auto *outputModeGroup = new QGroupBox(uiText(u"\u8fd0\u884c\u8f93\u51fa\u65b9\u5f0f"), calculationOverviewPage_);
-    outputModeGroup->setObjectName(QStringLiteral("solverOutputModeGroup"));
-    auto *outputModeLayout = new QFormLayout(outputModeGroup);
-    auto *outputMode = new QComboBox(outputModeGroup);
-    outputMode->setObjectName(QStringLiteral("solverOutputModeCombo"));
-    outputMode->addItem(uiText(u"\u7a97\u53e3\u5185\u8f93\u51fa"), QStringLiteral("embedded"));
-    outputMode->addItem(uiText(u"\u72ec\u7acb\u63a7\u5236\u53f0"), QStringLiteral("console"));
-    auto *outputModeDescription = new QLabel(
-        uiText(u"Mock \u914d\u7f6e\uff1a\u6c42\u89e3\u5668\u8f93\u51fa\u5c06\u5728\u8ba1\u7b97\u76d1\u63a7\u9875\u7684\u5f53\u524d\u4efb\u52a1\u65e5\u5fd7\u4e2d\u663e\u793a\u3002"), outputModeGroup);
-    outputModeDescription->setObjectName(QStringLiteral("solverOutputModeDescription"));
-    outputModeDescription->setWordWrap(true);
-    outputModeLayout->addRow(uiText(u"\u8f93\u51fa\u4f4d\u7f6e"), outputMode);
-    outputModeLayout->addRow(QString(), outputModeDescription);
-    connect(outputMode, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
-            [outputMode, outputModeDescription](int) {
-        outputModeDescription->setText(outputMode->currentData().toString() == QStringLiteral("embedded")
-            ? uiText(u"Mock \u914d\u7f6e\uff1a\u6c42\u89e3\u5668\u8f93\u51fa\u5c06\u5728\u8ba1\u7b97\u76d1\u63a7\u9875\u7684\u5f53\u524d\u4efb\u52a1\u65e5\u5fd7\u4e2d\u663e\u793a\u3002")
-            : uiText(u"Mock \u914d\u7f6e\uff1a\u4fdd\u7559\u72ec\u7acb\u63a7\u5236\u53f0\u9009\u62e9\u72b6\u6001\uff0c\u672c\u671f\u4e0d\u521b\u5efa\u63a7\u5236\u53f0\u8fdb\u7a0b\u3002"));
-    });
-    calculationOverviewLayout->addWidget(outputModeGroup);
-    calculationOverviewLayout->addStretch();
-
-    stateListPage_ = createWorkspacePage(QStringLiteral("stateListPage"), uiText(u"\u5de5\u51b5\u7ba1\u7406"),
-        uiText(u"\u5de5\u51b5\u4e0e\u6279\u5904\u7406\u8ba1\u5212\u5206\u5f00\u7ba1\u7406\u3002\u4ee5\u4e0b\u5185\u5bb9\u4ec5\u7528\u4e8e\u754c\u9762\u9a8c\u8bc1\uff0c\u672a\u4ece\u5de5\u4f5c\u533a\u670d\u52a1\u52a0\u8f7d\u3002"));
-    auto *stateLayout = qobject_cast<QVBoxLayout *>(stateListPage_->layout());
-    stateTable_ = new QTableWidget(0, 3, stateListPage_);
-    stateTable_->setObjectName(QStringLiteral("stateTable"));
-    stateTable_->setHorizontalHeaderLabels({uiText(u"\u5de5\u51b5"), uiText(u"\u53c2\u6570\u6458\u8981"), uiText(u"\u6821\u9a8c\u72b6\u6001")});
-    stateTable_->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
-    stateTable_->setSelectionBehavior(QAbstractItemView::SelectRows);
-    stateTable_->setSelectionMode(QAbstractItemView::SingleSelection);
-    stateTable_->setEditTriggers(QAbstractItemView::NoEditTriggers);
-    connect(stateTable_, &QTableWidget::cellDoubleClicked, this, [this](int, int) { editState(); });
-    stateLayout->addWidget(stateTable_, 1);
-    auto *stateCommands = new QHBoxLayout;
-    addStateButton_ = new QPushButton(uiText(u"+ \u65b0\u5efa\u5de5\u51b5"), stateListPage_);
-    addStateButton_->setObjectName(QStringLiteral("addStateButton"));
-    editStateButton_ = new QPushButton(uiText(u"\u7f16\u8f91\u53c2\u6570"), stateListPage_);
-    editStateButton_->setObjectName(QStringLiteral("editStateButton"));
-    removeStateButton_ = new QPushButton(uiText(u"- \u5220\u9664\u5de5\u51b5"), stateListPage_);
-    removeStateButton_->setObjectName(QStringLiteral("removeStateButton"));
-    connect(addStateButton_, &QPushButton::clicked, this, &MainWindow::addState);
-    connect(editStateButton_, &QPushButton::clicked, this, &MainWindow::editState);
-    connect(removeStateButton_, &QPushButton::clicked, this, &MainWindow::removeState);
-    stateCommands->addWidget(addStateButton_);
-    stateCommands->addWidget(editStateButton_);
-    stateCommands->addWidget(removeStateButton_);
-    stateCommands->addStretch();
-    stateLayout->addLayout(stateCommands);
-    refreshStateModel();
-
-    batchPlanPage_ = createWorkspacePage(QStringLiteral("batchPlanPage"), uiText(u"\u6279\u5904\u7406\u8ba1\u5212"),
-        uiText(u"\u6279\u5904\u7406\u8ba1\u5212\u662f\u672a\u6765\u7528\u4e8e\u4fdd\u5b58\u548c\u590d\u7528\u6279\u91cf\u8ba1\u7b97\u6a21\u677f\u7684\u5165\u53e3\u3002\u5f53\u524d\u7248\u672c\u8bf7\u4f7f\u7528\u201c\u6279\u91cf\u8ba1\u7b97\u201d\u914d\u7f6e\u5e76\u63d0\u4ea4\u4e00\u6b21\u6027\u6279\u5904\u7406\u4efb\u52a1\uff1b\u672c\u9875\u4ec5\u4f5c\u8bf4\u660e\u548c\u53ea\u8bfb\u5360\u4f4d\u3002"));
-    auto *batchLayout = qobject_cast<QVBoxLayout *>(batchPlanPage_->layout());
-    batchPlanTable_ = new QTableWidget(1, 3, batchPlanPage_);
-    batchPlanTable_->setObjectName(QStringLiteral("batchPlanTable"));
-    batchPlanTable_->setHorizontalHeaderLabels({uiText(u"\u5f53\u524d\u72b6\u6001"), uiText(u"\u4f5c\u7528"), uiText(u"\u64cd\u4f5c\u8bf4\u660e")});
-    batchPlanTable_->setItem(0, 0, new QTableWidgetItem(uiText(u"\u672a\u521b\u5efa\u6b63\u5f0f BatchPlan")));
-    batchPlanTable_->setItem(0, 1, new QTableWidgetItem(uiText(u"\u4fdd\u5b58\u53ef\u91cd\u7528\u7684\u6279\u91cf\u6a21\u677f")));
-    batchPlanTable_->setItem(0, 2, new QTableWidgetItem(uiText(u"\u8bf7\u4ece\u201c\u6279\u91cf\u8ba1\u7b97\u201d\u914d\u7f6e\u548c\u63d0\u4ea4")));
-    batchPlanTable_->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
-    batchPlanTable_->setSelectionBehavior(QAbstractItemView::SelectRows);
-    batchPlanTable_->setSelectionMode(QAbstractItemView::SingleSelection);
-    batchPlanTable_->setEditTriggers(QAbstractItemView::NoEditTriggers);
-    batchLayout->addWidget(batchPlanTable_, 1);
-    auto *batchCommands = new QHBoxLayout;
-    const QStringList batchCommandLabels = {uiText(u"\u6dfb\u52a0\u5de5\u51b5"), uiText(u"\u79fb\u9664"), uiText(u"\u4e0a\u79fb"), uiText(u"\u4e0b\u79fb"), uiText(u"\u67e5\u770b\u6821\u9a8c")};
-    int batchCommandIndex = 0;
-    for (const auto &label : batchCommandLabels) {
-        auto *button = new QPushButton(label, batchPlanPage_);
-        button->setEnabled(false);
-        button->setToolTip(uiText(u"\u6279\u5904\u7406\u8ba1\u5212\u670d\u52a1\u5c1a\u672a\u63a5\u5165\uff1b\u8bf7\u4f7f\u7528\u201c\u6279\u91cf\u8ba1\u7b97\u201d"));
-        batchCommands->addWidget(button);
-        ++batchCommandIndex;
-    }
-    batchCommands->addStretch();
-    batchLayout->addLayout(batchCommands);
-    auto *newPlan = new QPushButton(uiText(u"\u65b0\u5efa\u6279\u5904\u7406\u8ba1\u5212"), batchPlanPage_);
-    newPlan->setEnabled(false);
-    newPlan->setToolTip(uiText(u"\u6b63\u5f0f BatchPlan \u670d\u52a1\u5c1a\u672a\u63a5\u5165\uff1b\u8bf7\u4f7f\u7528\u201c\u6279\u91cf\u8ba1\u7b97\u201d"));
-    batchLayout->addWidget(newPlan, 0, Qt::AlignLeft);
-
-    // These two pages are the user-facing entry points for creating execution
-    // requests.  They deliberately use the existing RunRequest contract; the
-    // real solver and persistent BatchPlan service can replace the Mock later.
-    singleCalculationPage_ = createWorkspacePage(
-        QStringLiteral("singleCalculationPage"), uiText(u"\u5355\u6b21\u8ba1\u7b97"),
-        uiText(u"\u4e00\u7ec4\u5de5\u51b5\u53c2\u6570\u751f\u6210\u4e00\u4e2a\u6267\u884c\u8bf7\u6c42\u3002\u63d0\u4ea4\u540e\u5c06\u8fdb\u5165\u4efb\u52a1\u76d1\u63a7\uff1b\u5f53\u524d\u4f7f\u7528 Mock \u670d\u52a1\uff0c\u4e0d\u542f\u52a8\u771f\u5b9e\u6c42\u89e3\u5668\u3002"));
-    auto *singleLayout = qobject_cast<QVBoxLayout *>(singleCalculationPage_->layout());
-    auto *singleGroup = new QGroupBox(uiText(u"\u8ba1\u7b97\u5de5\u51b5\u4e0e\u53c2\u6570"), singleCalculationPage_);
-    auto *singleForm = new QFormLayout(singleGroup);
-    singleCaseCombo_ = new QComboBox(singleGroup);
-    singleCaseCombo_->setObjectName(QStringLiteral("singleCaseCombo"));
-    singleCaseCombo_->addItems(stateIds_);
-    singleMachSpin_ = new QDoubleSpinBox(singleGroup);
-    singleMachSpin_->setObjectName(QStringLiteral("singleMachSpin"));
-    singleMachSpin_->setRange(0.01, 20.0); singleMachSpin_->setSingleStep(0.05); singleMachSpin_->setValue(0.80);
-    singleAoASpin_ = new QDoubleSpinBox(singleGroup);
-    singleAoASpin_->setObjectName(QStringLiteral("singleAoASpin"));
-    singleAoASpin_->setRange(-90.0, 90.0); singleAoASpin_->setSingleStep(0.5); singleAoASpin_->setValue(2.0);
-    singleTemperatureSpin_ = new QDoubleSpinBox(singleGroup);
-    singleTemperatureSpin_->setObjectName(QStringLiteral("singleTemperatureSpin"));
-    singleTemperatureSpin_->setRange(100.0, 2000.0); singleTemperatureSpin_->setSuffix(QStringLiteral(" K")); singleTemperatureSpin_->setValue(288.15);
-    singleMpiSpin_ = new QSpinBox(singleGroup);
-    singleMpiSpin_->setObjectName(QStringLiteral("singleMpiSpin"));
-    singleMpiSpin_->setRange(1, 4096); singleMpiSpin_->setValue(4);
-    singleOutputModeCombo_ = new QComboBox(singleGroup);
-    singleOutputModeCombo_->setObjectName(QStringLiteral("singleOutputModeCombo"));
-    singleOutputModeCombo_->addItem(uiText(u"\u63d0\u4ea4\u672c\u5730\u8ba1\u7b97"), QStringLiteral("local"));
-    singleOutputModeCombo_->addItem(uiText(u"\u4ec5\u751f\u6210\u8f93\u5165\u6587\u4ef6"), QStringLiteral("input-only"));
-    singleOutputModeCombo_->addItem(uiText(u"\u4ec5\u751f\u6210\u8ba1\u7b97\u538b\u7f29\u5305"), QStringLiteral("package-only"));
-    singleForm->addRow(uiText(u"\u5de5\u51b5"), singleCaseCombo_);
-    singleForm->addRow(uiText(u"\u9a6c\u8d6b\u6570"), singleMachSpin_);
-    singleForm->addRow(uiText(u"\u653b\u89d2"), singleAoASpin_);
-    singleForm->addRow(uiText(u"\u6e29\u5ea6"), singleTemperatureSpin_);
-    singleForm->addRow(uiText(u"MPI \u8fdb\u7a0b\u6570"), singleMpiSpin_);
-    singleForm->addRow(uiText(u"\u8f93\u51fa\u65b9\u5f0f"), singleOutputModeCombo_);
-    // Keep the same condition data visible in the single-task form.  The
-    // selected state is the source of truth; the dialog remains available for
-    // a one-off run override.
-    singleGroup->show();
-    singleParametersSummary_ = new QLabel(singleCalculationPage_);
-    singleParametersSummary_->setObjectName(QStringLiteral("singleParametersSummary"));
-    singleParametersSummary_->setWordWrap(true);
-    singleLayout->addWidget(singleParametersSummary_);
-    auto *editSingleParameters = new QPushButton(uiText(u"\u7f16\u8f91\u672c\u6b21\u53c2\u6570"), singleCalculationPage_);
-    editSingleParameters->setObjectName(QStringLiteral("editSingleParameters"));
-    connect(editSingleParameters, &QPushButton::clicked, this, [this] {
-        QString caseId = singleCaseCombo_->currentText();
-        double mach = singleMachSpin_->value();
-        double aoa = singleAoASpin_->value();
-        double temperature = singleTemperatureSpin_->value();
-        int mpi = singleMpiSpin_->value();
-        if (!editCalculationParameters(caseId, mach, aoa, temperature, mpi)) return;
-        singleCaseCombo_->setCurrentText(caseId);
-        singleMachSpin_->setValue(mach);
-        singleAoASpin_->setValue(aoa);
-        singleTemperatureSpin_->setValue(temperature);
-        singleMpiSpin_->setValue(mpi);
-    singleParametersSummary_->setText(uiText(u"\u5f53\u524d\u5355\u6b21\u5de5\u51b5\uff1a%1\n\u9a6c\u8d6b\u6570 %2\uff0c\u653b\u89d2 %3\uff0c\u6e29\u5ea6 %4 K\uff0cMPI %5").arg(caseId).arg(mach).arg(aoa).arg(temperature).arg(mpi));
-    });
-    singleLayout->addWidget(editSingleParameters, 0, Qt::AlignLeft);
-    singleParametersSummary_->setText(uiText(u"\u5f53\u524d\u5355\u6b21\u5de5\u51b5\uff1a%1\n\u9a6c\u8d6b\u6570 %2\uff0c\u653b\u89d2 %3\uff0c\u6e29\u5ea6 %4 K\uff0cMPI %5").arg(singleCaseCombo_->currentText()).arg(singleMachSpin_->value()).arg(singleAoASpin_->value()).arg(singleTemperatureSpin_->value()).arg(singleMpiSpin_->value()));
-    connect(singleCaseCombo_, &QComboBox::currentTextChanged, this, [this](const QString &id) {
-        applyStateToSingleCalculation(id);
-    });
-    applyStateToSingleCalculation(singleCaseCombo_->currentText());
-    auto *singleHint = new QLabel(uiText(u"\u9009\u62e9\u5de5\u51b5\u540e\u4f1a\u8f7d\u5165\u5de5\u51b5\u53c2\u6570\uff1b\u8fd9\u91cc\u4fee\u6539\u4ec5\u4f5c\u7528\u4e8e\u672c\u6b21\u4efb\u52a1\uff0c\u4e0d\u4f1a\u6539\u52a8\u5de5\u51b5\u7ba1\u7406\u4e2d\u7684\u5de5\u51b5\u3002\u8981\u4fee\u6539\u5de5\u51b5\u672c\u8eab\u8bf7\u56de\u5230\u5de5\u51b5\u7ba1\u7406\u3002\u70b9\u51fb\u63d0\u4ea4\u540e\u4f1a\u751f\u6210 snapshot ID\u3002"), singleCalculationPage_);
-    singleHint->setWordWrap(true); singleLayout->addWidget(singleHint);
-    auto *singleSubmit = new QPushButton(uiText(u"\u751f\u6210\u5e76\u63d0\u4ea4\u5355\u6b21\u4efb\u52a1"), singleCalculationPage_);
-    singleSubmit->setObjectName(QStringLiteral("submitSingleCalculation"));
-    connect(singleSubmit, &QPushButton::clicked, this, &MainWindow::submitSingleCalculation);
-    singleLayout->addWidget(singleSubmit, 0, Qt::AlignLeft);
-    singleGenerationStatus_ = new QLabel(uiText(u"\u5c1a\u672a\u751f\u6210\u4efb\u52a1"), singleCalculationPage_);
-    singleGenerationStatus_->setObjectName(QStringLiteral("singleGenerationStatus"));
-    singleGenerationStatus_->setWordWrap(true); singleLayout->addWidget(singleGenerationStatus_);
-    singleLayout->addStretch();
-
-    batchCalculationPage_ = createWorkspacePage(
-        QStringLiteral("batchCalculationPage"), uiText(u"\u6279\u91cf\u8ba1\u7b97"),
-        uiText(u"\u5148\u7528 + \u6dfb\u52a0\u591a\u7ec4\u5de5\u51b5\u53c2\u6570\uff0c\u518d\u63d0\u4ea4\u4e00\u6b21\u6279\u5904\u7406\u4efb\u52a1\u3002\u9009\u62e9\u5de5\u51b5\u540e\u4fee\u6539\u7684\u6570\u503c\u53ea\u4f5c\u7528\u4e8e\u8be5\u6279\u6b21\u7684\u5b50\u4efb\u52a1\uff0c\u4e0d\u4f1a\u6539\u52a8\u5de5\u51b5\u7ba1\u7406\u3002\u5f53\u524d\u5b9e\u73b0\u662f UI/Mock \u6d41\u7a0b\u3002"));
-    auto *batchCalculationLayout = qobject_cast<QVBoxLayout *>(batchCalculationPage_->layout());
-    batchCalculationTable_ = new QTableWidget(0, 6, batchCalculationPage_);
-    batchCalculationTable_->setObjectName(QStringLiteral("batchCalculationTable"));
-    batchCalculationTable_->setHorizontalHeaderLabels({uiText(u"\u5de5\u51b5"), uiText(u"\u9a6c\u8d6b\u6570"), uiText(u"\u653b\u89d2"), uiText(u"\u6e29\u5ea6(K)"), QStringLiteral("MPI"), uiText(u"\u6821\u9a8c")});
-    batchCalculationTable_->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
-    batchCalculationTable_->setSelectionBehavior(QAbstractItemView::SelectRows);
-    batchCalculationTable_->setSelectionMode(QAbstractItemView::SingleSelection);
-    batchCalculationTable_->setEditTriggers(QAbstractItemView::NoEditTriggers);
-    connect(batchCalculationTable_, &QTableWidget::cellDoubleClicked, this, [this](int row, int) {
-        if (row < 0 || row >= batchCalculationTable_->rowCount()) return;
-        QString caseId = batchCalculationTable_->item(row, 0)->text();
-        double mach = batchCalculationTable_->item(row, 1)->text().toDouble();
-        double aoa = batchCalculationTable_->item(row, 2)->text().toDouble();
-        double temperature = batchCalculationTable_->item(row, 3)->text().toDouble();
-        int mpi = batchCalculationTable_->item(row, 4)->text().toInt();
-        if (!editCalculationParameters(caseId, mach, aoa, temperature, mpi)) return;
-        const QStringList values = {caseId, QString::number(mach, 'f', 3), QString::number(aoa, 'f', 3),
-                                    QString::number(temperature, 'f', 2), QString::number(mpi), uiText(u"\u5df2\u901a\u8fc7")};
-        for (int column = 0; column < values.size(); ++column)
-            batchCalculationTable_->setItem(row, column, new QTableWidgetItem(values.at(column)));
-    });
-    batchCalculationLayout->addWidget(batchCalculationTable_, 1);
-    auto *batchButtons = new QHBoxLayout;
-    auto *addBatch = new QPushButton(uiText(u"+ \u6dfb\u52a0\u5de5\u51b5"), batchCalculationPage_);
-    addBatch->setObjectName(QStringLiteral("addBatchCase"));
-    auto *removeBatch = new QPushButton(uiText(u"- \u79fb\u9664\u9009\u4e2d"), batchCalculationPage_);
-    removeBatch->setObjectName(QStringLiteral("removeBatchCase"));
-    connect(addBatch, &QPushButton::clicked, this, &MainWindow::addBatchCase);
-    connect(removeBatch, &QPushButton::clicked, this, &MainWindow::removeBatchCase);
-    batchButtons->addWidget(addBatch); batchButtons->addWidget(removeBatch); batchButtons->addStretch();
-    batchCalculationLayout->addLayout(batchButtons);
-    auto *batchOutputLayout = new QHBoxLayout;
-    batchOutputLayout->addWidget(new QLabel(uiText(u"\u6279\u5904\u7406\u8f93\u51fa\u65b9\u5f0f"), batchCalculationPage_));
-    auto *batchOutputMode = new QComboBox(batchCalculationPage_);
-    batchOutputMode->setObjectName(QStringLiteral("batchOutputModeCombo"));
-    batchOutputMode->addItem(uiText(u"\u63d0\u4ea4\u672c\u5730\u8ba1\u7b97"), QStringLiteral("local"));
-    batchOutputMode->addItem(uiText(u"\u4ec5\u751f\u6210\u8f93\u5165\u6587\u4ef6"), QStringLiteral("input-only"));
-    batchOutputMode->addItem(uiText(u"\u4ec5\u751f\u6210\u8ba1\u7b97\u538b\u7f29\u5305"), QStringLiteral("package-only"));
-    batchOutputLayout->addWidget(batchOutputMode);
-    batchOutputLayout->addStretch();
-    batchCalculationLayout->addLayout(batchOutputLayout);
-    auto *submitBatch = new QPushButton(uiText(u"\u751f\u6210\u5e76\u63d0\u4ea4\u6279\u91cf\u4efb\u52a1"), batchCalculationPage_);
-    submitBatch->setObjectName(QStringLiteral("submitBatchCalculation"));
-    connect(submitBatch, &QPushButton::clicked, this, &MainWindow::submitBatchCalculation);
-    batchCalculationLayout->addWidget(submitBatch, 0, Qt::AlignLeft);
-    batchGenerationStatus_ = new QLabel(uiText(u"\u8bf7\u5148\u6dfb\u52a0\u81f3\u5c11\u4e00\u7ec4\u5de5\u51b5\u3002"), batchCalculationPage_);
-    batchGenerationStatus_->setObjectName(QStringLiteral("batchGenerationStatus"));
-    batchGenerationStatus_->setWordWrap(true); batchCalculationLayout->addWidget(batchGenerationStatus_);
-    batchCalculationLayout->addStretch();
+    singleCalculationPage_ = new CalculationTaskPage(false, workspaceStack_);
+    batchCalculationPage_ = new CalculationTaskPage(true, workspaceStack_);
     workspaceStack_->addWidget(singleCalculationPage_);
     workspaceStack_->addWidget(batchCalculationPage_);
     workspacePages_.insert(QStringLiteral("single-calculation"), singleCalculationPage_);
     workspacePages_.insert(QStringLiteral("batch-calculation"), batchCalculationPage_);
+    // One stable host is shared when switching pages; ?'s curve widget can be
+    // injected once, without recreating it or duplicating algorithms.
+    createSlot(WidgetSlot::Monitor, {});
 
-    batchMonitorPage_ = createWorkspacePage(QStringLiteral("batchMonitorPage"), uiText(u"\u6279\u5904\u7406\u603b\u4f53\u76d1\u63a7"),
-        uiText(u"Mock \u754c\u9762\u793a\u4f8b\uff1a3 \u4e2a\u5b50\u4efb\u52a1\uff0c\u5df2\u5b8c\u6210 1\uff0c\u8fd0\u884c\u4e2d 1\uff0c\u7b49\u5f85 1\uff0c\u5931\u8d25 0\u3002\u5c1a\u672a\u63a5\u5165\u771f\u5b9e BatchRun \u6570\u636e\u3002"));
-    auto *batchMonitorLayout = qobject_cast<QVBoxLayout *>(batchMonitorPage_->layout());
-    batchRunProgress_ = new QProgressBar(batchMonitorPage_);
-    batchRunProgress_->setObjectName(QStringLiteral("batchRunProgress"));
-    batchRunProgress_->setRange(0, 3);
-    batchRunProgress_->setValue(1);
-    batchRunProgress_->setFormat(uiText(u"Mock \u793a\u4f8b\uff1a%v / %m \u5df2\u5b8c\u6210"));
-    batchMonitorLayout->addWidget(batchRunProgress_);
-    batchRunSummary_ = new QLabel(uiText(u"\u603b\u6570 3    \u8fd0\u884c\u4e2d 1    \u5df2\u5b8c\u6210 1    \u5931\u8d25 0    \u7b49\u5f85 1    \uff08Mock\uff09"), batchMonitorPage_);
-    batchRunSummary_->setObjectName(QStringLiteral("batchRunSummary"));
-    batchMonitorLayout->addWidget(batchRunSummary_);
-    batchMonitorLayout->addStretch();
-    taskMonitorPage_ = createWorkspacePage(QStringLiteral("taskMonitorPage"), uiText(u"\u5355\u4efb\u52a1\u76d1\u63a7"),
-        uiText(u"\u7efc\u5408\u663e\u793a\u4efb\u52a1\u8fdb\u5ea6\u3001\u6536\u655b\u8d8b\u52bf\u548c\u8d44\u6e90\u4fe1\u606f\u3002\u672a\u63a5\u5165\u771f\u5b9e\u6570\u636e\u7684\u5b57\u6bb5\u5747\u6807\u8bb0\u4e3a Mock\u3002"));
     dataProcessPage_ = createWorkspacePage(QStringLiteral("intelligentDataPage"),
         uiText(u"\u667a\u80fd\u6570\u636e\u5904\u7406"), {});
     // The module page keeps its own object name and heading: the workspace-tree
@@ -892,25 +648,17 @@ void MainWindow::createWorkspace()
         QStringLiteral("postprocessOverviewPage"), uiText(u"\u540e\u5904\u7406\u5206\u6790"),
         uiText(u"\u8be5\u6a21\u5757\u529f\u80fd\u5f85\u63a5\u5165\u3002\u5df2\u6709\u540e\u5904\u7406\u5de5\u4f5c\u53f0\u4e0e\u76f8\u5173\u4ee3\u7801\u4fdd\u6301\u4e0d\u53d8\uff0c\u672c\u9875\u4e0d\u521b\u5efa\u7b2c\u4e8c\u4e2a VTK \u89c6\u53e3\u6216\u6267\u884c\u540e\u5904\u7406\u7b97\u6cd5\u3002"));
     qobject_cast<QVBoxLayout *>(postprocessOverviewPage_->layout())->addStretch();
-    // The live monitoring page is a real page fed by task events and monitor
-    // samples. It sits beside the mock task-monitor page above instead of
-    // replacing it: the placeholder carries its own navigation entry and the
-    // window-level tests pin its object names and log behaviour.
+    // The live monitoring page is kept as a hidden, reusable curve host for the
+    // visualization module. It is no longer a workspace-tree navigation
+    // destination; the window only feeds it task events (see displayTaskEvent)
+    // and the assembly layer injects the curve widget. Because it is not
+    // registered in workspacePages_, navigation can never open it.
     monitorPage_ = new ComputeMonitorPage(workspaceStack_);
-    computeMonitorPage_ = monitorPage_;
-    workspaceStack_->addWidget(computeMonitorPage_);
-    workspacePages_.insert(QStringLiteral("compute-monitor"), computeMonitorPage_);
-    for (auto *page : {parameterWorkspacePage_, calculationOverviewPage_, stateListPage_, batchPlanPage_,
-                       batchMonitorPage_, taskMonitorPage_, dataProcessPage_, postprocessOverviewPage_})
+    for (auto *page : {parameterWorkspacePage_, dataProcessPage_, postprocessOverviewPage_})
         workspaceStack_->addWidget(page);
     workspacePages_.insert(QStringLiteral("viewport"), viewportPage_);
     workspacePages_.insert(QStringLiteral("trajectory-settings"), trajectorySettingsPage_);
     workspacePages_.insert(QStringLiteral("parameters"), parameterWorkspacePage_);
-    workspacePages_.insert(QStringLiteral("calculation-overview"), calculationOverviewPage_);
-    workspacePages_.insert(QStringLiteral("states"), stateListPage_);
-    workspacePages_.insert(QStringLiteral("batch-plan"), batchPlanPage_);
-    workspacePages_.insert(QStringLiteral("batch-monitor"), batchMonitorPage_);
-    workspacePages_.insert(QStringLiteral("task-monitor"), taskMonitorPage_);
     workspacePages_.insert(QStringLiteral("data-process"), dataProcessPage_);
     workspacePages_.insert(QStringLiteral("intelligent-data"), dataProcessPage_);
     // Both result pages resolve to the one module page; showWorkspacePage picks
@@ -927,10 +675,7 @@ void MainWindow::createWorkspace()
     for (const QString &pageId : {QStringLiteral("viewport"), QStringLiteral("trajectory-settings")})
         workspacePageModules_.insert(pageId, preprocessModuleId);
     workspacePageModules_.insert(QStringLiteral("parameters"), parameterModuleId);
-    for (const QString &pageId : {QStringLiteral("calculation-overview"), QStringLiteral("states"),
-                                  QStringLiteral("batch-plan"), QStringLiteral("batch-monitor"),
-                                  QStringLiteral("task-monitor"), QStringLiteral("single-calculation"),
-                                  QStringLiteral("batch-calculation")})
+    for (const QString &pageId : {QStringLiteral("single-calculation"), QStringLiteral("batch-calculation")})
         workspacePageModules_.insert(pageId, calculationModuleId);
     workspacePageModules_.insert(QStringLiteral("data-process"), intelligentModuleId);
     workspacePageModules_.insert(QStringLiteral("intelligent-data"), intelligentModuleId);
@@ -939,14 +684,14 @@ void MainWindow::createWorkspace()
     workspacePageModules_.insert(QStringLiteral("postprocess-overview"), postprocessModuleId);
     moduleLastPages_.insert(preprocessModuleId, QStringLiteral("viewport"));
     moduleLastPages_.insert(parameterModuleId, QStringLiteral("parameters"));
-    moduleLastPages_.insert(calculationModuleId, QStringLiteral("calculation-overview"));
+    moduleLastPages_.insert(calculationModuleId, QStringLiteral("single-calculation"));
     moduleLastPages_.insert(intelligentModuleId, QStringLiteral("intelligent-data"));
     moduleLastPages_.insert(postprocessModuleId, QStringLiteral("postprocess-overview"));
     setCentralWidget(workspaceStack_);
 
     projectDock_ = new QDockWidget(uiText(u"\u5de5\u4f5c\u533a\u6811"), this);
     projectDock_->setObjectName(QStringLiteral("projectDock"));
-    projectDock_->setMinimumWidth(220);
+    projectDock_->setMinimumWidth(uimetrics::projectDockMinimumWidth());
     projectDock_->setFeatures(QDockWidget::DockWidgetMovable);
     projectDock_->setAllowedAreas(Qt::LeftDockWidgetArea);
     projectDock_->installEventFilter(this);
@@ -974,41 +719,21 @@ void MainWindow::createWorkspace()
             QString::fromUtf16(reinterpret_cast<const ushort *>(definition.label)),
             QStringLiteral("parameter-dialog"), QString::fromLatin1(definition.id), QStringLiteral("parameter-page"));
     }
-    auto *calculationModule = addNavigationItem(root, uiText(u"\u8ba1\u7b97"), {}, QStringLiteral("module-calculation"), QStringLiteral("module"));
-    auto *startCalculation = addNavigationItem(calculationModule, uiText(u"\u5f00\u59cb\u8ba1\u7b97"), QStringLiteral("calculation-overview"), QStringLiteral("start-calculation"), QStringLiteral("group"));
-    statesNavigationItem_ = addNavigationItem(startCalculation, uiText(u"\u5de5\u51b5\u7ba1\u7406"), QStringLiteral("state-manager"), QStringLiteral("states"), QStringLiteral("state-manager"));
-    for (const QString &id : stateIds_) {
-        addNavigationItem(statesNavigationItem_, id + uiText(u"\uff08Mock \u754c\u9762\u793a\u4f8b\uff09"), QStringLiteral("state"), id, QStringLiteral("state"));
-    }
-    auto *plans = addNavigationItem(startCalculation, uiText(u"\u6279\u5904\u7406\u8ba1\u5212"), QStringLiteral("batch-plans"), QStringLiteral("batch-plans"), QStringLiteral("batch-plans"));
-    plans->setToolTip(0, uiText(u"\u53ea\u8bfb\u9884\u7559\uff1a\u5f53\u524d\u8bf7\u4f7f\u7528\u6279\u91cf\u8ba1\u7b97\u76f4\u63a5\u7ec4\u7ec7\u5e76\u63d0\u4ea4\u4efb\u52a1"));
-    addNavigationItem(startCalculation, uiText(u"\u5355\u6b21\u8ba1\u7b97"), QStringLiteral("single-calculation"), QStringLiteral("single-calculation"), QStringLiteral("feature"));
-    addNavigationItem(startCalculation, uiText(u"\u6279\u91cf\u8ba1\u7b97"), QStringLiteral("batch-calculation"), QStringLiteral("batch-calculation"), QStringLiteral("feature"));
-    auto *calculationMonitor = addNavigationItem(calculationModule, uiText(u"\u8ba1\u7b97\u76d1\u63a7"), QStringLiteral("task-monitor"), QStringLiteral("calculation-monitor"), QStringLiteral("group"));
-    auto *singleRuns = addNavigationItem(calculationMonitor, uiText(u"\u5355\u6b21\u8ba1\u7b97\u4efb\u52a1"), {}, QStringLiteral("single-runs"), QStringLiteral("group"));
-    auto *run = addNavigationItem(singleRuns, uiText(u"Run_001\uff08Mock \u793a\u4f8b\uff09"), QStringLiteral("task"), QStringLiteral("Run_001"), QStringLiteral("task"));
-    setTaskItemStatus(run, TaskStatus::Running);
-    auto *batchRuns = addNavigationItem(calculationMonitor, uiText(u"\u6279\u5904\u7406\u4efb\u52a1"), {}, QStringLiteral("batch-runs"), QStringLiteral("group"));
-    auto *batchRun = addNavigationItem(batchRuns, uiText(u"BatchRun_001\uff08Mock \u793a\u4f8b\uff09"), QStringLiteral("batch-run"), QStringLiteral("BatchRun_001"), QStringLiteral("batch-run"));
-    setTaskItemStatus(batchRun, TaskStatus::Running);
-    for (int i = 1; i <= 3; ++i) {
-        const QString id = QStringLiteral("Task_%1").arg(i, 3, 10, QLatin1Char('0'));
-        auto *task = addNavigationItem(batchRun, id + uiText(u"\uff08Mock \u793a\u4f8b\uff09"), QStringLiteral("task"), id, QStringLiteral("task"));
-        setTaskItemStatus(task, i == 1 ? TaskStatus::Finished : i == 2 ? TaskStatus::Running : TaskStatus::Preparing);
-    }
-    // Appended after the two run groups, never between them: the workspace tree
-    // tests address 单次计算任务 and 批处理任务 by child index under 计算监控.
-    addNavigationItem(calculationMonitor, uiText(u"\u5b9e\u65f6\u76d1\u63a7"), QStringLiteral("compute-monitor"), QStringLiteral("compute-monitor"), QStringLiteral("feature"));
+    auto *calculationModule = addNavigationItem(root, uiText(u"\u8ba1\u7b97\u4efb\u52a1"), {}, QStringLiteral("module-calculation"), QStringLiteral("module"));
+    addNavigationItem(calculationModule, uiText(u"\u5355\u4efb\u52a1"), QStringLiteral("single-calculation"), QStringLiteral("single-calculation"), QStringLiteral("feature"));
+    addNavigationItem(calculationModule, uiText(u"\u591a\u4efb\u52a1"), QStringLiteral("batch-calculation"), QStringLiteral("batch-calculation"), QStringLiteral("feature"));
     auto *intelligentModule = addNavigationItem(root, uiText(u"\u667a\u80fd\u6570\u636e\u5904\u7406"), {}, QStringLiteral("module-intelligent-data"), QStringLiteral("module"));
     addNavigationItem(intelligentModule, uiText(u"结果数据表可视化分析"), QStringLiteral("result-data-table"), QStringLiteral("result-data-table"), QStringLiteral("feature"));
     addNavigationItem(intelligentModule, uiText(u"结果汇总分析"), QStringLiteral("result-summary-table"), QStringLiteral("result-summary-table"), QStringLiteral("feature"));
+    // The standalone compute-monitoring ("实时监控 / 任务列表") navigation entry
+    // has been removed from the workspace tree. The live monitoring page remains
+    // only as a hidden curve host for the visualization module; the calculation
+    // module stays the deliberately small single/multiple task entry point.
     addNavigationItem(root, uiText(u"\u540e\u5904\u7406\u5206\u6790"), {}, QStringLiteral("module-postprocess-analysis"), QStringLiteral("module"));
     root->setExpanded(true);
     preprocessModule->setExpanded(true);
     parameterModule->setExpanded(true);
     calculationModule->setExpanded(true);
-    startCalculation->setExpanded(true);
-    calculationMonitor->setExpanded(true);
     connect(projectTree_, &QTreeWidget::currentItemChanged, this, [this](QTreeWidgetItem *item) { handleNavigationSelection(item); });
     projectDock_->setWidget(projectTree_);
 
@@ -1030,7 +755,7 @@ void MainWindow::createWorkspace()
     propertyDock_->setObjectName(QStringLiteral("propertyDock"));
     // Leave enough room for the project tree to grow while keeping the
     // property editor usable beside it.
-    propertyDock_->setMinimumWidth(180);
+    propertyDock_->setMinimumWidth(uimetrics::propertyDockMinimumWidth());
     // The property editor is part of the workbench layout.  Keeping it docked
     // prevents a close/float action from making every later selection reopen a
     // floating window and leaves the left dock splitter available for resizing.
@@ -1054,153 +779,6 @@ void MainWindow::createWorkspace()
     propertyLayout->addWidget(draftReset_);
     propertyDock_->setWidget(properties);
     selectPage(QStringLiteral("viewport"));
-
-    // Reuse the existing monitor slot and task list in the right-hand monitor
-    // workspaces. The bottom dock is reserved for unified runtime output.
-    auto *taskMonitorLayout = qobject_cast<QVBoxLayout *>(taskMonitorPage_->layout());
-    taskMonitorTitle_ = new QLabel(uiText(u"Task_001 \u00b7 \u8fd0\u884c\u4e2d\uff08Mock\uff09"), taskMonitorPage_);
-    taskMonitorTitle_->setObjectName(QStringLiteral("taskMonitorTitle"));
-    QFont taskTitleFont = taskMonitorTitle_->font();
-    taskTitleFont.setPointSize(taskTitleFont.pointSize() + 2);
-    taskTitleFont.setBold(true);
-    taskMonitorTitle_->setFont(taskTitleFont);
-    taskMonitorLayout->addWidget(taskMonitorTitle_);
-    auto *monitorSlot = createSlot(WidgetSlot::Monitor, {});
-    monitorSlot->setObjectName(QStringLiteral("monitorWorkspaceSlot"));
-    auto *monitorLayout = slotLayouts_.value(static_cast<int>(WidgetSlot::Monitor));
-    auto *oldMonitorItem = monitorLayout->takeAt(0);
-    delete oldMonitorItem->widget();
-    delete oldMonitorItem;
-    auto *monitor = new QFrame(monitorSlot);
-    monitor->setObjectName(QStringLiteral("taskMetricsFrame"));
-    monitor->setFrameShape(QFrame::StyledPanel);
-    auto *monitorForm = new QFormLayout(monitor);
-    monitorStatus_ = new QLabel(uiText(u"Running\uff08Mock\uff09"), monitor);
-    monitorDetails_ = new QLabel(uiText(u"\u5f53\u524d\u8fed\u4ee3\uff1a1250    \u603b\u8fed\u4ee3\uff1a10000    \u6b8b\u5dee\uff1a1.2e-4\uff08Mock\uff09"), monitor);
-    progress_ = new QProgressBar(monitor);
-    progress_->setRange(0, 1000);
-    progress_->setValue(125);
-    progress_->setFormat(uiText(u"12.5%\uff08Mock\uff09"));
-    monitorForm->addRow(uiText(u"\u8fd0\u884c\u72b6\u6001"), monitorStatus_);
-    monitorForm->addRow(uiText(u"\u8fed\u4ee3\u4fe1\u606f"), monitorDetails_);
-    monitorForm->addRow(uiText(u"\u8ba1\u7b97\u8fdb\u5ea6"), progress_);
-    monitorLayout->addWidget(monitor);
-    taskMonitorLayout->addWidget(monitorSlot);
-    taskMonitorContentSplitter_ = new QSplitter(Qt::Vertical, taskMonitorPage_);
-    taskMonitorContentSplitter_->setObjectName(QStringLiteral("taskMonitorContentSplitter"));
-    taskMonitorContentSplitter_->setChildrenCollapsible(false);
-    auto *curveFrame = new QFrame(taskMonitorContentSplitter_);
-    curveFrame->setObjectName(QStringLiteral("convergenceCurvePanel"));
-    curveFrame->setFrameShape(QFrame::StyledPanel);
-    curveFrame->setMinimumHeight(150);
-    auto *curveLayout = new QVBoxLayout(curveFrame);
-    auto *curveTitle = new QLabel(uiText(u"\u6536\u655b\u66f2\u7ebf"), curveFrame);
-    QFont curveTitleFont = curveTitle->font();
-    curveTitleFont.setBold(true);
-    curveTitle->setFont(curveTitleFont);
-    curveLayout->addWidget(curveTitle);
-    taskCurveState_ = emptyState(uiText(u"Task_001 \u00b7 Mock \u66f2\u7ebf\u533a\u57df\n\u7b49\u5f85\u6b8b\u5dee\u91c7\u6837\u6570\u636e\u4e0e\u66f2\u7ebf\u7ec4\u4ef6\u63a5\u5165"), curveFrame);
-    taskCurveState_->setObjectName(QStringLiteral("taskCurveState"));
-    curveLayout->addWidget(taskCurveState_, 1);
-
-    auto *taskLogPanel = new QFrame(taskMonitorContentSplitter_);
-    taskLogPanel->setObjectName(QStringLiteral("taskRuntimeLogPanel"));
-    taskLogPanel->setFrameShape(QFrame::StyledPanel);
-    taskLogPanel->setMinimumHeight(130);
-    auto *taskLogLayout = new QVBoxLayout(taskLogPanel);
-    taskLogLayout->setContentsMargins(8, 6, 8, 8);
-    auto *taskLogToolbar = new QHBoxLayout;
-    auto *taskLogTitle = new QLabel(uiText(u"\u5f53\u524d\u4efb\u52a1\u65e5\u5fd7"), taskLogPanel);
-    QFont taskLogTitleFont = taskLogTitle->font();
-    taskLogTitleFont.setBold(true);
-    taskLogTitle->setFont(taskLogTitleFont);
-    taskLogToolbar->addWidget(taskLogTitle);
-    taskLogStreamFilter_ = new QComboBox(taskLogPanel);
-    taskLogStreamFilter_->setObjectName(QStringLiteral("taskLogStreamFilter"));
-    taskLogStreamFilter_->addItem(uiText(u"\u5168\u90e8\u8f93\u51fa"), QStringLiteral("all"));
-    taskLogStreamFilter_->addItem(QStringLiteral("stdout"), QStringLiteral("stdout"));
-    taskLogStreamFilter_->addItem(QStringLiteral("stderr"), QStringLiteral("stderr"));
-    taskLogToolbar->addWidget(taskLogStreamFilter_);
-    taskLogAutoScroll_ = new QCheckBox(uiText(u"\u81ea\u52a8\u6eda\u52a8"), taskLogPanel);
-    taskLogAutoScroll_->setObjectName(QStringLiteral("taskLogAutoScroll"));
-    taskLogAutoScroll_->setChecked(true);
-    taskLogToolbar->addWidget(taskLogAutoScroll_);
-    auto *appendTaskLog = new QPushButton(uiText(u"\u8ffd\u52a0\u6f14\u793a"), taskLogPanel);
-    appendTaskLog->setObjectName(QStringLiteral("appendTaskLogMockButton"));
-    appendTaskLog->setToolTip(uiText(u"Mock\uff1a\u8ffd\u52a0\u4e00\u884c stdout\uff0c\u4e0d\u63a5\u5165\u771f\u5b9e\u6c42\u89e3\u5668"));
-    taskLogToolbar->addWidget(appendTaskLog);
-    auto *updateProgress = new QPushButton(uiText(u"\u66f4\u65b0\u8fdb\u5ea6"), taskLogPanel);
-    updateProgress->setObjectName(QStringLiteral("updateTaskProgressMockButton"));
-    updateProgress->setToolTip(uiText(u"Mock\uff1a\u66ff\u6362\u5f53\u524d\u8fdb\u5ea6\u884c\uff0c\u6f14\u793a\u4e0d\u6362\u884c\u8f93\u51fa"));
-    taskLogToolbar->addWidget(updateProgress);
-    auto *clearTaskLog = new QPushButton(uiText(u"\u6e05\u7a7a\u663e\u793a"), taskLogPanel);
-    clearTaskLog->setObjectName(QStringLiteral("clearTaskLogButton"));
-    taskLogToolbar->addWidget(clearTaskLog);
-    taskLogToolbar->addStretch();
-    taskLogLayout->addLayout(taskLogToolbar);
-    taskLogView_ = new QPlainTextEdit(taskLogPanel);
-    taskLogView_->setObjectName(QStringLiteral("taskRuntimeLogView"));
-    taskLogView_->setReadOnly(true);
-    taskLogView_->setLineWrapMode(QPlainTextEdit::NoWrap);
-    taskLogView_->setFont(QFontDatabase::systemFont(QFontDatabase::FixedFont));
-    taskLogView_->setPlaceholderText(uiText(u"\u5f53\u524d\u4efb\u52a1\u6682\u65e0\u8fd0\u884c\u65e5\u5fd7\uff08Mock\uff09"));
-    taskLogLayout->addWidget(taskLogView_, 1);
-    taskMonitorContentSplitter_->addWidget(curveFrame);
-    taskMonitorContentSplitter_->addWidget(taskLogPanel);
-    taskMonitorContentSplitter_->setStretchFactor(0, 3);
-    taskMonitorContentSplitter_->setStretchFactor(1, 2);
-    taskMonitorContentSplitter_->setSizes({300, 170});
-    taskMonitorLayout->addWidget(taskMonitorContentSplitter_, 1);
-    taskResourceSummary_ = new QLabel(uiText(u"CPU 76%    \u5185\u5b58 18.3 GB    MPI 32    \u8ba1\u7b97\u65f6\u95f4 00:12:35    \uff08Mock\uff09"), taskMonitorPage_);
-    taskResourceSummary_->setObjectName(QStringLiteral("taskResourceSummary"));
-    taskMonitorLayout->addWidget(taskResourceSummary_);
-
-    taskLogEntries_.insert(QStringLiteral("Run_001"), {
-        {QStringLiteral("stdout"), QStringLiteral("[12:00:01] Solver started")},
-        {QStringLiteral("stdout"), QStringLiteral("[12:00:02] Iteration 100: Residual = 1.0e-2")},
-        {QStringLiteral("stderr"), QStringLiteral("[12:00:03] Warning: convergence is slower than expected")},
-        {QStringLiteral("stdout"), QStringLiteral("Progress: 12% (same-line update mock)")}});
-    taskLogEntries_.insert(QStringLiteral("Task_001"), {
-        {QStringLiteral("stdout"), QStringLiteral("[12:10:01] Solver started for Task_001")},
-        {QStringLiteral("stdout"), QStringLiteral("[12:10:02] Iteration 1: Residual = 0.1")},
-        {QStringLiteral("stdout"), QStringLiteral("[12:10:03] Iteration 2: Residual = 0.01")},
-        {QStringLiteral("stderr"), QStringLiteral("[12:10:04] Warning: convergence issue")},
-        {QStringLiteral("stdout"), QStringLiteral("Progress: 100% (same-line update mock)")}});
-    taskLogEntries_.insert(QStringLiteral("Task_002"), {
-        {QStringLiteral("stdout"), QStringLiteral("[12:20:01] Solver started for Task_002")},
-        {QStringLiteral("stdout"), QStringLiteral("[12:20:02] Iteration 250: Residual = 4.2e-3")},
-        {QStringLiteral("stdout"), QStringLiteral("Progress: 42% (same-line update mock)")}});
-    taskLogEntries_.insert(QStringLiteral("Task_003"), {});
-    connect(taskLogStreamFilter_, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
-            [this] { refreshTaskLog(); });
-    connect(clearTaskLog, &QPushButton::clicked, this, [this] {
-        taskLogEntries_[currentTaskId_].clear();
-        refreshTaskLog();
-    });
-    connect(appendTaskLog, &QPushButton::clicked, this, [this] {
-        const int iteration = taskLogEntries_.value(currentTaskId_).size() + 1;
-        appendTaskLogMock(QStringLiteral("stdout"),
-            uiText(u"Mock \u8ffd\u52a0\uff1aIteration %1: Residual = 1.0e-%2").arg(iteration).arg(iteration));
-    });
-    connect(updateProgress, &QPushButton::clicked, this, [this] {
-        const int previous = taskLogEntries_.value(currentTaskId_).size() * 10;
-        updateTaskProgressMock(QStringLiteral("Progress: %1% (same-line update mock)").arg(qMin(100, previous + 10)));
-    });
-    showTaskMonitor(currentTaskId_);
-
-    taskTree_ = new QTreeWidget(batchMonitorPage_);
-    taskTree_->setObjectName(QStringLiteral("taskTree"));
-    taskTree_->setHeaderLabels({uiText(u"\u4efb\u52a1 ID"), uiText(u"\u72b6\u6001"), uiText(u"\u6d88\u606f"), uiText(u"\u65f6\u95f4")});
-    taskTree_->header()->setSectionResizeMode(QHeaderView::ResizeToContents);
-    taskTree_->header()->setSectionResizeMode(2, QHeaderView::Stretch);
-    taskTree_->setAlternatingRowColors(true);
-    new QTreeWidgetItem(taskTree_, {QStringLiteral("Task_001"), uiText(u"\u5df2\u5b8c\u6210\uff08Mock\uff09"), uiText(u"\u793a\u4f8b\u5b50\u4efb\u52a1"), QStringLiteral("00:08:21")});
-    new QTreeWidgetItem(taskTree_, {QStringLiteral("Task_002"), uiText(u"\u8fd0\u884c\u4e2d\uff08Mock\uff09"), uiText(u"\u793a\u4f8b\u5b50\u4efb\u52a1"), QStringLiteral("00:04:10")});
-    new QTreeWidgetItem(taskTree_, {QStringLiteral("Task_003"), uiText(u"\u51c6\u5907\u4e2d\uff08Mock\uff09"), uiText(u"\u793a\u4f8b\u5b50\u4efb\u52a1"), QStringLiteral("--")});
-    connect(taskTree_, &QTreeWidget::currentItemChanged, this, [this](QTreeWidgetItem *item) {
-        if (item) selectNavigationNode(projectTree_, item->text(0));
-    });
-    batchMonitorLayout->insertWidget(batchMonitorLayout->count() - 1, taskTree_, 1);
 
     outputDock_ = new QDockWidget(uiText(u"\u8f93\u51fa"), this);
     outputDock_->setObjectName(QStringLiteral("outputDock"));
@@ -1389,21 +967,14 @@ void MainWindow::handleNavigationSelection(QTreeWidgetItem *item)
     selectPage(draftPage);
     emit navigationRequested(page, objectId, {});
     if (item->treeWidget() == projectTree_) setOutputScope(QStringLiteral("current-project"));
-    if (page == QStringLiteral("state-manager")) showWorkspacePage(QStringLiteral("states"));
-    else if (page == QStringLiteral("batch-plans") || page == QStringLiteral("batch-plan")) showWorkspacePage(QStringLiteral("batch-plan"));
-    else if (page == QStringLiteral("batch-run")) {
-        showWorkspacePage(QStringLiteral("batch-monitor"));
-        setOutputScope(objectId);
-    } else if (page == QStringLiteral("task")) {
+    if (workspacePages_.contains(page)) showWorkspacePage(page);
+    else if (page == QStringLiteral("task")) {
         showWorkspacePage(QStringLiteral("task-monitor"));
         setOutputScope(objectId);
-        showTaskMonitor(objectId);
     }
-    else if (page == QStringLiteral("compute-monitor")) showComputeMonitor();
-    else if (workspacePages_.contains(page)) showWorkspacePage(page);
     else if (page == QStringLiteral("dataset") || page == QStringLiteral("data-process")) showWorkspacePage(QStringLiteral("data-process"));
     else if (page == QStringLiteral("monitor-log")) showOutput(0);
-    else if (page == QStringLiteral("monitor-residual")) showWorkspacePage(QStringLiteral("task-monitor"));
+    else if (page == QStringLiteral("monitor-residual")) showWorkspacePage(QStringLiteral("single-calculation"));
     else if (page == QStringLiteral("monitor-errors")) showOutput(3);
     else showWorkspacePage(QStringLiteral("viewport"));
 }
@@ -1411,6 +982,8 @@ void MainWindow::handleNavigationSelection(QTreeWidgetItem *item)
 void MainWindow::showWorkspacePage(const QString &pageId)
 {
     if (auto *target = workspacePages_.value(pageId, nullptr)) {
+        const bool calculation = target == singleCalculationPage_ || target == batchCalculationPage_;
+        if (!calculation) setCalculationWorkspaceActive(false);
         workspaceStack_->setCurrentWidget(target);
         // Several page ids share the module widget, so the id alone does not say
         // which screen to show; the inner stack carries that. Anything not
@@ -1435,19 +1008,26 @@ void MainWindow::showWorkspacePage(const QString &pageId)
                 propertyDockVisibleBeforePage_ = !propertyDock_->isHidden();
                 propertyDockHiddenForPage_ = true;
             }
-            const int treeWidth = target == dataProcessPage_ ? projectDock_->width() : 260;
+            const int treeWidth = target == dataProcessPage_ ? projectDock_->width() : uimetrics::embeddedPageDockWidth();
             propertyDock_->hide();
             resizeDocks({projectDock_}, {treeWidth}, Qt::Horizontal);
+        }
+        if (calculation) {
+            setCalculationWorkspaceActive(true);
+            if (!syncingRibbonTree_) {
+                syncingRibbonTree_ = true;
+                selectNavigationNode(projectTree_, pageId);
+                ribbonBar()->raiseCategory(findChild<SARibbonCategory *>(QStringLiteral("calculationCategory")));
+                syncingRibbonTree_ = false;
+            }
         }
     }
 }
 
-void MainWindow::showComputeMonitor()
+void MainWindow::setLayoutSettingsScope(const QString &organization, const QString &application)
 {
-    if (!monitorPage_) return;
-    // The shared page switch restores the property dock when needed.
-    selectPage(QStringLiteral("compute-monitor"));
-    showWorkspacePage(QStringLiteral("compute-monitor"));
+    layoutSettingsOrg_ = organization;
+    layoutSettingsApp_ = application;
 }
 
 void MainWindow::showModuleWorkspace(const QString &moduleId)
@@ -1474,7 +1054,7 @@ void MainWindow::setMeshWorkspaceActive(bool active)
         if (propertyDock_) propertyDock_->hide();
         projectDock_->setMinimumWidth(projectDockWidth_);
         resizeDocks({projectDock_}, {projectDockWidth_}, Qt::Horizontal);
-        projectDock_->setMinimumWidth(220);
+        projectDock_->setMinimumWidth(uimetrics::projectDockMinimumWidth());
         // Collapse the global output once for the initial mesh layout. Later
         // navigation must preserve the user's explicit expand/collapse choice.
         if (!meshOutputInitialCollapseApplied_) {
@@ -1487,9 +1067,26 @@ void MainWindow::setMeshWorkspaceActive(bool active)
             propertyDock_->show();
             projectDock_->setMinimumWidth(projectDockWidth_);
             resizeDocks({projectDock_, propertyDock_},
-                        {projectDockWidth_, 180}, Qt::Horizontal);
-            projectDock_->setMinimumWidth(220);
+                        {projectDockWidth_, uimetrics::propertyDockMinimumWidth()}, Qt::Horizontal);
+            projectDock_->setMinimumWidth(uimetrics::projectDockMinimumWidth());
         }
+    }
+}
+
+void MainWindow::setCalculationWorkspaceActive(bool active)
+{
+    if (active && !calculationWorkspaceActive_) {
+        propertyDockVisibleBeforeCalculation_ = propertyDock_->isVisible();
+        outputDockVisibleBeforeCalculation_ = outputDock_->isVisible();
+    }
+    if (!active && calculationWorkspaceActive_) {
+        propertyDock_->setVisible(propertyDockVisibleBeforeCalculation_);
+        outputDock_->setVisible(outputDockVisibleBeforeCalculation_);
+    }
+    calculationWorkspaceActive_ = active;
+    if (active) {
+        propertyDock_->hide();
+        outputDock_->hide();
     }
 }
 
@@ -1519,8 +1116,8 @@ void MainWindow::showParameterDialog(const QString &pageId, const QString &title
     workspacePages_.insert(workspaceId, dialog);
     workspacePageModules_.insert(workspaceId, QStringLiteral("module-parameters"));
     auto *layout = new QVBoxLayout(dialog);
-    layout->setContentsMargins(24, 20, 24, 20);
-    layout->setSpacing(12);
+    layout->setContentsMargins(uimetrics::pageMargins());
+    layout->setSpacing(uimetrics::panelSpacing());
     auto *heading = new QLabel(title, dialog);
     heading->setObjectName(QStringLiteral("parameterHeading"));
     QFont headingFont = heading->font();
@@ -1664,6 +1261,8 @@ void MainWindow::selectNavigationNode(QTreeWidget *tree, const QString &objectId
 void MainWindow::selectPage(const QString &pageId)
 {
     currentPage_ = pageId;
+    if (pageId.startsWith(QStringLiteral("single-calculation"))
+        || pageId.startsWith(QStringLiteral("batch-calculation"))) return;
     const QString pageType = pageId.section(QLatin1Char('|'), 0, 0);
     const QString objectId = pageId.section(QLatin1Char('|'), 1, 1);
     while (propertyForm_->rowCount()) propertyForm_->removeRow(0);
@@ -1679,7 +1278,6 @@ void MainWindow::selectPage(const QString &pageId)
         {"parameters", uiText(u"\u53c2\u6570\u8bbe\u7f6e")}, {"calculation-overview", uiText(u"\u8ba1\u7b97")},
         {"intelligent-data", uiText(u"\u667a\u80fd\u6570\u636e\u5904\u7406")}, {"postprocess-overview", uiText(u"\u540e\u5904\u7406\u5206\u6790")},
         {"result-data-table", uiText(u"结果数据表可视化分析")}, {"result-summary-table", uiText(u"结果汇总分析")},
-        {"compute-monitor", uiText(u"实时监控")},
         {"viewport", uiText(u"\u7f51\u683c\u7ba1\u7406")}, {"trajectory-settings", uiText(u"\u5f39\u9053\u8bbe\u7f6e")},
         {"single-calculation", uiText(u"\u5355\u6b21\u8ba1\u7b97")},
         {"batch-calculation", uiText(u"\u6279\u91cf\u8ba1\u7b97")}};
@@ -1747,7 +1345,8 @@ void MainWindow::selectPage(const QString &pageId)
         note->setWordWrap(true);
         propertyForm_->addRow(note);
     }
-    propertyDock_->setVisible(!meshWorkspaceActive_ && !propertyDockHiddenForPage_);
+    propertyDock_->setVisible(!meshWorkspaceActive_ && !calculationWorkspaceActive_
+        && !propertyDockHiddenForPage_);
 }
 
 void MainWindow::restoreLayout()
@@ -1763,17 +1362,21 @@ void MainWindow::restoreLayout()
     setCorner(Qt::BottomLeftCorner, Qt::BottomDockWidgetArea);
     setCorner(Qt::BottomRightCorner, Qt::BottomDockWidgetArea);
     for (auto *dock : {projectDock_, propertyDock_, outputDock_}) dock->show();
-    resizeDocks({projectDock_, propertyDock_}, {250, 330}, Qt::Horizontal);
+    resizeDocks({projectDock_, propertyDock_},
+                {uimetrics::projectDockWidth(), uimetrics::propertyDockDefaultWidth()}, Qt::Horizontal);
     if (outputCollapsed_) setOutputCollapsed(false);
-    resizeDocks({outputDock_}, {140}, Qt::Vertical);
-    expandedOutputHeight_ = 140;
+    resizeDocks({outputDock_}, {uimetrics::outputExpandedHeight()}, Qt::Vertical);
+    expandedOutputHeight_ = uimetrics::outputExpandedHeight();
     ribbonBar()->setMinimumMode(false);
     if (auto *meshPage = qobject_cast<MeshManagementPage *>(viewportPage_))
         meshPage->restoreDefaultLayout();
-    if (taskMonitorContentSplitter_) taskMonitorContentSplitter_->setSizes({300, 170});
-    if (meshWorkspaceActive_ || propertyDockHiddenForPage_) propertyDock_->hide();
+    singleCalculationPage_->restoreDefaultLayout();
+    batchCalculationPage_->restoreDefaultLayout();
+    if (meshWorkspaceActive_ || calculationWorkspaceActive_ || propertyDockHiddenForPage_)
+        propertyDock_->hide();
     if (meshWorkspaceActive_) {
-        resizeDocks({projectDock_}, {260}, Qt::Horizontal);
+        propertyDock_->hide();
+        resizeDocks({projectDock_}, {uimetrics::projectDockWidth()}, Qt::Horizontal);
         projectDockWidth_ = projectDock_->width();
     }
     setOutputCollapsed(true);
@@ -1782,7 +1385,7 @@ void MainWindow::restoreLayout()
 
 void MainWindow::saveUserLayout()
 {
-    QSettings settings(QStringLiteral("AeroSimWorkbench"), QStringLiteral("UiLayout"));
+    QSettings settings(layoutSettingsOrg_, layoutSettingsApp_);
     settings.beginGroup(QStringLiteral("UserLayout"));
     settings.remove(QString());
     settings.setValue(QStringLiteral("version"), 1);
@@ -1795,17 +1398,13 @@ void MainWindow::saveUserLayout()
     settings.setValue(QStringLiteral("outputHeightRatio"), double(outputDock_->height()) / qMax(1, height()));
     settings.setValue(QStringLiteral("expandedOutputRatio"), double(expandedOutputHeight_) / qMax(1, height()));
     settings.setValue(QStringLiteral("outputCollapsed"), outputCollapsed_);
-    const QList<int> monitorSizes = taskMonitorContentSplitter_->sizes();
-    const int monitorTotal = monitorSizes.value(0) + monitorSizes.value(1);
-    settings.setValue(QStringLiteral("monitorCurveRatio"), monitorTotal > 0
-        ? double(monitorSizes.value(0)) / monitorTotal : 0.64);
+    settings.setValue(QStringLiteral("singleCalculationLayout"), singleCalculationPage_->layoutState());
+    settings.setValue(QStringLiteral("multipleCalculationLayout"), batchCalculationPage_->layoutState());
     if (auto *meshPage = qobject_cast<MeshManagementPage *>(viewportPage_))
         settings.setValue(QStringLiteral("meshLayout"), meshPage->layoutState());
 
-    QScreen *screen = QGuiApplication::screenAt(frameGeometry().center());
-    if (!screen) screen = QGuiApplication::primaryScreen();
-    if (screen) {
-        const QRect available = screen->availableGeometry();
+    if (uimetrics::screenOf(this)) {
+        const QRect available = uimetrics::availableRect(this);
         const QRect windowRect = isMaximized() ? normalGeometry() : geometry();
         settings.setValue(QStringLiteral("windowWidthRatio"), double(windowRect.width()) / qMax(1, available.width()));
         settings.setValue(QStringLiteral("windowHeightRatio"), double(windowRect.height()) / qMax(1, available.height()));
@@ -1822,7 +1421,7 @@ void MainWindow::saveUserLayout()
 
 void MainWindow::restoreUserLayout()
 {
-    QSettings settings(QStringLiteral("AeroSimWorkbench"), QStringLiteral("UiLayout"));
+    QSettings settings(layoutSettingsOrg_, layoutSettingsApp_);
     settings.beginGroup(QStringLiteral("UserLayout"));
     if (settings.value(QStringLiteral("version")).toInt() != 1) {
         settings.endGroup();
@@ -1834,13 +1433,18 @@ void MainWindow::restoreUserLayout()
     const QByteArray mainWindowState = settings.value(QStringLiteral("mainWindowState")).toByteArray();
     const bool maximized = settings.value(QStringLiteral("maximized")).toBool();
     const bool ribbonMinimum = settings.value(QStringLiteral("ribbonMinimum")).toBool();
-    const double projectRatio = qBound(0.12, settings.value(QStringLiteral("projectDockRatio"), 0.18).toDouble(), 0.35);
-    const double propertyRatio = qBound(0.18, settings.value(QStringLiteral("propertyDockRatio"), 0.23).toDouble(), 0.38);
-    const double outputRatio = qBound(0.10, settings.value(QStringLiteral("outputHeightRatio"), 0.15).toDouble(), 0.45);
-    const double expandedOutputRatio = qBound(0.10, settings.value(QStringLiteral("expandedOutputRatio"), 0.15).toDouble(), 0.45);
+    const double projectRatio = uimetrics::clampProjectDockRatio(
+        settings.value(QStringLiteral("projectDockRatio"), uimetrics::defaultProjectDockRatio()).toDouble());
+    const double propertyRatio = uimetrics::clampPropertyDockRatio(
+        settings.value(QStringLiteral("propertyDockRatio"), uimetrics::defaultPropertyDockRatio()).toDouble());
+    const double outputRatio = uimetrics::clampOutputRatio(
+        settings.value(QStringLiteral("outputHeightRatio"), uimetrics::defaultOutputHeightRatio()).toDouble());
+    const double expandedOutputRatio = uimetrics::clampOutputRatio(
+        settings.value(QStringLiteral("expandedOutputRatio"), uimetrics::defaultExpandedOutputRatio()).toDouble());
     const bool outputCollapsed = settings.value(QStringLiteral("outputCollapsed")).toBool();
-    const double monitorCurveRatio = qBound(0.45, settings.value(QStringLiteral("monitorCurveRatio"), 0.64).toDouble(), 0.82);
     const QVariantMap meshLayout = settings.value(QStringLiteral("meshLayout")).toMap();
+    const QVariantMap singleCalculationLayout = settings.value(QStringLiteral("singleCalculationLayout")).toMap();
+    const QVariantMap multipleCalculationLayout = settings.value(QStringLiteral("multipleCalculationLayout")).toMap();
     const double widthRatio = qBound(0.45, settings.value(QStringLiteral("windowWidthRatio"), 0.75).toDouble(), 1.0);
     const double heightRatio = qBound(0.50, settings.value(QStringLiteral("windowHeightRatio"), 0.88).toDouble(), 1.0);
     const double xRatio = qBound(0.0, settings.value(QStringLiteral("windowXRatio"), 0.1).toDouble(), 0.95);
@@ -1856,8 +1460,7 @@ void MainWindow::restoreUserLayout()
         statusBar()->showMessage(uiText(u"\u5df2\u4fdd\u5b58\u7684\u5e03\u5c40\u65e0\u6548\uff0c\u5df2\u4fdd\u7559\u5f53\u524d\u754c\u9762"), 5000);
         return;
     }
-    QScreen *screen = QGuiApplication::screenAt(frameGeometry().center());
-    if (!screen) screen = QGuiApplication::primaryScreen();
+    QScreen *screen = uimetrics::screenOf(this);
     if (!maximized && screen) {
         const QRect available = screen->availableGeometry();
         const int targetWidth = qMin(available.width(), qMax(minimumWidth(), qRound(available.width() * widthRatio)));
@@ -1878,7 +1481,8 @@ void MainWindow::restoreUserLayout()
     setOutputCollapsed(outputCollapsed);
     if (auto *meshPage = qobject_cast<MeshManagementPage *>(viewportPage_))
         meshPage->restoreLayoutState(meshLayout);
-    taskMonitorContentSplitter_->setSizes({qRound(monitorCurveRatio * 1000), qRound((1.0 - monitorCurveRatio) * 1000)});
+    singleCalculationPage_->restoreLayoutState(singleCalculationLayout);
+    batchCalculationPage_->restoreLayoutState(multipleCalculationLayout);
     QTimer::singleShot(0, this, [this, projectRatio, propertyRatio, outputRatio, outputCollapsed] {
         // Older saved layouts may contain a floating/closed property dock.
         // Normalize it once so the editor remains part of the left workbench
@@ -1897,6 +1501,7 @@ void MainWindow::restoreUserLayout()
         if (!outputCollapsed)
             resizeDocks({outputDock_}, {qMax(120, qRound(height() * outputRatio))}, Qt::Vertical);
         constrainToAvailableScreen();
+        if (calculationWorkspaceActive_) setCalculationWorkspaceActive(true);
     });
     statusBar()->showMessage(uiText(u"\u5df2\u6062\u590d\u4e0a\u6b21\u4fdd\u5b58\u7684\u7528\u6237\u5e03\u5c40"), 4000);
 }
@@ -1904,23 +1509,16 @@ void MainWindow::restoreUserLayout()
 void MainWindow::constrainToAvailableScreen()
 {
     if (isMaximized()) return;
-    QScreen *target = nullptr;
-    for (auto *screen : QGuiApplication::screens()) {
-        if (screen->availableGeometry().intersects(frameGeometry())) {
-            target = screen;
-            break;
-        }
+    if (auto *target = uimetrics::screenOf(this)) {
+        const QRect available = uimetrics::availableRect(this);
+        const int targetWidth = qMin(available.width(), qMax(minimumWidth(), width()));
+        const int targetHeight = qMin(available.height(), qMax(minimumHeight(), height()));
+        const int maxX = available.right() - targetWidth + 1;
+        const int maxY = available.bottom() - targetHeight + 1;
+        const int targetX = maxX <= available.left() ? available.left() : qBound(available.left(), x(), maxX);
+        const int targetY = maxY <= available.top() ? available.top() : qBound(available.top(), y(), maxY);
+        setGeometry(targetX, targetY, targetWidth, targetHeight);
     }
-    if (!target) target = QGuiApplication::primaryScreen();
-    if (!target) return;
-    const QRect available = target->availableGeometry();
-    const int targetWidth = qMin(available.width(), qMax(minimumWidth(), width()));
-    const int targetHeight = qMin(available.height(), qMax(minimumHeight(), height()));
-    const int maxX = available.right() - targetWidth + 1;
-    const int maxY = available.bottom() - targetHeight + 1;
-    const int targetX = maxX <= available.left() ? available.left() : qBound(available.left(), x(), maxX);
-    const int targetY = maxY <= available.top() ? available.top() : qBound(available.top(), y(), maxY);
-    setGeometry(targetX, targetY, targetWidth, targetHeight);
 }
 
 bool MainWindow::eventFilter(QObject *watched, QEvent *event)
@@ -2035,368 +1633,17 @@ void MainWindow::submitRun()
     if (!result.allowed) showOutput(3);
 }
 
-void MainWindow::submitSingleCalculation()
-{
-    if (!workflow_ || workflow_->thread() != thread()) {
-        const QString message = uiText(u"\u5de5\u4f5c\u6d41\u670d\u52a1\u5c1a\u672a\u8fde\u63a5\uff0c\u672a\u751f\u6210\u4efb\u52a1");
-        if (singleGenerationStatus_) singleGenerationStatus_->setText(message);
-        appendLog(QStringLiteral("ERROR"), QStringLiteral("UI"), message);
-        return;
-    }
-
-    const QString caseId = singleCaseCombo_->currentText();
-    const QString snapshotId = QStringLiteral("ui-%1-m%2-a%3-t%4-rev-1")
-        .arg(caseId)
-        .arg(singleMachSpin_->value(), 0, 'f', 3)
-        .arg(singleAoASpin_->value(), 0, 'f', 3)
-        .arg(singleTemperatureSpin_->value(), 0, 'f', 2);
-    RunRequest request;
-    request.scope.projectId = QStringLiteral("mock-project");
-    request.scope.caseId = caseId;
-    request.inputSnapshot.snapshotId = snapshotId;
-    request.inputSnapshot.scope = request.scope;
-    request.inputSnapshot.revision = 1;
-    runRequest_ = request;
-    hasRunContext_ = true;
-    const auto result = workflow_->requestRun(request);
-    if (result.allowed) {
-        const QString message = uiText(u"\u5df2\u751f\u6210\u5355\u6b21\u4efb\u52a1\u8bf7\u6c42\uff1a%1\uff08Mock\uff09").arg(snapshotId);
-        singleGenerationStatus_->setText(message + uiText(u"\uff1b\u8bf7\u5728\u8ba1\u7b97\u76d1\u63a7\u4e2d\u67e5\u770b\u4efb\u52a1\u4e8b\u4ef6"));
-        appendMessage(message);
-    } else {
-        singleGenerationStatus_->setText(uiText(u"\u5355\u6b21\u4efb\u52a1\u6821\u9a8c\u5931\u8d25"));
-        for (const auto &issue : result.issues)
-            appendLog(QStringLiteral("ERROR"), QStringLiteral("Validation"), issue.message);
-    }
-}
-
-bool MainWindow::editCalculationParameters(QString &caseId, double &mach, double &aoa,
-                                            double &temperature, int &mpi)
-{
-    QDialog dialog(this);
-    dialog.setWindowTitle(uiText(u"\u8ba1\u7b97\u53c2\u6570"));
-    auto *form = new QFormLayout(&dialog);
-    auto *caseCombo = new QComboBox(&dialog);
-    caseCombo->addItems(stateIds_);
-    caseCombo->setCurrentText(caseId);
-    auto *machEditor = new QDoubleSpinBox(&dialog); machEditor->setRange(0.01, 20.0); machEditor->setValue(mach); machEditor->setSingleStep(0.05);
-    auto *aoaEditor = new QDoubleSpinBox(&dialog); aoaEditor->setRange(-90.0, 90.0); aoaEditor->setValue(aoa); aoaEditor->setSingleStep(0.5);
-    auto *temperatureEditor = new QDoubleSpinBox(&dialog); temperatureEditor->setRange(100.0, 2000.0); temperatureEditor->setValue(temperature); temperatureEditor->setSuffix(QStringLiteral(" K"));
-    auto *mpiEditor = new QSpinBox(&dialog); mpiEditor->setRange(1, 4096); mpiEditor->setValue(mpi);
-    form->addRow(uiText(u"\u5de5\u51b5"), caseCombo);
-    form->addRow(uiText(u"\u9a6c\u8d6b\u6570"), machEditor);
-    form->addRow(uiText(u"\u653b\u89d2"), aoaEditor);
-    form->addRow(uiText(u"\u6e29\u5ea6"), temperatureEditor);
-    form->addRow(QStringLiteral("MPI"), mpiEditor);
-    connect(caseCombo, &QComboBox::currentTextChanged, &dialog, [this, machEditor, aoaEditor, temperatureEditor](const QString &id) {
-        const auto draft = stateDrafts_.value(id);
-        machEditor->setValue(draft.mach);
-        aoaEditor->setValue(draft.angleOfAttack);
-        temperatureEditor->setValue(draft.temperature);
-    });
-    auto *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
-    form->addRow(buttons);
-    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
-    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
-    if (dialog.exec() != QDialog::Accepted) return false;
-    caseId = caseCombo->currentText();
-    mach = machEditor->value();
-    aoa = aoaEditor->value();
-    temperature = temperatureEditor->value();
-    mpi = mpiEditor->value();
-    return true;
-}
-
-void MainWindow::addBatchCase()
-{
-    QString caseId = stateIds_.value(0);
-    const auto state = stateDrafts_.value(caseId);
-    double mach = state.mach;
-    double aoa = state.angleOfAttack;
-    double temperature = state.temperature;
-    int mpi = 4;
-    if (!editCalculationParameters(caseId, mach, aoa, temperature, mpi)) return;
-    const int row = batchCalculationTable_->rowCount();
-    batchCalculationTable_->insertRow(row);
-    const QStringList values = {
-        caseId, QString::number(mach, 'f', 3), QString::number(aoa, 'f', 3),
-        QString::number(temperature, 'f', 2), QString::number(mpi), uiText(u"\u5df2\u901a\u8fc7")};
-    for (int column = 0; column < values.size(); ++column)
-        batchCalculationTable_->setItem(row, column, new QTableWidgetItem(values.at(column)));
-    batchCalculationTable_->selectRow(row);
-    batchGenerationStatus_->setText(uiText(u"\u5df2\u7f16\u8f91 %1 \u7ec4\u5de5\u51b5\uff0c\u53ef\u7ee7\u7eed\u6dfb\u52a0\u6216\u63d0\u4ea4\u3002").arg(batchCalculationTable_->rowCount()));
-}
-
-void MainWindow::removeBatchCase()
-{
-    const int row = batchCalculationTable_ ? batchCalculationTable_->currentRow() : -1;
-    if (row < 0) return;
-    batchCalculationTable_->removeRow(row);
-    batchGenerationStatus_->setText(batchCalculationTable_->rowCount() == 0
-        ? uiText(u"\u8bf7\u5148\u6dfb\u52a0\u81f3\u5c11\u4e00\u7ec4\u5de5\u51b5\u3002")
-        : uiText(u"\u5df2\u7f16\u8f91 %1 \u7ec4\u5de5\u51b5\u3002").arg(batchCalculationTable_->rowCount()));
-}
-
-void MainWindow::submitBatchCalculation()
-{
-    if (!batchCalculationTable_ || batchCalculationTable_->rowCount() == 0) {
-        batchGenerationStatus_->setText(uiText(u"\u6279\u5904\u7406\u8ba1\u5212\u4e3a\u7a7a\uff0c\u8bf7\u5148\u70b9\u51fb + \u6dfb\u52a0\u5de5\u51b5\u3002"));
-        return;
-    }
-    if (!workflow_ || workflow_->thread() != thread()) {
-        batchGenerationStatus_->setText(uiText(u"\u5de5\u4f5c\u6d41\u670d\u52a1\u5c1a\u672a\u8fde\u63a5\uff0c\u672a\u63d0\u4ea4\u6279\u5904\u7406\u8ba1\u5212\u3002"));
-        return;
-    }
-
-    const QString planId = QStringLiteral("ui-batch-%1").arg(QUuid::createUuid().toString(QUuid::WithoutBraces).left(8));
-    const quint64 version = ++batchPlanVersion_;
-    int accepted = 0;
-    for (int row = 0; row < batchCalculationTable_->rowCount(); ++row) {
-        RunRequest request;
-        request.scope.projectId = QStringLiteral("mock-project");
-        request.scope.caseId = batchCalculationTable_->item(row, 0)->text();
-        request.batchPlanId = planId;
-        request.batchPlanVersion = version;
-        request.inputSnapshot.snapshotId = QStringLiteral("%1-row-%2-m%3-a%4-t%5")
-            .arg(planId).arg(row + 1)
-            .arg(batchCalculationTable_->item(row, 1)->text())
-            .arg(batchCalculationTable_->item(row, 2)->text())
-            .arg(batchCalculationTable_->item(row, 3)->text());
-        request.inputSnapshot.scope = request.scope;
-        request.inputSnapshot.revision = 1;
-        const auto result = workflow_->requestRun(request);
-        if (result.allowed) ++accepted;
-        for (const auto &issue : result.issues)
-            appendLog(QStringLiteral("ERROR"), QStringLiteral("Validation"), issue.message, planId);
-    }
-    batchGenerationStatus_->setText(uiText(u"\u5df2\u751f\u6210\u6279\u5904\u7406\u8ba1\u5212 %1\uff08v%2\uff09\uff0c\u63d0\u4ea4 %3 \u4e2a Mock \u6267\u884c\u8bf7\u6c42\u3002\u771f\u5b9e\u6c42\u89e3\u5668\u4ecd\u9700\u8fd0\u884c\u6a21\u5757\u63a5\u5165\u3002").arg(planId).arg(version).arg(accepted));
-    if (batchRunProgress_ && batchRunSummary_) {
-        batchRunProgress_->setRange(0, qMax(1, accepted));
-        batchRunProgress_->setValue(0);
-        batchRunProgress_->setFormat(uiText(u"Mock \u6279\u5904\u7406\uff1a0 / %m \u5df2\u63d0\u4ea4"));
-        batchRunSummary_->setText(uiText(u"\u6279\u5904\u7406\u8ba1\u5212 %1    \u603b\u4efb\u52a1 %2    \u5df2\u63d0\u4ea4 %3    \u8fd0\u884c\u6a21\u5f0f Mock").arg(planId).arg(batchCalculationTable_->rowCount()).arg(accepted));
-    }
-    appendMessage(uiText(u"\u6279\u5904\u7406\u8ba1\u5212\u5df2\u63d0\u4ea4\uff1a%1 \u4e2a\u5b50\u8bf7\u6c42\uff08Mock\uff09").arg(accepted));
-}
-
-void MainWindow::refreshStateModel()
-{
-    for (int index = 0; index < stateIds_.size(); ++index) {
-        const QString &id = stateIds_.at(index);
-        if (stateDrafts_.contains(id)) continue;
-        StateDraft draft;
-        // Give the built-in examples distinct values so selecting a state
-        // visibly proves that the calculation form follows the state model.
-        if (index == 1) {
-            draft.mach = 1.2;
-            draft.angleOfAttack = 3.5;
-            draft.temperature = 300.0;
-            draft.altitude = 8000.0;
-        } else if (index == 2) {
-            draft.mach = 0.6;
-            draft.angleOfAttack = -1.0;
-            draft.temperature = 280.0;
-            draft.altitude = 2000.0;
-        }
-        stateDrafts_.insert(id, draft);
-    }
-    if (stateTable_) {
-        const QSignalBlocker blocker(stateTable_);
-        stateTable_->setRowCount(stateIds_.size());
-        for (int row = 0; row < stateIds_.size(); ++row) {
-            const auto draft = stateDrafts_.value(stateIds_.at(row));
-            stateTable_->setItem(row, 0, new QTableWidgetItem(stateIds_.at(row)));
-            stateTable_->setItem(row, 1, new QTableWidgetItem(
-                uiText(u"\u9a6c\u8d6b\u6570 %1\uff0c\u653b\u89d2 %2\uff0c\u6e29\u5ea6 %3 K\uff0c\u9ad8\u5ea6 %4 m")
-                    .arg(draft.mach).arg(draft.angleOfAttack).arg(draft.temperature).arg(draft.altitude)));
-            stateTable_->setItem(row, 2, new QTableWidgetItem(uiText(u"\u754c\u9762 Mock\uff1a\u5df2\u914d\u7f6e")));
-        }
-    }
-    if (statesNavigationItem_) {
-        qDeleteAll(statesNavigationItem_->takeChildren());
-        for (const QString &id : stateIds_)
-            addNavigationItem(statesNavigationItem_, id + uiText(u"\uff08Mock \u754c\u9762\u793a\u4f8b\uff09"), QStringLiteral("state"), id, QStringLiteral("state"));
-        statesNavigationItem_->setExpanded(true);
-    }
-    if (singleCaseCombo_) {
-        const QString current = singleCaseCombo_->currentText();
-        const QSignalBlocker blocker(singleCaseCombo_);
-        singleCaseCombo_->clear();
-        singleCaseCombo_->addItems(stateIds_);
-        const int index = singleCaseCombo_->findText(current);
-        singleCaseCombo_->setCurrentIndex(index >= 0 ? index : 0);
-        applyStateToSingleCalculation(singleCaseCombo_->currentText());
-    }
-}
-
-void MainWindow::applyStateToSingleCalculation(const QString &stateId)
-{
-    if (!singleMachSpin_ || stateId.isEmpty()) return;
-    const auto draft = stateDrafts_.value(stateId);
-    {
-        const QSignalBlocker machBlocker(singleMachSpin_);
-        const QSignalBlocker aoaBlocker(singleAoASpin_);
-        const QSignalBlocker temperatureBlocker(singleTemperatureSpin_);
-        singleMachSpin_->setValue(draft.mach);
-        singleAoASpin_->setValue(draft.angleOfAttack);
-        singleTemperatureSpin_->setValue(draft.temperature);
-    }
-    if (singleParametersSummary_)
-        singleParametersSummary_->setText(uiText(u"\u5f53\u524d\u5355\u6b21\u5de5\u51b5\uff1a%1\n\u9a6c\u8d6b\u6570 %2\uff0c\u653b\u89d2 %3\uff0c\u6e29\u5ea6 %4 K\uff0c\u9ad8\u5ea6 %5 m\uff0cMPI %6")
-            .arg(stateId).arg(draft.mach).arg(draft.angleOfAttack)
-            .arg(draft.temperature).arg(draft.altitude).arg(singleMpiSpin_->value()));
-}
-
-void MainWindow::addState()
-{
-    QDialog dialog(stateListPage_);
-    dialog.setWindowTitle(uiText(u"\u65b0\u5efa\u5de5\u51b5"));
-    auto *form = new QFormLayout(&dialog);
-    auto *name = new QLineEdit(&dialog);
-    name->setText(QStringLiteral("State_%1").arg(stateIds_.size() + 1, 3, 10, QLatin1Char('0')));
-    auto *mach = new QDoubleSpinBox(&dialog);
-    mach->setRange(0.01, 20.0); mach->setSingleStep(0.05); mach->setValue(0.8);
-    auto *aoa = new QDoubleSpinBox(&dialog);
-    aoa->setRange(-90.0, 90.0); aoa->setSingleStep(0.5); aoa->setValue(2.0);
-    auto *temperature = new QDoubleSpinBox(&dialog);
-    temperature->setRange(100.0, 2000.0); temperature->setValue(288.15); temperature->setSuffix(QStringLiteral(" K"));
-    auto *altitude = new QDoubleSpinBox(&dialog);
-    altitude->setRange(-1000.0, 100000.0); altitude->setValue(5000.0); altitude->setSuffix(QStringLiteral(" m"));
-    form->addRow(uiText(u"\u5de5\u51b5 ID"), name);
-    form->addRow(uiText(u"\u9a6c\u8d6b\u6570"), mach);
-    form->addRow(uiText(u"\u653b\u89d2"), aoa);
-    form->addRow(uiText(u"\u6e29\u5ea6"), temperature);
-    form->addRow(uiText(u"\u9ad8\u5ea6"), altitude);
-    auto *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
-    form->addRow(buttons);
-    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
-    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
-    if (dialog.exec() != QDialog::Accepted) return;
-    const QString id = name->text().trimmed();
-    if (id.isEmpty() || stateIds_.contains(id)) {
-        appendLog(QStringLiteral("WARN"), QStringLiteral("State"), uiText(u"\u5de5\u51b5 ID \u4e3a\u7a7a\u6216\u5df2\u5b58\u5728\uff0c\u672a\u6dfb\u52a0\u3002"));
-        return;
-    }
-    stateIds_.append(id);
-    StateDraft draft;
-    draft.mach = mach->value();
-    draft.angleOfAttack = aoa->value();
-    draft.temperature = temperature->value();
-    draft.altitude = altitude->value();
-    stateDrafts_.insert(id, draft);
-    refreshStateModel();
-    appendMessage(uiText(u"\u5df2\u6dfb\u52a0\u5de5\u51b5 %1\uff08\u754c\u9762 Mock\uff09").arg(id));
-}
-
-void MainWindow::editState()
-{
-    if (!stateTable_ || stateTable_->currentRow() < 0) return;
-    const QString id = stateIds_.value(stateTable_->currentRow());
-    StateDraft draft = stateDrafts_.value(id);
-    QDialog dialog(stateListPage_);
-    dialog.setWindowTitle(uiText(u"\u7f16\u8f91\u5de5\u51b5\u53c2\u6570"));
-    auto *form = new QFormLayout(&dialog);
-    form->addRow(uiText(u"\u5de5\u51b5 ID"), new QLabel(id, &dialog));
-    auto *mach = new QDoubleSpinBox(&dialog);
-    mach->setRange(0.01, 20.0); mach->setSingleStep(0.05); mach->setValue(draft.mach);
-    auto *aoa = new QDoubleSpinBox(&dialog);
-    aoa->setRange(-90.0, 90.0); aoa->setSingleStep(0.5); aoa->setValue(draft.angleOfAttack);
-    auto *temperature = new QDoubleSpinBox(&dialog);
-    temperature->setRange(100.0, 2000.0); temperature->setValue(draft.temperature); temperature->setSuffix(QStringLiteral(" K"));
-    auto *altitude = new QDoubleSpinBox(&dialog);
-    altitude->setRange(-1000.0, 100000.0); altitude->setValue(draft.altitude); altitude->setSuffix(QStringLiteral(" m"));
-    form->addRow(uiText(u"\u9a6c\u8d6b\u6570"), mach);
-    form->addRow(uiText(u"\u653b\u89d2"), aoa);
-    form->addRow(uiText(u"\u6e29\u5ea6"), temperature);
-    form->addRow(uiText(u"\u9ad8\u5ea6"), altitude);
-    auto *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
-    form->addRow(buttons);
-    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
-    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
-    if (dialog.exec() != QDialog::Accepted) return;
-    draft.mach = mach->value();
-    draft.angleOfAttack = aoa->value();
-    draft.temperature = temperature->value();
-    draft.altitude = altitude->value();
-    stateDrafts_.insert(id, draft);
-    refreshStateModel();
-    appendMessage(uiText(u"\u5df2\u66f4\u65b0\u5de5\u51b5 %1 \u7684\u53c2\u6570\uff08\u754c\u9762 Mock\uff09").arg(id));
-}
-
-void MainWindow::removeState()
-{
-    if (!stateTable_ || stateTable_->currentRow() < 0) return;
-    if (stateIds_.size() <= 1) {
-        appendLog(QStringLiteral("WARN"), QStringLiteral("State"), uiText(u"\u81f3\u5c11\u4fdd\u7559\u4e00\u4e2a\u5de5\u51b5\u3002"));
-        return;
-    }
-    const int row = stateTable_->currentRow();
-    const QString id = stateIds_.at(row);
-    stateIds_.removeAt(row);
-    stateDrafts_.remove(id);
-    refreshStateModel();
-    appendMessage(uiText(u"\u5df2\u5220\u9664\u5de5\u51b5 %1\uff08\u754c\u9762 Mock\uff09").arg(id));
-}
-
 void MainWindow::displayTaskEvent(const TaskEvent &event)
 {
-    QTreeWidgetItem *row = nullptr;
-    for (int i = 0; i < taskTree_->topLevelItemCount(); ++i) {
-        if (taskTree_->topLevelItem(i)->text(0) == event.taskId) { row = taskTree_->topLevelItem(i); break; }
-    }
-    if (!row) {
-        if (taskTree_->topLevelItemCount() >= 500) delete taskTree_->takeTopLevelItem(0);
-        row = new QTreeWidgetItem(taskTree_, {event.taskId});
-    }
-    row->setText(1, taskStatus(event.status));
-    row->setText(2, event.message);
-    row->setText(3, event.timestamp.toLocalTime().toString("HH:mm:ss"));
-    QTreeWidgetItem *navigationTask = nullptr;
-    QTreeWidgetItem *singleRuns = nullptr;
-    QTreeWidgetItem *batchRuns = nullptr;
-    QTreeWidgetItem *batchRun = nullptr;
-    const QString batchId = tasks_ ? tasks_->record(event.taskId).batchId : QString();
-    for (QTreeWidgetItemIterator it(projectTree_); *it; ++it) {
-        const QString objectId = (*it)->data(0, ObjectIdRole).toString();
-        if (objectId == event.taskId) navigationTask = *it;
-        if (objectId == QStringLiteral("single-runs")) singleRuns = *it;
-        if (objectId == QStringLiteral("batch-runs")) batchRuns = *it;
-        if (!batchId.isEmpty() && objectId == batchId
-            && (*it)->data(0, NodeTypeRole).toString() == QStringLiteral("batch-run")) batchRun = *it;
-    }
-    if (!batchId.isEmpty() && !batchRun && batchRuns) {
-        batchRun = addNavigationItem(batchRuns, batchId + uiText(u"\uff08Mock \u6279\u5904\u7406\uff09"),
-                                     QStringLiteral("batch-run"), batchId, QStringLiteral("batch-run"));
-        batchRun->setExpanded(true);
-    }
-    if (!navigationTask && singleRuns && !event.taskId.isEmpty()) {
-        auto *parent = batchRun ? batchRun : singleRuns;
-        navigationTask = addNavigationItem(parent, event.taskId + uiText(u"\uff08Mock \u4e8b\u4ef6\uff09"),
-                                           QStringLiteral("task"), event.taskId, QStringLiteral("task"));
-    }
-    if (navigationTask) {
-        setTaskItemStatus(navigationTask, event.status);
-        navigationTask->setToolTip(0, uiText(u"\u72b6\u6001\uff1a%1\n%2").arg(taskStatus(event.status), event.message));
-    }
-    monitorStatus_->setText(event.taskId + uiText(u" \u00b7 ") + taskStatus(event.status));
-    if (event.progress.totalSteps > 0) {
-        const int progressValue = qBound(0, static_cast<int>(1000.0 * event.progress.currentStep / event.progress.totalSteps), 1000);
-        progress_->setValue(progressValue);
-        progress_->setFormat(QStringLiteral("%1%").arg(progressValue / 10.0, 0, 'f', 1));
-        monitorDetails_->setText(uiText(u"\u8fed\u4ee3\uff1a%1 / %2    \u6b8b\u5dee\uff1a%3").arg(event.progress.currentStep).arg(event.progress.totalSteps).arg(event.progress.residual));
-    } else {
-        progress_->setValue(0);
-        progress_->setFormat(uiText(u"\u6682\u65e0\u8fdb\u5ea6\u6570\u636e"));
-        monitorDetails_->setText(uiText(u"\u6682\u65e0\u8fed\u4ee3 / \u6b8b\u5dee\u6570\u636e\uff1bMock \u6d88\u606f\u4e0d\u4ee3\u8868\u771f\u5b9e\u8ba1\u7b97"));
-    }
+    // Runtime events never grow the two-leaf calculation navigation tree.
     const QString level = event.type == TaskEventType::Failed ? QStringLiteral("ERROR")
         : event.type == TaskEventType::Warning ? QStringLiteral("WARN") : QStringLiteral("INFO");
     appendLog(level, QStringLiteral("Task"),
               (event.errorCode.isEmpty() ? QString() : event.errorCode + QLatin1Char(' ')) + event.message,
               event.taskId);
-    // Feed the live monitoring page as a second consumer. Its task set is its
-    // own, so this adds a listener without changing what the task tree and log
-    // table above already show for the same event.
+    // The monitoring navigation tree has been removed from the workspace, so
+    // task events no longer grow a tree under it. The live monitoring page is
+    // still fed below as the reusable curve host for the visualization module.
     if (monitorPage_) {
         // The page rejects events whose attempt does not match the attempt it
         // holds, which is what keeps a stale delivery from attaching itself to
@@ -2493,115 +1740,6 @@ void MainWindow::setOutputCollapsed(bool collapsed)
         outputCollapse_->setText(uiText(u"\u6536\u8d77"));
         resizeDocks({outputDock_}, {qMax(120, expandedOutputHeight_)}, Qt::Vertical);
     }
-}
-
-void MainWindow::showTaskMonitor(const QString &taskId)
-{
-    if (taskId.isEmpty() || !taskLogView_) return;
-    if (!currentTaskId_.isEmpty())
-        taskLogScrollPositions_.insert(currentTaskId_, taskLogView_->verticalScrollBar()->value());
-    currentTaskId_ = taskId;
-
-    QString status = uiText(u"\u8fd0\u884c\u4e2d\uff08Mock\uff09");
-    QString details = uiText(u"\u5f53\u524d\u8fed\u4ee3\uff1a1250    \u603b\u8fed\u4ee3\uff1a10000    \u6b8b\u5dee\uff1a1.2e-4\uff08Mock\uff09");
-    int progressValue = 125;
-    QString progressText = uiText(u"12.5%\uff08Mock\uff09");
-    QString resources = uiText(u"CPU 76%    \u5185\u5b58 18.3 GB    MPI 32    \u8ba1\u7b97\u65f6\u95f4 00:12:35    \uff08Mock\uff09");
-    if (taskId == QStringLiteral("Task_001")) {
-        status = uiText(u"\u5df2\u5b8c\u6210\uff08Mock\uff09");
-        details = uiText(u"\u5f53\u524d\u8fed\u4ee3\uff1a10000    \u603b\u8fed\u4ee3\uff1a10000    \u6b8b\u5dee\uff1a8.0e-7\uff08Mock\uff09");
-        progressValue = 1000;
-        progressText = uiText(u"100%\uff08Mock\uff09");
-        resources = uiText(u"CPU 0%    \u5185\u5b58 0 GB    MPI 32    \u8ba1\u7b97\u65f6\u95f4 00:08:21    \uff08Mock\uff09");
-    } else if (taskId == QStringLiteral("Task_002")) {
-        details = uiText(u"\u5f53\u524d\u8fed\u4ee3\uff1a4200    \u603b\u8fed\u4ee3\uff1a10000    \u6b8b\u5dee\uff1a4.2e-3\uff08Mock\uff09");
-        progressValue = 420;
-        progressText = uiText(u"42%\uff08Mock\uff09");
-        resources = uiText(u"CPU 81%    \u5185\u5b58 20.1 GB    MPI 32    \u8ba1\u7b97\u65f6\u95f4 00:04:10    \uff08Mock\uff09");
-    } else if (taskId == QStringLiteral("Task_003")) {
-        status = uiText(u"\u51c6\u5907\u4e2d\uff08Mock\uff09");
-        details = uiText(u"\u6682\u65e0\u8fed\u4ee3\u4e0e\u6b8b\u5dee\u6570\u636e\uff08Mock\uff09");
-        progressValue = 0;
-        progressText = uiText(u"0%\uff08Mock\uff09");
-        resources = uiText(u"CPU --    \u5185\u5b58 --    MPI 32    \u8ba1\u7b97\u65f6\u95f4 --    \uff08Mock\uff09");
-    }
-    taskMonitorTitle_->setText(taskId + uiText(u" \u00b7 \u7efc\u5408\u76d1\u63a7\uff08Mock\uff09"));
-    monitorStatus_->setText(status);
-    monitorDetails_->setText(details);
-    progress_->setValue(progressValue);
-    progress_->setFormat(progressText);
-    taskCurveState_->setText(taskId + uiText(u" \u00b7 Mock \u66f2\u7ebf\u533a\u57df\n\u7b49\u5f85\u771f\u5b9e\u6b8b\u5dee\u6570\u636e\u4e0e\u66f2\u7ebf\u7ec4\u4ef6\u63a5\u5165"));
-    taskResourceSummary_->setText(resources);
-    refreshTaskLog();
-    taskLogView_->verticalScrollBar()->setValue(
-        taskLogScrollPositions_.value(taskId, taskLogView_->verticalScrollBar()->maximum()));
-}
-
-void MainWindow::refreshTaskLog()
-{
-    if (!taskLogView_ || !taskLogStreamFilter_) return;
-    const QString filter = taskLogStreamFilter_->currentData().toString();
-    taskLogView_->clear();
-    QTextCursor cursor(taskLogView_->document());
-    const auto entries = taskLogEntries_.value(currentTaskId_);
-    for (const auto &entry : entries) {
-        if (filter != QStringLiteral("all") && filter != entry.first) continue;
-        QTextCharFormat format;
-        if (entry.first == QStringLiteral("stderr")) format.setForeground(QColor(196, 83, 0));
-        else format.setForeground(taskLogView_->palette().color(QPalette::Text));
-        cursor.movePosition(QTextCursor::End);
-        cursor.insertText(QStringLiteral("[%1] %2\n").arg(entry.first, entry.second), format);
-    }
-    if (taskLogAutoScroll_->isChecked())
-        taskLogView_->verticalScrollBar()->setValue(taskLogView_->verticalScrollBar()->maximum());
-}
-
-void MainWindow::appendTaskLogMock(const QString &stream, const QString &message)
-{
-    taskLogEntries_[currentTaskId_].append(qMakePair(stream, message));
-    const QString filter = taskLogStreamFilter_->currentData().toString();
-    if (filter != QStringLiteral("all") && filter != stream) return;
-    auto *scrollBar = taskLogView_->verticalScrollBar();
-    const bool wasAtBottom = scrollBar->value() >= scrollBar->maximum() - 2;
-    QTextCursor cursor(taskLogView_->document());
-    QTextCharFormat format;
-    format.setForeground(stream == QStringLiteral("stderr")
-        ? QColor(196, 83, 0) : taskLogView_->palette().color(QPalette::Text));
-    cursor.movePosition(QTextCursor::End);
-    cursor.insertText(QStringLiteral("[%1] %2\n").arg(stream, message), format);
-    if (taskLogAutoScroll_->isChecked() && wasAtBottom)
-        scrollBar->setValue(scrollBar->maximum());
-}
-
-void MainWindow::updateTaskProgressMock(const QString &message)
-{
-    auto &entries = taskLogEntries_[currentTaskId_];
-    int progressIndex = -1;
-    for (int index = entries.size() - 1; index >= 0; --index) {
-        if (entries[index].second.startsWith(QStringLiteral("Progress:"))) {
-            progressIndex = index;
-            break;
-        }
-    }
-    if (progressIndex < 0) {
-        appendTaskLogMock(QStringLiteral("stdout"), message);
-        return;
-    }
-    entries[progressIndex].second = message;
-    const QString filter = taskLogStreamFilter_->currentData().toString();
-    if (filter != QStringLiteral("all") && filter != QStringLiteral("stdout")) return;
-    QTextCursor cursor(taskLogView_->document());
-    cursor.movePosition(QTextCursor::End);
-    cursor.movePosition(QTextCursor::PreviousBlock);
-    const QString progressPrefix = QStringLiteral("[stdout] Progress:");
-    if (!cursor.block().text().startsWith(progressPrefix)) {
-        refreshTaskLog();
-        return;
-    }
-    cursor.select(QTextCursor::BlockUnderCursor);
-    QTextCharFormat format;
-    format.setForeground(taskLogView_->palette().color(QPalette::Text));
-    cursor.insertText(QStringLiteral("[stdout] %1").arg(message), format);
 }
 
 void MainWindow::showOutput(int index)

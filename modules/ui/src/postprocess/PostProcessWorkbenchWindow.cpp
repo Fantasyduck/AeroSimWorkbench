@@ -30,6 +30,7 @@
 #include <QMap>
 #include <QMenu>
 #include <QMouseEvent>
+#include <QMessageBox>
 #include <QResizeEvent>
 #include <QQuaternion>
 #include <QVector3D>
@@ -555,7 +556,7 @@ QWidget *PostProcessWorkbenchWindow::createDataPanel() {
         datasetTree_->setCurrentItem(item); updateDataSelection(item,0);
         QMenu menu(this); menu.addAction(styleAction_); menu.addAction(parameterAction_);
         const QString itemKind = item->data(0, Qt::UserRole).toString();
-        if (!item->parent() && (itemKind == QStringLiteral("exampleFile") || itemKind == QStringLiteral("pendingGroup"))) {
+        if (!item->parent() && (itemKind == QStringLiteral("exampleFile") || itemKind == QStringLiteral("pendingGroup") || itemKind == QStringLiteral("dataset"))) {
             auto *remove = menu.addAction(uiText(u"移除此项"));
             connect(remove, &QAction::triggered, this, [this, item] {
                 const QString source = item->data(0, Qt::UserRole+3).toMap().value("sourceId").toString();
@@ -565,7 +566,9 @@ QWidget *PostProcessWorkbenchWindow::createDataPanel() {
                         const QString id = derived->data(Qt::UserRole+1).toString(); styleDrafts_.remove(id); parameterDrafts_.remove(id); delete sceneList_->takeItem(i);
                     }
                 }
+                if (item->data(0,Qt::UserRole).toString()==QStringLiteral("dataset")) emit datasetRemovalRequested(source);
                 delete datasetTree_->takeTopLevelItem(datasetTree_->indexOfTopLevelItem(item));
+                if (datasetTree_->topLevelItemCount() == 0) sessionContext_->setText(uiText(u"尚未导入结果"));
                 updateDataSelection(datasetTree_->currentItem(), 0);
                 appendMessage(uiText(u"已移除所选界面条目。"));
             });
@@ -573,7 +576,17 @@ QWidget *PostProcessWorkbenchWindow::createDataPanel() {
         menu.exec(datasetTree_->viewport()->mapToGlobal(point));
     });
     connect(datasetTree_, &QTreeWidget::itemChanged, this, [this](QTreeWidgetItem *item, int column) {
-        if (column != 0 || item->data(0, Qt::UserRole).toString() != QStringLiteral("exampleFile")) return;
+        if (column != 0) return;
+        if ((item->data(0,Qt::UserRole).toString()==QStringLiteral("volume") || item->data(0,Qt::UserRole).toString()==QStringLiteral("surface")) && !item->data(0,Qt::UserRole+3).toMap().value("regionId").toString().isEmpty()) {
+            const QVariantMap context=item->data(0,Qt::UserRole+3).toMap();
+            emit regionVisibilityChanged(context.value("sourceId").toString(),context.value("regionId").toString(),item->checkState(0)==Qt::Checked);
+            return;
+        }
+        if (item->data(0,Qt::UserRole).toString()==QStringLiteral("dataset")) {
+            emit datasetVisibilityChanged(item->data(0,Qt::UserRole+3).toMap().value("sourceId").toString(), item->checkState(0)==Qt::Checked);
+            return;
+        }
+        if (item->data(0, Qt::UserRole).toString() != QStringLiteral("exampleFile")) return;
         const bool visible = item->checkState(0) == Qt::Checked;
         item->setToolTip(0, visible ? uiText(u"界面示例 · 已勾选显示") : uiText(u"界面示例 · 已取消显示"));
         appendMessage(visible ? uiText(u"示例文件已勾选；真实显示尚未接入。") : uiText(u"示例文件已取消勾选；真实显示尚未接入。"));
@@ -610,7 +623,7 @@ void PostProcessWorkbenchWindow::openImportDialog() {
     for (int i = 0; i < datasetTree_->topLevelItemCount(); ++i)
         if (!datasetTree_->topLevelItem(i)->data(0, Qt::UserRole).toString().startsWith(QStringLiteral("pending"))) { hasData = true; break; }
     modeRow->setVisible(hasData); layout->addWidget(modeRow);
-    auto *status = new QLabel(uiText(u"读取服务尚未接入；提交后文件会显示为等待读取。"), dialog); status->setWordWrap(true); status->setObjectName(QStringLiteral("postProcessImportStatus")); layout->addWidget(status);
+    auto *status = new QLabel(dataServiceAvailable_ ? uiText(u"选择 CGNS 文件；读取成功后显示数据。") : uiText(u"读取服务尚未接入；提交后文件会显示为等待读取。"), dialog); status->setWordWrap(true); status->setObjectName(QStringLiteral("postProcessImportStatus")); layout->addWidget(status);
     auto *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, dialog); buttons->button(QDialogButtonBox::Ok)->setText(uiText(u"导入")); layout->addWidget(buttons);
     connect(buttons, &QDialogButtonBox::rejected, dialog, &QDialog::reject);
     connect(buttons, &QDialogButtonBox::accepted, dialog, [this, dialog, files, mode, status, hasData] {
@@ -625,8 +638,8 @@ void PostProcessWorkbenchWindow::openImportDialog() {
             item->setData(0, Qt::UserRole, QStringLiteral("pending")); item->setData(0, Qt::UserRole + 4, path); item->setToolTip(0, path);
         }
         request->setExpanded(true); showNavigationPanel(1); datasetTree_->setCurrentItem(request);
-        emit importFilesRequested(paths); emit postProcessCommandRequested(QStringLiteral("importResults:") + importMode);
-        appendMessage(importMode == "replace" ? uiText(u"替换请求已提交；读取成功前保留现有数据。") : uiText(u"导入请求已提交；读取服务尚未接入。"));
+        emit importFilesRequested(paths); emit importDataRequested(paths, importMode); emit postProcessCommandRequested(QStringLiteral("importResults:") + importMode);
+        appendMessage(importMode == "replace" ? uiText(u"替换请求已提交；读取成功前保留现有数据。") : (dataServiceAvailable_ ? uiText(u"正在读取数据。") : uiText(u"导入请求已提交；读取服务尚未接入。")));
         dialog->accept();
     });
     dialog->show();
@@ -1028,10 +1041,74 @@ void PostProcessWorkbenchWindow::updateDataSelection(QTreeWidgetItem *item, int)
     selectedId_ = item ? item->data(0, Qt::UserRole+1).toString() : QString();
     selectedName_ = item ? item->text(0).trimmed() : QString();
     selectedContext_ = item ? item->data(0, Qt::UserRole+3).toMap() : QVariantMap();
-    if (selectionSummary_) selectionSummary_->setText(uiText(u"当前选择：") + selectedName_);
+    if (selectionSummary_) {
+        QString summary=uiText(u"当前选择：") + selectedName_;
+        if(selectedKind_==QStringLiteral("field") && !selectedContext_.value("regionId").toString().isEmpty()) {
+            summary+=uiText(u"\n位置：")+(selectedContext_.value("association").toString()=="point" ? uiText(u"节点") : uiText(u"单元"));
+            summary+=uiText(u"  ·  分量：%1").arg(selectedContext_.value("components").toInt());
+            if(selectedContext_.value("hasRange").toBool()) summary+=uiText(u"\n范围：%1 ~ %2").arg(selectedContext_.value("minimum").toDouble(),0,'g',6).arg(selectedContext_.value("maximum").toDouble(),0,'g',6);
+            summary+=uiText(u"\n单位：未知");
+        }
+        selectionSummary_->setText(summary);
+    }
     if (selectedKind_ == "time" && timeSlider_ && item->parent())
         timeSlider_->setValue(item->parent()->indexOfChild(item));
     updateSelectionActions();
+    if (!selectedContext_.value("regionId").toString().isEmpty()) {
+        emit dataSelectionChanged(selectedContext_.value("sourceId").toString(), selectedContext_.value("regionId").toString(), selectedContext_.value("field").toString(), selectedContext_.value("association").toString());
+    }
+}
+
+void PostProcessWorkbenchWindow::setDataServiceAvailable(bool available) { dataServiceAvailable_ = available; }
+
+void PostProcessWorkbenchWindow::presentImportError(const QString &message) {
+    for (int i=datasetTree_->topLevelItemCount()-1; i>=0; --i)
+        if (datasetTree_->topLevelItem(i)->data(0,Qt::UserRole).toString()==QStringLiteral("pendingGroup")) delete datasetTree_->takeTopLevelItem(i);
+    appendMessage(uiText(u"导入失败：") + message);
+    QMessageBox::warning(this, uiText(u"导入失败"), message);
+}
+
+void PostProcessWorkbenchWindow::presentImportedData(const QVariantList &datasets, bool replace) {
+    const QSignalBlocker blocker(datasetTree_);
+    if (replace) { datasetTree_->clear(); sceneList_->clear(); styleDrafts_.clear(); parameterDrafts_.clear(); }
+    else for (int i=datasetTree_->topLevelItemCount()-1; i>=0; --i)
+        if (datasetTree_->topLevelItem(i)->data(0,Qt::UserRole).toString()==QStringLiteral("pendingGroup")) delete datasetTree_->takeTopLevelItem(i);
+    QTreeWidgetItem *first = nullptr;
+    for (const QVariant &value : datasets) {
+        const QVariantMap dataset=value.toMap();
+        auto *root=new QTreeWidgetItem(datasetTree_,QStringList(dataset.value("name").toString()));
+        if(!first) first=root;
+        root->setData(0,Qt::UserRole,QStringLiteral("dataset")); root->setToolTip(0,dataset.value("path").toString());
+        QVariantMap rootContext; rootContext["sourceId"]=dataset.value("id"); root->setData(0,Qt::UserRole+3,rootContext);
+        root->setFlags(root->flags() | Qt::ItemIsUserCheckable); root->setCheckState(0,Qt::Checked);
+        for (const QVariant &rv : dataset.value("regions").toList()) {
+            const QVariantMap region=rv.toMap();
+            QVariantMap context; context["sourceId"]=dataset.value("id"); context["sourceName"]=dataset.value("name");
+            context["regionId"]=region.value("id"); context["dimension"]=region.value("dimension"); context["topology"]=uiText(u"CGNS 网格"); context["frames"]=1;
+            QStringList scalars, vectors;
+            for (const QVariant &fv:region.value("fields").toList()) { const auto f=fv.toMap(); if(f.value("components").toInt()==1) scalars << f.value("name").toString(); else if(f.value("components").toInt()==3) vectors << f.value("name").toString(); }
+            context["scalars"]=scalars; context["vectors"]=vectors; context["field"]=QString(); context["components"]=0;
+            auto *item=new QTreeWidgetItem(root,QStringList(region.value("name").toString()));
+            item->setData(0,Qt::UserRole,region.value("dimension").toInt()==3 ? QStringLiteral("volume") : QStringLiteral("surface"));
+            item->setData(0,Qt::UserRole+1,dataset.value("id").toString()+QStringLiteral("/")+region.value("id").toString()); item->setData(0,Qt::UserRole+3,context);
+            item->setFlags(item->flags() | Qt::ItemIsUserCheckable); item->setCheckState(0,Qt::Checked);
+            const QString kind=region.value("kind").toString();
+            item->setToolTip(0,kind==QStringLiteral("volume") ? uiText(u"体区域") : kind==QStringLiteral("boundary") ? uiText(u"边界区域") : uiText(u"未归入已识别边界的单元段"));
+            for (const QVariant &fv:region.value("fields").toList()) {
+                const auto f=fv.toMap(); const QString assoc=f.value("association").toString();
+                auto fc=context; fc["field"]=f.value("name"); fc["association"]=assoc; fc["components"]=f.value("components"); fc["hasRange"]=f.value("hasRange"); fc["minimum"]=f.value("minimum"); fc["maximum"]=f.value("maximum");
+                auto *field=new QTreeWidgetItem(item,QStringList(f.value("name").toString()+ (assoc=="point" ? uiText(u" · 节点") : uiText(u" · 单元"))));
+                const QString rangeText=f.value("hasRange").toBool() ? QStringLiteral("%1 ~ %2").arg(f.value("minimum").toDouble(),0,'g',6).arg(f.value("maximum").toDouble(),0,'g',6) : uiText(u"未知");
+                field->setToolTip(0,uiText(u"位置：%1\n分量：%2\n范围：%3\n单位：未知").arg(assoc=="point" ? uiText(u"节点") : uiText(u"单元")).arg(f.value("components").toInt()).arg(rangeText));
+                field->setData(0,Qt::UserRole,QStringLiteral("field")); field->setData(0,Qt::UserRole+1,dataset.value("id").toString()+QStringLiteral("/")+region.value("id").toString()+QStringLiteral("/")+assoc+QStringLiteral("/")+f.value("name").toString()); field->setData(0,Qt::UserRole+3,fc);
+            }
+            item->setExpanded(false);
+        }
+        root->setExpanded(true);
+    }
+    showNavigationPanel(1); if(first) { datasetTree_->setCurrentItem(first); updateDataSelection(first,0); }
+    if (sessionContext_) sessionContext_->setText(uiText(u"已加载 CGNS 数据"));
+    appendMessage(uiText(u"CGNS 数据读取完成。"));
 }
 
 void PostProcessWorkbenchWindow::updateSelectionActions() {
@@ -1069,7 +1146,7 @@ void PostProcessWorkbenchWindow::updateSelectionActions() {
     }
     enable("postProcessProbeAction",spatial,uiText(u"请先导入并选择可查询的网格或对象。"));
     if (viewportHint_) viewportHint_->setText(spatial
-        ? uiText(u"界面示例 · %1 · %2 · %3").arg(selectedContext_.value("topology").toString(),selectedName_,selectedContext_.value("field").toString())
+        ? (selectedContext_.value("regionId").toString().isEmpty() ? uiText(u"界面示例 · %1 · %2 · %3") : uiText(u"%1 · %2 · %3")).arg(selectedContext_.value("topology").toString(),selectedName_,selectedContext_.value("field").toString())
         : uiText(u"未选择空间数据"));
 
 }

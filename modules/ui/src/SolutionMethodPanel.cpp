@@ -4,6 +4,7 @@
 #include <QDoubleSpinBox>
 #include <QFormLayout>
 #include <QGroupBox>
+#include <QGridLayout>
 #include <QHeaderView>
 #include <QLabel>
 #include <QLocale>
@@ -38,19 +39,23 @@ SolutionMethodPanel::SolutionMethodPanel(const QVariantMap &draft, QWidget *pare
         {"cflPoints", QVariantList{QVariantMap{{"iteration", 1}, {"cfl", 0.}}, QVariantMap{{"iteration", 2000}, {"cfl", 5.}}}}};
     for (auto it = defaults.cbegin(); it != defaults.cend(); ++it)
         if (!draft_.contains(it.key())) draft_[it.key()] = it.value();
-    auto *layout = new QVBoxLayout(this); layout->setContentsMargins(0, 0, 0, 0); layout->setSpacing(16);
-    auto *group = new QGroupBox(text(u"求解方法"), this); layout->addWidget(group);
-    auto *form = new QFormLayout(group); form->setHorizontalSpacing(24); form->setVerticalSpacing(8);
+    auto *layout = new QGridLayout(this); layout->setContentsMargins(0, 0, 0, 0); layout->setSpacing(16);
+    layout->setColumnStretch(0, 1); layout->setColumnStretch(1, 1);
+    auto *group = new QGroupBox(text(u"求解方法"), this); layout->addWidget(group, 0, 0);
+    auto *form = new QFormLayout(group); form->setHorizontalSpacing(18); form->setVerticalSpacing(8);
+    form->setFormAlignment(Qt::AlignTop);
     form_ = form;
     form->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow); form->setRowWrapPolicy(QFormLayout::WrapLongRows);
     const auto addRow = [=](const QString &caption, QWidget *editor, bool unsteady = false) {
-        auto *label = new QLabel(caption, group); label->setMinimumWidth(215); label->setBuddy(editor);
+        auto *label = new QLabel(caption, group); label->setBuddy(editor);
         form->addRow(label, editor);
         if (unsteady) { unsteadyFields_.append(label); unsteadyFields_.append(editor); }
     };
     const auto choice = [=](const QString &caption, const QString &key,
                             const QList<QPair<QString, QString>> &options, bool unsteady = false) {
-        auto *editor = new QComboBox(group); editor->setObjectName(key); editor->setMaximumWidth(480);
+        auto *editor = new QComboBox(group); editor->setObjectName(key);
+        editor->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
+        editor->setMinimumContentsLength(16);
         for (const auto &option : options) editor->addItem(option.first, option.second);
         editor->setCurrentIndex(qMax(0, editor->findData(draft_.value(key)))); draft_[key] = editor->currentData();
         addRow(caption, editor, unsteady);
@@ -62,30 +67,33 @@ SolutionMethodPanel::SolutionMethodPanel(const QVariantMap &draft, QWidget *pare
         {"AUSM", "ausm"}, {"AUSMPW+", "ausmpw-plus"}, {"HLLC", "hllc"}});
     choice(text(u"流场限制器"), "limiter", {{text(u"无"), "none"}, {"vanleer", "vanleer"},
         {"vanalbada", "vanalbada"}, {"hvanleer", "hvanleer"}, {"hvanalbada", "hvanalbada"}});
-    choice(text(u"时间离散格式（非定常计算）"), "timeScheme", {
+    choice(text(u"时间离散格式"), "timeScheme", {
         {text(u"一阶向后差分格式"), "bdf1"}, {text(u"二阶向后差分格式"), "bdf2"},
         {text(u"优化的二阶向后差分格式"), "optimized-bdf2"}, {text(u"三阶向后差分格式"), "bdf3"},
         {text(u"修正的四阶向后差分格式"), "modified-bdf4"}, {text(u"强保稳的三阶Runge-Kutta格式"), "ssprk3"}}, true);
     auto *step = new Number(group); step->setObjectName("timeStep"); step->setMinimum(0.00000001);
-    step->setValue(draft_.value("timeStep").toDouble()); step->setMaximumWidth(220); draft_["timeStep"] = step->value();
+    step->setValue(draft_.value("timeStep").toDouble()); draft_["timeStep"] = step->value();
     addRow(text(u"时间步长 (s)"), step, true);
     connect(step, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [=](double value) {
         draft_["timeStep"] = value; emit draftChanged(draft_);
     });
     auto *sub = new QSpinBox(group); sub->setObjectName("subIterations"); sub->setRange(1, 1000000000);
-    sub->setValue(draft_.value("subIterations").toInt()); sub->setMaximumWidth(220); sub->setKeyboardTracking(false);
+    sub->setValue(draft_.value("subIterations").toInt()); sub->setKeyboardTracking(false);
     draft_["subIterations"] = sub->value(); addRow(text(u"子迭代步数"), sub, true);
     connect(sub, QOverload<int>::of(&QSpinBox::valueChanged), this, [=](int value) {
         draft_["subIterations"] = value; emit draftChanged(draft_);
     });
-    auto *count = new QSpinBox(group); count->setObjectName("cflPointCount"); count->setRange(1, 1000);
+    auto *cflGroup = new QGroupBox(text(u"CFL 数渐变"), this); layout->addWidget(cflGroup, 0, 1);
+    auto *cflLayout = new QVBoxLayout(cflGroup);
+    auto *count = new QSpinBox(cflGroup); count->setObjectName("cflPointCount"); count->setRange(1, 1000);
     count->setValue(draft_.value("cflPointCount").toInt()); count->setMaximumWidth(220); count->setKeyboardTracking(false);
-    draft_["cflPointCount"] = count->value(); addRow(text(u"CFL 数渐变设置"), count);
+    draft_["cflPointCount"] = count->value();
+    auto *countForm = new QFormLayout;
+    countForm->addRow(text(u"渐变点数"), count);
+    cflLayout->addLayout(countForm);
     auto *stable = new QCheckBox(text(u"开启强保稳"), group); stable->setObjectName("strongStability");
     stable->setChecked(draft_.value("strongStability").toBool()); form->addRow(stable);
     connect(stable, &QCheckBox::toggled, this, [=](bool value) { draft_["strongStability"] = value; emit draftChanged(draft_); });
-    auto *cflGroup = new QGroupBox(text(u"CFL 数渐变"), this); layout->addWidget(cflGroup);
-    auto *cflLayout = new QVBoxLayout(cflGroup);
     auto *table = new QTableWidget(cflGroup); table->setObjectName("cflTable"); table->setColumnCount(2);
     table->setHorizontalHeaderLabels({text(u"迭代步数"), text(u"CFL 数")});
     table->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
@@ -116,7 +124,7 @@ SolutionMethodPanel::SolutionMethodPanel(const QVariantMap &draft, QWidget *pare
     rebuild(count->value());
     connect(count, QOverload<int>::of(&QSpinBox::valueChanged), this, [=](int value) { rebuild(value); emit draftChanged(draft_); });
     auto *hint = new QLabel(text(u"定常计算隐藏时间离散、时间步长和子迭代设置；切换计算类型会保留已输入值。"), this);
-    hint->setWordWrap(true); hint->setProperty("parameterHint", true); layout->addWidget(hint);
+    hint->setWordWrap(true); hint->setProperty("parameterHint", true); layout->addWidget(hint, 1, 0, 1, 2);
     setUnsteady(false);
 }
 void SolutionMethodPanel::setUnsteady(bool unsteady) {

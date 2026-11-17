@@ -7,6 +7,7 @@
 #include <QComboBox>
 #include <QFormLayout>
 #include <QHeaderView>
+#include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
 #include <QPushButton>
@@ -35,7 +36,10 @@ MeshMotionPanel::MeshMotionPanel(const QVariantMap &draft, QWidget *parent)
     enabled_ = new QCheckBox(uiText(u"是否启动动网格"), this);
     enabled_->setObjectName(QStringLiteral("meshMotionEnabled"));
     enabled_->setChecked(draft.value("enabled", false).toBool());
-    layout->addWidget(enabled_);
+    auto *toolbar = new QHBoxLayout;
+    toolbar->setSpacing(16);
+    toolbar->addWidget(enabled_);
+    toolbar->addStretch();
     auto *countForm = new QFormLayout;
     count_ = new QSpinBox(this);
     count_->setObjectName(QStringLiteral("motionBodyCount"));
@@ -44,7 +48,8 @@ MeshMotionPanel::MeshMotionPanel(const QVariantMap &draft, QWidget *parent)
     count_->setMaximumWidth(220);
     count_->setEnabled(enabled_->isChecked());
     countForm->addRow(uiText(u"运动体数目"), count_);
-    layout->addLayout(countForm);
+    toolbar->addLayout(countForm);
+    layout->addLayout(toolbar);
     table_ = new QTableWidget(this);
     table_->setObjectName(QStringLiteral("motionBodyTable"));
     table_->setColumnCount(4);

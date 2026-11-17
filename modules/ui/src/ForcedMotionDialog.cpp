@@ -1,4 +1,6 @@
 #include "aerosim/ui/ForcedMotionDialog.h"
+#include "MotionDialogLayout.h"
+#include <QGroupBox>
 #include <QComboBox>
 #include <QDialogButtonBox>
 #include <QDoubleSpinBox>
@@ -36,14 +38,20 @@ ForcedMotionDialog::ForcedMotionDialog(const QVariantMap &parameters, QWidget *p
     setProperty("parameterEditor", true);
     setStyleSheet(QStringLiteral("QAbstractSpinBox, QComboBox, QLineEdit { min-height: 22px; max-height: 22px; padding: 2px 6px; }"));
     setModal(true);
-    resize(650, 690);
+
     auto *layout = new QVBoxLayout(this);
     auto *scroll = new QScrollArea(this);
     scroll->setWidgetResizable(true);
     scroll->setFrameShape(QFrame::NoFrame);
     auto *content = new QWidget(scroll);
     content->setProperty("parameterSurface", true);
-    auto *form = new QFormLayout(content);
+    auto *body = new QVBoxLayout(content);
+    auto *columns = new motionLayout::Columns(content);
+    body->addWidget(columns);
+    body->addStretch();
+    auto *general = new QGroupBox(text(u"运动类型与位置"), columns);
+    auto *form = new QFormLayout(general);
+    columns->items->addWidget(general, 1);
     form->setRowWrapPolicy(QFormLayout::WrapLongRows);
     form->setVerticalSpacing(8);
     scroll->setWidget(content);
@@ -86,10 +94,10 @@ ForcedMotionDialog::ForcedMotionDialog(const QVariantMap &parameters, QWidget *p
     auto *rotation = choice(content, "rotationType", {text(u"无旋转"), text(u"匀速旋转"), text(u"正弦旋转")},
                             {"none", "constant", "sinusoidal"});
     form->addRow(text(u"旋转运动类型"), rotation);
-    auto *rotationFields = new QWidget(content);
+    auto *rotationFields = new QGroupBox(text(u"旋转参数"), columns);
     rotationFields->setObjectName("rotationSettings");
     auto *rotationForm = new QFormLayout(rotationFields);
-    rotationForm->setContentsMargins(0, 0, 0, 0);
+
     rotationForm->setRowWrapPolicy(QFormLayout::WrapLongRows);
     rotationForm->addRow(text(u"旋转中心 (m)"), vector("rotationCenter", false));
     rotationForm->addRow(text(u"旋转方向矢量"), vector("rotationAxis", true));
@@ -123,7 +131,7 @@ ForcedMotionDialog::ForcedMotionDialog(const QVariantMap &parameters, QWidget *p
     sineForm->addRow(text(u"旋转偏移值 (°)"), number(sine, "rotationOffset", 0));
     sineForm->addRow(text(u"旋转振幅 (°)"), number(sine, "rotationAmplitude", 0, 0));
     rotationForm->addRow(sine);
-    form->addRow(rotationFields);
+    columns->items->addWidget(rotationFields, 1);
     auto *translation = choice(content, "translationType", {text(u"无平动")}, {"none"});
     form->addRow(text(u"平移运动类型"), translation);
     const auto update = [=] {
@@ -135,7 +143,10 @@ ForcedMotionDialog::ForcedMotionDialog(const QVariantMap &parameters, QWidget *p
         reduced->setVisible(frequencyType->currentData() == "reduced");
         reducedLabel->setVisible(!reduced->isHidden());
     };
-    connect(rotation, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [update](int) { update(); });
+    connect(rotation, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [=](int) {
+        update();
+        motionLayout::fit(this, rotation->currentData() == "none" ? QSize(600, 260) : QSize(1080, 440));
+    });
     connect(frequencyType, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [update](int) { update(); });
     update();
     auto *error = new QLabel(this);
@@ -163,5 +174,6 @@ ForcedMotionDialog::ForcedMotionDialog(const QVariantMap &parameters, QWidget *p
         accept();
     });
     layout->addWidget(buttons);
+    motionLayout::fit(this, rotation->currentData() == "none" ? QSize(600, 260) : QSize(1080, 440));
 }
 }

@@ -132,7 +132,7 @@ BoundaryConditionsPanel::BoundaryConditionsPanel(const QVariantMap &draft, QWidg
         item->setIcon(1, QIcon(QStringLiteral(":/aerosim/postprocess/parameters.svg")));
         if (row.value("id").toString() == draft_.value("selectedId", "wing_edge").toString()) initial = item;
     }
-    content->addWidget(table_, 3);
+    content->addWidget(table_, 2);
     auto *editColumn = new QVBoxLayout;
     editColumn->setSpacing(12);
     auto *editor = new QGroupBox(uiText(u"边界条件"), this);
@@ -197,7 +197,7 @@ BoundaryConditionsPanel::BoundaryConditionsPanel(const QVariantMap &draft, QWidg
     footer->addWidget(apply_);
     editColumn->addLayout(footer);
     editColumn->addStretch();
-    content->addLayout(editColumn, 2);
+    content->addLayout(editColumn, 3);
     layout->addLayout(content);
     connect(table_, &QTreeWidget::currentItemChanged, this, [this] { loadSelection(); });
     connect(name_, &QLineEdit::textChanged, this, [this] { validateEdit(); });
@@ -350,8 +350,8 @@ void BoundaryConditionsPanel::resizeEvent(QResizeEvent *event)
     QWidget::resizeEvent(event);
     const bool stacked = width() < 900;
     bodyLayout_->setDirection(stacked ? QBoxLayout::TopToBottom : QBoxLayout::LeftToRight);
-    bodyLayout_->setStretch(0, stacked ? 0 : 3);
-    bodyLayout_->setStretch(1, stacked ? 0 : 2);
+    bodyLayout_->setStretch(0, stacked ? 0 : 2);
+    bodyLayout_->setStretch(1, stacked ? 0 : 3);
     table_->setMaximumHeight(stacked ? 300 : QWIDGETSIZE_MAX);
 }
 

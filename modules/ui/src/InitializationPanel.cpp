@@ -42,6 +42,8 @@ public:
     std::function<void(const QVariantMap &)> changed;
     explicit StateEditor(const QVariantMap &initial, QWidget *parent, bool fixed = false) : QWidget(parent), values(initial) {
         form_=new QFormLayout(this); form_->setContentsMargins(0,0,0,0); form_->setVerticalSpacing(8);
+        form_->setHorizontalSpacing(18);
+        form_->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
         form_->setRowWrapPolicy(QFormLayout::WrapLongRows);
         auto *type=new QComboBox(this); type->setObjectName("initialParameterType");
         for(const auto &p:parameterTypes()) type->addItem(p.first,p.second);
@@ -94,7 +96,7 @@ private:
         for(const auto &key:keys) { const auto r=rows_[key]; form_->addRow(r.first,r.second);r.first->show();r.second->show(); }
         for(int row=0;row<form_->rowCount();++row) {
             auto *item=form_->itemAt(row,QFormLayout::LabelRole);
-            if(item && item->widget())item->widget()->setMinimumWidth(190);
+            if(item && item->widget())item->widget()->setMinimumWidth(140);
         }
     }
 };
@@ -102,24 +104,29 @@ private:
 namespace aerosim {
 InitializationPanel::InitializationPanel(const QVariantMap &draft,QWidget *parent) : QWidget(parent),draft_(draft),regions_(draft.value("regions").toList()) {
     setObjectName("initializationPanel");setProperty("parameterPanel",true);setAttribute(Qt::WA_StyledBackground,true);
-    auto *layout=new QVBoxLayout(this);layout->setContentsMargins(0,0,0,0);layout->setSpacing(16);
+    auto *layout=new QHBoxLayout(this);layout->setContentsMargins(0,0,0,0);layout->setSpacing(16);
     auto *global=new QGroupBox(text(u"全局初始化"),this);auto *globalLayout=new QVBoxLayout(global);
     auto *form=new QFormLayout; globalForm_=form;globalLayout->addLayout(form);
+    global->setObjectName("globalInitializationGroup");
+    globalLayout->setSpacing(8);
+    form->setHorizontalSpacing(18);
+    form->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
     mode_=new QComboBox(global);mode_->setObjectName("initializationMode");
     mode_->addItem(text(u"自定义输入"),"custom");mode_->addItem(text(u"从边界条件初始化"),"boundary");mode_->addItem(text(u"从参考量初始化"),"reference");
     mode_->setCurrentIndex(qMax(0,mode_->findData(draft_.value("mode","custom"))));draft_["mode"]=mode_->currentData();
     form->addRow(text(u"初始化方式"),mode_);
-    form->labelForField(mode_)->setMinimumWidth(190);
+    form->labelForField(mode_)->setMinimumWidth(140);
     source_=new QComboBox(global);source_->setObjectName("initializationBoundary");sourceLabel_=new QLabel(text(u"从边界条件获取"),global);form->addRow(sourceLabel_,source_);
     state_=new QWidget(global);state_->setObjectName("initializationStateHost");auto *stateLayout=new QVBoxLayout(state_);stateLayout->setContentsMargins(0,0,0,0);globalLayout->addWidget(state_);
-    sourceHint_=new QLabel(global);sourceHint_->setWordWrap(true);sourceHint_->setProperty("parameterHint",true);globalLayout->addWidget(sourceHint_);layout->addWidget(global);
+    sourceHint_=new QLabel(global);sourceHint_->setWordWrap(true);sourceHint_->setProperty("parameterHint",true);globalLayout->addWidget(sourceHint_);globalLayout->addStretch();layout->addWidget(global, 1);
     connect(mode_,QOverload<int>::of(&QComboBox::currentIndexChanged),this,[=](int){draft_["mode"]=mode_->currentData();updateGlobal();publish();});
     connect(source_,QOverload<int>::of(&QComboBox::currentIndexChanged),this,[=](int){draft_["boundaryId"]=source_->currentData();updateGlobal();publish();});
     auto *local=new QGroupBox(text(u"局部初始化"),this);auto *localLayout=new QVBoxLayout(local);auto *countForm=new QFormLayout;
+    local->setObjectName("localInitializationGroup");
     auto *count=new QSpinBox(local);count->setObjectName("initializationRegionCount");count->setRange(0,100);count->setMaximumWidth(220);
     count->setValue(draft_.value("regionCount",0).toInt());draft_["regionCount"]=count->value();countForm->addRow(text(u"局部初始化个数"),count);localLayout->addLayout(countForm);
     table_=new QTableWidget(local);table_->setObjectName("initializationRegions");table_->setColumnCount(3);table_->setHorizontalHeaderLabels({text(u"形状"),text(u"参数类型"),text(u"设置")});
-    table_->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);table_->verticalHeader()->setDefaultSectionSize(40);table_->setMinimumHeight(200);localLayout->addWidget(table_);layout->addWidget(local);layout->addStretch();
+    table_->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);table_->verticalHeader()->setDefaultSectionSize(40);table_->setMinimumHeight(200);localLayout->addWidget(table_, 1);layout->addWidget(local, 1);
     connect(count,QOverload<int>::of(&QSpinBox::valueChanged),this,[=](int n){draft_["regionCount"]=n;rebuildRegions(n);publish();});
     rebuildRegions(count->value());setSources({},{});
 }
@@ -134,7 +141,7 @@ void InitializationPanel::setSources(const QVariantMap &boundary,const QVariantM
 void InitializationPanel::updateGlobal() {
     const auto mode=mode_->currentData().toString(); const bool boundary=mode=="boundary";
     if(globalForm_->indexOf(source_)>=0){auto row=globalForm_->takeRow(source_);delete row.labelItem;delete row.fieldItem;}
-    if(boundary){globalForm_->addRow(sourceLabel_,source_);sourceLabel_->setMinimumWidth(190);}
+    if(boundary){globalForm_->addRow(sourceLabel_,source_);sourceLabel_->setMinimumWidth(140);}
     source_->setVisible(boundary);sourceLabel_->setVisible(boundary);
     QVariantMap state=draft_.value("customState").toMap();bool available=true;
     if(mode=="reference") {state=reference_;available=!reference_.isEmpty();}

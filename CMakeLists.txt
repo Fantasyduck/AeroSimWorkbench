@@ -12,6 +12,7 @@ endif()
 option(AEROSIM_BUILD_GUI "Build the SARibbon main window" ON)
 option(AEROSIM_BUILD_TESTS "Build and register skeleton smoke tests" ON)
 option(AEROSIM_BUILD_MACHINE_LEARNING "Build the Eigen-based machine learning backend" ${AEROSIM_BUILD_GUI})
+option(AEROSIM_BUILD_MESH_VIEWER "Build the VTK preprocessing mesh viewport" OFF)
 
 option(AEROSIM_BUILD_STACK_PROBE "Build the optional Qt/VTK/SARibbon compatibility probe" OFF)
 # Visualization is on by default: the monitor page gets its real curve widget
@@ -46,6 +47,16 @@ endif()
 # and the abstract MonitorCurveWidget injection point.
 if(AEROSIM_BUILD_VISUALIZATION)
     add_subdirectory(modules/visualization)
+endif()
+
+# modules/visualization/scene holds both viewers and is entered exactly once,
+# from here: the preprocessing mesh viewport needs AEROSIM_BUILD_MESH_VIEWER,
+# while the post-process workbench viewer (aerosim_visualization_scene, picked
+# up by app/ through a TARGET check) only needs AEROSIM_BUILD_VISUALIZATION.
+# modules/visualization/ deliberately does not add this directory again, and
+# the option above is the single declaration of AEROSIM_BUILD_MESH_VIEWER.
+if(AEROSIM_BUILD_GUI AND (AEROSIM_BUILD_MESH_VIEWER OR AEROSIM_BUILD_VISUALIZATION))
+    add_subdirectory(modules/visualization/scene)
 endif()
 
 if(AEROSIM_BUILD_GUI)

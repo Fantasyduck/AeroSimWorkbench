@@ -40,12 +40,21 @@ public:
 public slots:
     // GUI-thread presentation endpoint; no picking or numerical work is done here.
     void displayProbeResult(const QString &text);
+    void setDataServiceAvailable(bool available);
+    void presentImportedData(const QVariantList &datasets, bool replace);
+    void presentImportError(const QString &message);
 
 signals:
     void viewRequested(const QString &orientation);
     void postProcessCommandRequested(const QString &command);
     // UI requests only; no reader or exporter is currently connected.
     void importFilesRequested(const QStringList &paths);
+    void importDataRequested(const QStringList &paths, const QString &mode);
+    void datasetVisibilityChanged(const QString &dataset, bool visible);
+    void datasetRemovalRequested(const QString &dataset);
+    void regionVisibilityChanged(const QString &dataset, const QString &region, bool visible);
+    void dataSelectionChanged(const QString &dataset, const QString &region,
+                              const QString &field, const QString &association);
     void exportFileRequested(const QString &kind, const QString &path);
     // GUI-thread view preference; a future viewer adapter must apply it to VTK.
     void backgroundChanged(const QColor &bottom, const QColor &top, bool gradient);
@@ -109,6 +118,7 @@ private:
     QDockWidget *deepSeekHarnessDock_ = nullptr;
     ServiceBindings services_;
     bool bound_ = false;
+    bool dataServiceAvailable_ = false;
 };
 
 } // namespace aerosim

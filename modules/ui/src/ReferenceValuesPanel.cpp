@@ -38,7 +38,8 @@ QFormLayout *makeForm(QWidget *parent)
     form->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
     form->setRowWrapPolicy(QFormLayout::WrapLongRows);
     form->setLabelAlignment(Qt::AlignLeft | Qt::AlignVCenter);
-    form->setHorizontalSpacing(24);
+    form->setFormAlignment(Qt::AlignTop);
+    form->setHorizontalSpacing(18);
     form->setVerticalSpacing(8);
     return form;
 }
@@ -59,12 +60,13 @@ ReferenceValuesPanel::ReferenceValuesPanel(const QVariantMap &draft, QWidget *pa
     for (auto it = defaults.cbegin(); it != defaults.cend(); ++it)
         if (!draft_.contains(it.key())) draft_.insert(it.key(), it.value());
 
-    auto *layout = new QVBoxLayout(this);
+    auto *layout = new QHBoxLayout(this);
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(16);
     auto *geometry = new QGroupBox(uiText(u"几何参考量"), this);
+    geometry->setObjectName(QStringLiteral("referenceGeometryGroup"));
     auto *geometryForm = makeForm(geometry);
-    layout->addWidget(geometry);
+    layout->addWidget(geometry, 1);
 
     const auto number = [this](QWidget *owner, const QString &key, double minimum, double maximum) {
         auto *editor = new ReferenceValueSpinBox(owner);
@@ -73,9 +75,8 @@ ReferenceValuesPanel::ReferenceValuesPanel(const QVariantMap &draft, QWidget *pa
         editor->setRange(minimum, maximum);
         editor->setSingleStep(0.1);
         editor->setValue(draft_.value(key).toDouble());
-        editor->setMaximumWidth(180);
         editor->setMinimumWidth(100);
-        editor->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Fixed);
+        editor->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
         editor->setKeyboardTracking(false);
         draft_[key] = editor->value();
         connect(editor, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
@@ -91,27 +92,26 @@ ReferenceValuesPanel::ReferenceValuesPanel(const QVariantMap &draft, QWidget *pa
     for (int index = 0; index < 3; ++index) {
         auto *label = new QLabel(axes[index], point);
         auto *editor = number(point, pointKeys[index], -1e9, 1e9);
-        editor->setMaximumWidth(140);
         editor->setMinimumWidth(80);
         editor->setAccessibleName(uiText(u"力矩参考点 ") + axes[index]);
         label->setBuddy(editor);
         pointLayout->addWidget(label);
-        pointLayout->addWidget(editor);
+        pointLayout->addWidget(editor, 1);
     }
-    pointLayout->addStretch();
-    geometryForm->addRow(uiText(u"力矩参考点 (m)"), point);
+    geometryForm->addRow(new QLabel(uiText(u"力矩参考点 (m)"), geometry));
+    geometryForm->addRow(point);
     geometryForm->addRow(uiText(u"气动弦长 (m)"), number(geometry, "chordLength", 0.000001, 1e9));
     geometryForm->addRow(uiText(u"气动展长 (m)"), number(geometry, "spanLength", 0.000001, 1e9));
     geometryForm->addRow(uiText(u"参考面积 (m²)"), number(geometry, "referenceArea", 0.000001, 1e12));
 
     auto *flow = new QGroupBox(uiText(u"来流参考量"), this);
+    flow->setObjectName(QStringLiteral("referenceFlowGroup"));
     flowForm_ = makeForm(flow);
-    layout->addWidget(flow);
+    layout->addWidget(flow, 1);
     inputMode_ = new QComboBox(flow);
     inputMode_->setObjectName(QStringLiteral("referenceInputMode"));
     inputMode_->addItem(uiText(u"从边界条件获取"), "boundary");
     inputMode_->addItem(uiText(u"自定义输入"), "custom");
-    inputMode_->setMaximumWidth(280);
     inputMode_->setCurrentIndex(qMax(0, inputMode_->findData(draft_.value("inputMode"))));
     flowForm_->addRow(uiText(u"输入方式"), inputMode_);
 
@@ -123,7 +123,6 @@ ReferenceValuesPanel::ReferenceValuesPanel(const QVariantMap &draft, QWidget *pa
     sourceLayout->setSpacing(4);
     auto *boundary = new QComboBox(boundarySource_);
     boundary->setObjectName(QStringLiteral("referenceBoundary"));
-    boundary->setMaximumWidth(280);
     boundary->addItem(uiText(u"暂无可获取的边界来流参数"));
     boundary->setEnabled(false);
     sourceLayout->addWidget(boundary);
@@ -140,7 +139,6 @@ ReferenceValuesPanel::ReferenceValuesPanel(const QVariantMap &draft, QWidget *pa
     parameterType_->addItem(uiText(u"静温和静压"), "static-temperature-pressure");
     parameterType_->addItem(uiText(u"总温和总压"), "total-temperature-pressure");
     parameterType_->addItem(uiText(u"高度"), "altitude");
-    parameterType_->setMaximumWidth(280);
     parameterType_->setCurrentIndex(qMax(0, parameterType_->findData(draft_.value("parameterType"))));
     flowForm_->addRow(uiText(u"参数类型"), parameterType_);
     flowForm_->addRow(uiText(u"马赫数"), number(flow, "machNumber", 0.0, 1e4));

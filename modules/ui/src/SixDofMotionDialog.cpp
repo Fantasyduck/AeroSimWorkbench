@@ -1,4 +1,7 @@
 #include "aerosim/ui/SixDofMotionDialog.h"
+#include "MotionDialogLayout.h"
+#include <QGridLayout>
+#include <QTabWidget>
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDialogButtonBox>
@@ -57,7 +60,7 @@ public:
             : QStringList{"Fx (N)", "Fy (N)", "Fz (N)", "Px (m)", "Py (m)", "Pz (m)", text(u"时刻 (s)")});
         table_->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
         table_->verticalHeader()->setDefaultSectionSize(36);
-        table_->setMinimumHeight(130); table_->setMaximumHeight(200);
+        table_->setMinimumHeight(110); table_->setMaximumHeight(160);
         layout->addWidget(table_);
         auto *save = new QPushButton(text(u"保存"), this); save->setObjectName(prefix + "Save");
         layout->addWidget(save, 0, Qt::AlignRight);
@@ -134,19 +137,28 @@ SixDofMotionDialog::SixDofMotionDialog(const QVariantMap &parameters, QWidget *p
     const bool release = mode == Mode::RotationRelease;
     setObjectName(release ? "rotationReleaseMotionDialog" : "sixDofMotionDialog");
     setWindowTitle(release ? text(u"旋转抛置参数设置") : text(u"六自由度运动参数设置"));
-    setProperty("parameterEditor", true); setModal(true); resize(900, 780);
+    setProperty("parameterEditor", true); setModal(true);
     setStyleSheet(QStringLiteral("QAbstractSpinBox, QComboBox { min-height: 22px; max-height: 22px; padding: 2px 6px; }"));
     auto *layout = new QVBoxLayout(this);
     auto *scroll = new QScrollArea(this); scroll->setObjectName("sixDofScroll");
     scroll->setWidgetResizable(true); scroll->setFrameShape(QFrame::NoFrame);
     auto *content = new QWidget(scroll); content->setProperty("parameterSurface", true);
-    auto *body = new QVBoxLayout(content); auto *form = new QFormLayout;
+    auto *body = new QVBoxLayout(content);
+    auto *columns = new motionLayout::Columns(content);
+    body->addWidget(columns);
+    body->addStretch();
+    auto *rigidBody = new QGroupBox(text(u"运动体与约束"), columns);
+    auto *form = new QFormLayout(rigidBody);
     form->setRowWrapPolicy(QFormLayout::WrapLongRows);
-    auto *rigidBody = release ? new QGroupBox(text(u"运动体参数"), content) : nullptr;
-    QVBoxLayout *loadLayout = body;
-    if (rigidBody) {
-        loadLayout = new QVBoxLayout(rigidBody); loadLayout->addLayout(form); body->addWidget(rigidBody);
-    } else body->addLayout(form);
+    columns->items->addWidget(rigidBody, 1);
+    auto *right = new QWidget(columns);
+    auto *rightLayout = new QVBoxLayout(right);
+    rightLayout->setContentsMargins(0, 0, 0, 0);
+    columns->items->addWidget(right, 1);
+    auto *initial = new QGroupBox(text(u"初始运动状态"), right);
+    auto *initialForm = new QFormLayout(initial);
+    if (!release) rightLayout->addWidget(initial);
+    else initial->hide();
     scroll->setWidget(content); layout->addWidget(scroll);
     const auto number = [this](QWidget *owner, const QString &key, double fallback, double minimum = -1e12) {
         auto *value = new Number(owner); value->setObjectName(key); value->setMinimum(minimum);
@@ -163,9 +175,10 @@ SixDofMotionDialog::SixDofMotionDialog(const QVariantMap &parameters, QWidget *p
         }
         return row;
     };
+    QGroupBox *axisGroup = nullptr;
     if (release) {
-        auto *axisGroup = new QGroupBox(text(u"旋转抛置参数"), content);
-        auto *axisForm = new QFormLayout(axisGroup); body->insertWidget(0, axisGroup);
+        axisGroup = new QGroupBox(text(u"旋转抛置参数"), content);
+        auto *axisForm = new QFormLayout(axisGroup); rightLayout->addWidget(axisGroup);
         auto *definition = new QComboBox(axisGroup); definition->setObjectName("axisDefinition");
         definition->addItem(text(u"方向定义"), "direction"); definition->addItem(text(u"两点定义"), "two-points");
         definition->setCurrentIndex(parameters_.value("axisDefinition") == "two-points" ? 1 : 0);
@@ -199,14 +212,26 @@ SixDofMotionDialog::SixDofMotionDialog(const QVariantMap &parameters, QWidget *p
     }
     form->addRow(text(u"运动体质量 (kg)"), number(content, "mass", 1., 0.000001));
     form->addRow(text(u"重心位置 (m)"), vector("centerOfGravity"));
-    for (const auto &component : QStringList{"xx", "yy", "zz", "xy", "xz", "yz"})
-        form->addRow(text(u"惯性矩 I%1 (kg·m²)").arg(component),
-                     number(content, "inertia" + component, component[0] == component[1] ? 1. : 0.,
-                            component[0] == component[1] ? 0.000001 : -1e12));
+    auto *inertia = new QGroupBox(text(u"惯性矩 (kg·m²)"), rigidBody);
+    auto *inertiaGrid = new QGridLayout(inertia);
+    int componentIndex = 0;
+    for (const auto &component : QStringList{"xx", "yy", "zz", "xy", "xz", "yz"}) {
+        const int row = componentIndex / 3;
+        const int column = componentIndex % 3;
+        auto *cell = new QWidget(inertia);
+        auto *cellLayout = new QHBoxLayout(cell);
+        cellLayout->setContentsMargins(0, 0, 0, 0);
+        cellLayout->addWidget(new QLabel("I" + component, cell));
+        cellLayout->addWidget(number(cell, "inertia" + component, component[0] == component[1] ? 1. : 0.,
+                                     component[0] == component[1] ? 0.000001 : -1e12));
+        inertiaGrid->addWidget(cell, row, column);
+        ++componentIndex;
+    }
+    form->addRow(inertia);
     if (!release) {
-        form->addRow(text(u"初始线速度 (m/s)"), vector("initialVelocity"));
-        form->addRow(text(u"初始角速度 (°/s)"), vector("initialAngularVelocity"));
-        form->addRow(text(u"初始姿态角 (°)"), vector("initialAttitude"));
+        initialForm->addRow(text(u"初始线速度 (m/s)"), vector("initialVelocity"));
+        initialForm->addRow(text(u"初始角速度 (°/s)"), vector("initialAngularVelocity"));
+        initialForm->addRow(text(u"初始姿态角 (°)"), vector("initialAttitude"));
     }
     for (const auto &key : QStringList{"ignoreTranslation", "ignoreRotation"}) {
         auto *row = new QWidget(content); auto *items = new QHBoxLayout(row); items->setContentsMargins(0, 0, 0, 0);
@@ -224,11 +249,22 @@ SixDofMotionDialog::SixDofMotionDialog(const QVariantMap &parameters, QWidget *p
         auto *labelItem = form->itemAt(row, QFormLayout::LabelRole);
         if (labelItem && labelItem->widget()) labelItem->widget()->setMinimumWidth(175);
     }
+    auto *loads = new QTabWidget(right);
+    loads->setObjectName("motionLoadTabs");
+    if (axisGroup) {
+        rightLayout->removeWidget(axisGroup);
+        loads->addTab(axisGroup, text(u"转轴"));
+    }
+    rightLayout->addWidget(loads);
+    rightLayout->addStretch();
     LoadEditor *forces = nullptr; LoadEditor *moments = nullptr;
     for (bool moment : {false, true}) {
         const QString key = moment ? "momentCount" : "forceCount";
         auto *count = new QSpinBox(content); count->setObjectName(moment ? "externalMomentCount" : "externalForceCount");
         count->setRange(0, 100); count->setValue(parameters_.value(key, release ? 0 : 1).toInt()); parameters_[key] = count->value();
+        auto *page = new QWidget(loads);
+        auto *loadLayout = new QVBoxLayout(page);
+        loads->addTab(page, moment ? text(u"外力矩") : text(u"外力"));
         auto *countForm = new QFormLayout;
         auto *countLabel = new QLabel(moment ? text(u"外力矩数目") : text(u"外力数目"), content);
         countLabel->setMinimumWidth(175);
@@ -240,7 +276,6 @@ SixDofMotionDialog::SixDofMotionDialog(const QVariantMap &parameters, QWidget *p
             editor->resizeEntries(value); parameters_[key] = value;
         });
     }
-    body->addStretch();
     auto *error = new QLabel(this); error->setObjectName("motionValidationError");
     error->setWordWrap(true); error->hide(); layout->addWidget(error);
     auto *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
@@ -261,5 +296,6 @@ SixDofMotionDialog::SixDofMotionDialog(const QVariantMap &parameters, QWidget *p
         parameters_["forces"] = forces->entries(); parameters_["moments"] = moments->entries(); accept();
     });
     layout->addWidget(buttons);
+    motionLayout::fit(this, QSize(1160, 600));
 }
 }

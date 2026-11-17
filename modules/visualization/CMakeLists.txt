@@ -1,5 +1,4 @@
 cmake_minimum_required(VERSION 3.16)
-
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
     project(AeroSimVisualization LANGUAGES CXX)
     set(CMAKE_CXX_STANDARD 14)
@@ -39,3 +38,9 @@ if(AEROSIM_BUILD_TESTS)
     enable_testing()
     add_subdirectory(tests)
 endif()
+
+# scene/ is entered from the top-level CMakeLists instead of here: it holds both
+# viewers (the preprocessing mesh viewport and the post-process workbench
+# viewer) and must be added exactly once when either option is on. Adding it
+# from this file as well would add the same directory twice; it also cannot
+# stand alone because the workbench viewer links modules/ui.

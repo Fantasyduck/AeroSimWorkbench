@@ -24,6 +24,9 @@ add_subdirectory(monitor)
 add_subdirectory(intelligent)
 add_library(aerosim_ui STATIC
     resources/PostProcessIcons.qrc
+    src/CalculationTaskPage.cpp include/aerosim/ui/CalculationTaskPage.h
+    src/CalculationTaskInputDialog.cpp include/aerosim/ui/CalculationTaskInputDialog.h
+    src/UiLayoutConfig.cpp include/aerosim/ui/UiLayoutConfig.h
     src/MainWindow.cpp include/aerosim/ui/MainWindow.h resources/RibbonIcons.qrc
     src/MeshManagementPage.cpp include/aerosim/ui/MeshManagementPage.h
     src/TrajectorySettingsPage.cpp include/aerosim/ui/TrajectorySettingsPage.h
@@ -54,10 +57,14 @@ if(MSVC)
 endif()
 if(AEROSIM_BUILD_TESTS)
     find_package(Qt5 5.12.12 EXACT REQUIRED COMPONENTS Test)
-    add_executable(aerosim_main_monitor_test tests/monitor/MainWindowMonitorTest.cpp)
-    target_link_libraries(aerosim_main_monitor_test PRIVATE aerosim_ui Qt5::Test)
-    add_test(NAME main_monitor_integration COMMAND aerosim_main_monitor_test)
-    set_tests_properties(main_monitor_integration PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+    add_executable(aerosim_parameter_layout_test tests/ParameterLayoutRegression.cpp)
+    target_link_libraries(aerosim_parameter_layout_test PRIVATE aerosim_ui)
+    add_test(NAME parameter_layout_regression COMMAND aerosim_parameter_layout_test)
+    set_tests_properties(parameter_layout_regression PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+    add_executable(aerosim_ui_layout_framework_test tests/UiLayoutFrameworkTest.cpp)
+    target_link_libraries(aerosim_ui_layout_framework_test PRIVATE aerosim_ui)
+    add_test(NAME ui_layout_framework COMMAND aerosim_ui_layout_framework_test)
+    set_tests_properties(ui_layout_framework PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
     add_executable(aerosim_postprocess_ui_smoke tests/postprocess/PostProcessWorkbenchWindowSmoke.cpp)
     target_link_libraries(aerosim_postprocess_ui_smoke PRIVATE aerosim_ui)
     add_test(NAME postprocess_ui_smoke COMMAND aerosim_postprocess_ui_smoke)

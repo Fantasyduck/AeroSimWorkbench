@@ -19,8 +19,12 @@
 #endif
 #include <QPixmap>
 
+#ifdef AEROSIM_HAS_MESH_VIEWER
+#include "MeshViewerBinding.h"
+#endif
+
 #ifdef AEROSIM_HAS_VTK_VIEWER
-#include "aerosim/visualization/scene/VtkSceneViewer.h"
+#include "aerosim/visualization/VtkSceneViewer.h"
 #include <QSurfaceFormat>
 #include <QVTKOpenGLNativeWidget.h>
 #endif
@@ -38,6 +42,10 @@ int main(int argc, char *argv[])
     QApplication::setAttribute(Qt::AA_UseHighDpiPixmaps);
 #ifdef AEROSIM_HAS_VTK_VIEWER
     QSurfaceFormat::setDefaultFormat(QVTKOpenGLNativeWidget::defaultFormat());
+#endif
+#ifdef AEROSIM_HAS_MESH_VIEWER
+    if (qgetenv("AEROSIM_ENABLE_MESH_VIEWER") != "0")
+        aerosim::configureMeshViewerSurface();
 #endif
     QApplication app(argc, argv);
     aerosim::ApplicationController controller(
@@ -89,8 +97,13 @@ int main(int argc, char *argv[])
     if (!window.resultDataTablePage()->setCurveView(new aerosim::QwtResultCurveView))
         QTextStream(stderr) << "Failed to insert result curve view\n";
 #endif
-    if (app.arguments().contains(QStringLiteral("--monitor")))
-        window.showComputeMonitor();
+#ifdef AEROSIM_HAS_MESH_VIEWER
+    if (!smoke && qgetenv("AEROSIM_ENABLE_MESH_VIEWER") != "0"
+        && !aerosim::installMeshViewer(window)) {
+        QTextStream(stderr) << "Failed to insert preprocessing mesh viewer\n";
+        return 4;
+    }
+#endif
 #endif
     postprocess.bindServices(bindings);
 #ifndef AEROSIM_POSTPROCESS_STANDALONE
@@ -124,12 +137,10 @@ int main(int argc, char *argv[])
     });
 #endif
 #ifdef AEROSIM_HAS_VTK_VIEWER
-    // The workbench remains usable without a native OpenGL surface.  This is
-    // also the safe default on remote desktop sessions where VTK's native
-    // widget may not be backed by the expected graphics driver.
-    const bool enableVtkViewer = qEnvironmentVariableIntValue("AEROSIM_ENABLE_VTK_VIEWER") == 1;
-    if (!smoke && enableVtkViewer) {
+    // Smoke tests run without an OpenGL surface; interactive sessions use the VTK viewer.
+    if (!smoke) {
         auto *viewer = new aerosim::visualization::VtkSceneViewer;
+        viewer->bindWorkbench(&postprocess);
         if (!postprocess.insertWidget(aerosim::WidgetSlot::Viewport, viewer)) {
             delete viewer;
             QTextStream(stderr) << "Failed to insert VTK viewer\n";
@@ -176,6 +187,7 @@ int main(int argc, char *argv[])
         }, Qt::QueuedConnection);
         QTimer::singleShot(0, &app, [&controller] {
             aerosim::RunRequest request;
+            request.scope.projectId = QStringLiteral("mock-project");
             request.scope.caseId = QStringLiteral("mock-case");
             request.inputSnapshot.snapshotId = QStringLiteral("mock-snapshot");
             controller.workflow()->requestRun(request);
