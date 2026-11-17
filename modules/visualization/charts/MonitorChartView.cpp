@@ -26,6 +26,8 @@
 #include <qwt_plot_dict.h>
 #include <qwt_plot_picker.h>
 #include <qwt_plot_renderer.h>
+#include <qwt_scale_draw.h>
+#include <qwt_scale_div.h>
 #include <qwt_scale_engine.h>
 #include <qwt_scale_map.h>
 #include <qwt_spline_curve_fitter.h>
@@ -35,6 +37,27 @@
 namespace aerosim {
 namespace monitor {
 namespace {
+
+class NumericScaleDraw final : public QwtScaleDraw {
+public:
+    explicit NumericScaleDraw(int precision) : precision_(precision) {}
+
+    void setPrecision(int precision)
+    {
+        if (precision_ != precision) {
+            precision_ = precision;
+            invalidateCache();
+        }
+    }
+
+    QwtText label(double value) const override
+    {
+        return QwtText(QString::number(value, 'g', precision_));
+    }
+
+private:
+    int precision_;
+};
 
 // Same encoding-safe literal helper the rest of the project uses, so this file
 // compiles identically whether or not the compiler assumes UTF-8 source.
@@ -350,7 +373,7 @@ void MonitorChartView::resetView()
     if (fullAxisRanges_.isEmpty())
         return;
     for (auto range = fullAxisRanges_.constBegin(); range != fullAxisRanges_.constEnd(); ++range)
-        plot_->setAxisScale(range.key(), range.value().first, range.value().second);
+        applyAxisScale(range.key(), range.value().first, range.value().second);
     fullAxisRanges_.clear();
     zoomSteps_ = 0.0;
     flushReplot();
@@ -366,7 +389,14 @@ QVector<MonitorChartView::AxisRange> MonitorChartView::axisRanges() const
         auto bounds = fixedAxisRanges_.value(axis, automatic.value());
         if (logarithmic && bounds.first <= 0.0)
             bounds = automatic.value();
-        ranges.append(AxisRange{axis, name, bounds.first, bounds.second, logarithmic});
+        AxisRange range{axis, name, bounds.first, bounds.second, logarithmic};
+        const auto settings = axisConfiguration_.constFind(axis);
+        if (settings != axisConfiguration_.constEnd()) {
+            range.majorStep = settings->majorStep;
+            range.minorTicks = settings->minorTicks;
+            range.labelPrecision = settings->labelPrecision;
+        }
+        ranges.append(range);
     };
     append(QwtAxis::XBottom, uiText(u"横轴"), false);
     for (const auto &axis : axes_)
@@ -395,9 +425,75 @@ bool MonitorChartView::setFixedAxisRanges(const QVector<AxisRange> &ranges)
     fullAxisRanges_.clear();
     zoomSteps_ = 0.0;
     for (const auto &axis : axisRanges())
-        plot_->setAxisScale(axis.id, axis.lower, axis.upper);
+        applyAxisScale(axis.id, axis.lower, axis.upper);
     flushReplot();
     return true;
+}
+
+bool MonitorChartView::setAxisConfiguration(const QVector<AxisRange> &ranges, bool fixedRanges)
+{
+    const auto available = axisRanges();
+    if (ranges.size() != available.size())
+        return false;
+    QHash<int, AxisRange> settings;
+    for (const auto &range : ranges) {
+        const auto axis = std::find_if(available.cbegin(), available.cend(),
+            [&range](const AxisRange &candidate) { return candidate.id == range.id; });
+        if (axis == available.cend() || settings.contains(range.id)
+            || !std::isfinite(range.majorStep) || range.majorStep < 0
+            || range.minorTicks < 0 || range.minorTicks > 100
+            || range.labelPrecision < 1 || range.labelPrecision > 17
+            || (axis->logarithmic && range.majorStep > 0 && range.majorStep < 1))
+            return false;
+        const auto &division = plot_->axisScaleDiv(range.id);
+        auto bounds = qMakePair(division.lowerBound(), division.upperBound());
+        if (fixedRanges)
+            bounds = qMakePair(range.lower, range.upper);
+        else if (hasFixedAxisRanges())
+            bounds = automaticAxisRanges_.value(range.id);
+        if (!std::isfinite(bounds.first) || !std::isfinite(bounds.second)
+            || bounds.first >= bounds.second || (axis->logarithmic && bounds.first <= 0))
+            return false;
+        const double span = axis->logarithmic
+            ? std::log10(bounds.second) - std::log10(bounds.first) : bounds.second - bounds.first;
+        // Qwt caps a scale at 10,000 ticks. Keep its integer tick calculation in range.
+        if (range.majorStep > 0 && span / range.majorStep > 9998)
+            return false;
+        settings.insert(range.id, range);
+    }
+    if (fixedRanges || hasFixedAxisRanges()) {
+        if (!setFixedAxisRanges(fixedRanges ? ranges : QVector<AxisRange>{}))
+            return false;
+    }
+    axisConfiguration_ = settings;
+    for (const auto &axis : axisRanges()) {
+        const auto &division = plot_->axisScaleDiv(axis.id);
+        applyAxisScale(axis.id, division.lowerBound(), division.upperBound());
+    }
+    flushReplot();
+    return true;
+}
+
+void MonitorChartView::applyAxisScale(int axis, double lower, double upper)
+{
+    auto settings = axisConfiguration_.find(axis);
+    if (settings == axisConfiguration_.end()) {
+        plot_->setAxisScale(axis, lower, upper);
+        return;
+    }
+    const bool logarithmic = dynamic_cast<const QwtLogScaleEngine *>(plot_->axisScaleEngine(axis));
+    const double span = logarithmic ? std::log10(upper) - std::log10(lower) : upper - lower;
+    // A later data/axis change may make a previously valid interval too dense.
+    if (settings->majorStep > 0 && (span / settings->majorStep > 9998
+        || (logarithmic && settings->majorStep < 1)))
+        settings->majorStep = 0;
+    plot_->setAxisMaxMinor(axis, settings->minorTicks);
+    auto *draw = dynamic_cast<NumericScaleDraw *>(plot_->axisScaleDraw(axis));
+    if (draw)
+        draw->setPrecision(settings->labelPrecision);
+    else
+        plot_->setAxisScaleDraw(axis, new NumericScaleDraw(settings->labelPrecision));
+    plot_->setAxisScale(axis, lower, upper, settings->majorStep);
 }
 
 bool MonitorChartView::eventFilter(QObject *watched, QEvent *event)
@@ -536,7 +632,7 @@ void MonitorChartView::transformView(const QPointF &anchor, double factor, const
             continue;
         if (!fullAxisRanges_.contains(axis))
             fullAxisRanges_.insert(axis, qMakePair(map.s1(), map.s2()));
-        plot_->setAxisScale(axis, lower, upper);
+        applyAxisScale(axis, lower, upper);
     }
     flushReplot();
 }
@@ -1513,14 +1609,14 @@ void MonitorChartView::setAutomaticAxisScale(int axis, double lower, double uppe
     automaticAxisRanges_.insert(axis, qMakePair(lower, upper));
     const auto fixed = fixedAxisRanges_.constFind(axis);
     if (fixed != fixedAxisRanges_.constEnd() && (!logarithmic || fixed.value().first > 0.0)) {
-        plot_->setAxisScale(axis, fixed.value().first, fixed.value().second);
+        applyAxisScale(axis, fixed.value().first, fixed.value().second);
         return;
     }
     auto range = fullAxisRanges_.find(axis);
     if (range != fullAxisRanges_.end())
         range.value() = qMakePair(lower, upper);
     else
-        plot_->setAxisScale(axis, lower, upper);
+        applyAxisScale(axis, lower, upper);
 }
 
 void MonitorChartView::setAutomaticYAxisRange(int axis, bool logarithmic, double low, double high)

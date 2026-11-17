@@ -11,6 +11,7 @@ class QPushButton;
 class QTableWidget;
 
 namespace aerosim {
+class ResultForecastPanel;
 
 // Displays CSV fields, optional wall comparisons, or history statistics.
 class ResultSummaryTablePage final : public QWidget {
@@ -53,6 +54,7 @@ private:
     bool loadHistoryFile(const QString &path, QString *error);
     void updateStatus();
     void chooseFile();
+    void updateAnalysisData();
 
     ResultDataSource *source_ = nullptr;
     ResultTable table_;
@@ -69,6 +71,7 @@ private:
     QLabel *sourceLabel_ = nullptr;
     QLabel *status_ = nullptr;
     QTableWidget *tableWidget_ = nullptr;
+    ResultForecastPanel *forecastPanel_ = nullptr;
 };
 
 } // namespace aerosim

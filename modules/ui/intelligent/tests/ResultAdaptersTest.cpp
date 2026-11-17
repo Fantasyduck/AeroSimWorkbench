@@ -3,6 +3,8 @@
 #include "aerosim/ui/intelligent/ResultDataTablePage.h"
 #include "aerosim/ui/intelligent/ResultSummaryTablePage.h"
 #include <QComboBox>
+#include <QDialog>
+#include <QDialogButtonBox>
 #include <QLabel>
 #include <QHelpEvent>
 #include <QLineEdit>
@@ -19,14 +21,18 @@
 #include <QTableWidget>
 #include <QTemporaryDir>
 #include <QTest>
+#include <QTimer>
 #include <limits>
+#include <cmath>
 
 #include <qwt_legend.h>
 #include <qwt_legend_label.h>
 #include <qwt_plot.h>
 #include <qwt_plot_curve.h>
 #include <qwt_scale_div.h>
+#include <qwt_scale_draw.h>
 #include <qwt_scale_map.h>
+#include <qwt_text.h>
 
 class ResultAdaptersTest final : public QObject {
     Q_OBJECT
@@ -40,6 +46,7 @@ private slots:
     void polynomialFitOnCfyUsesSelectedDegree();
     void forceSummaryComparesCasesByCoefficient();
     void clickingLegendRenamesOnlyThatCurve();
+    void axisGranularityCanBeConfiguredFromTheDialog();
 };
 
 void ResultAdaptersTest::realReaderFeedsSelectedColumnsAndBothAxes()
@@ -556,6 +563,149 @@ void ResultAdaptersTest::clickingLegendRenamesOnlyThatCurve()
     QVERIFY(QToolTip::text().contains(QStringLiteral("X: 1")));
     QVERIFY(QToolTip::text().contains(QStringLiteral("Y: 0.2")));
     QToolTip::hideText();
+}
+
+void ResultAdaptersTest::axisGranularityCanBeConfiguredFromTheDialog()
+{
+    aerosim::ResultTable table;
+    table.datasetId = QStringLiteral("axis-granularity");
+    table.variables = {{QStringLiteral("CD"), QStringLiteral("-"), false},
+                       {QStringLiteral("residual"), QStringLiteral("-"), true}};
+    for (int row = 0; row <= 10; ++row) {
+        table.axisValues.append(row);
+        table.samples[QStringLiteral("CD")].append(row / 10.0);
+        table.samples[QStringLiteral("residual")].append(std::pow(10.0, -row - 2));
+    }
+    aerosim::QwtResultCurveView view;
+    view.replaceSeries(table, {QStringLiteral("CD"), QStringLiteral("residual")}, QStringLiteral("X"));
+    view.resize(1000, 650);
+    view.show();
+    auto *button = view.findChild<QPushButton *>(QStringLiteral("resultCurveAxisSettings"));
+    QVERIFY(button);
+    bool configured = false;
+    QTimer::singleShot(0, &view, [&] {
+        auto *dialog = view.findChild<QDialog *>(QStringLiteral("resultAxisSettingsDialog"));
+        QVERIFY(dialog);
+        auto *mode = dialog->findChild<QComboBox *>(QStringLiteral("resultAxisRangeMode"));
+        QVERIFY(mode);
+        mode->setCurrentIndex(1);
+        for (const auto &axis : view.chart()->axisRanges()) {
+            auto *lower = dialog->findChild<QLineEdit *>(QStringLiteral("axisLower_%1").arg(axis.id));
+            auto *upper = dialog->findChild<QLineEdit *>(QStringLiteral("axisUpper_%1").arg(axis.id));
+            auto *step = dialog->findChild<QLineEdit *>(QStringLiteral("axisStep_%1").arg(axis.id));
+            auto *minor = dialog->findChild<QSpinBox *>(QStringLiteral("axisMinor_%1").arg(axis.id));
+            auto *precision = dialog->findChild<QSpinBox *>(QStringLiteral("axisPrecision_%1").arg(axis.id));
+            QVERIFY(lower && upper && step && minor && precision);
+            lower->setText(axis.logarithmic ? QStringLiteral("1e-12") : QStringLiteral("0"));
+            upper->setText(axis.id == QwtAxis::XBottom ? QStringLiteral("10")
+                : axis.logarithmic ? QStringLiteral("1e-2") : QStringLiteral("1"));
+            step->setText(axis.id == QwtAxis::XBottom || axis.logarithmic
+                ? QStringLiteral("2") : QStringLiteral("0.2"));
+            minor->setValue(0);
+            precision->setValue(12);
+        }
+        const QString screenshot = qEnvironmentVariable("AEROSIM_AXIS_DIALOG_SCREENSHOT");
+        if (!screenshot.isEmpty())
+            QVERIFY(dialog->grab().save(screenshot));
+        auto *buttons = dialog->findChild<QDialogButtonBox *>(QStringLiteral("resultAxisButtons"));
+        QVERIFY(buttons);
+        buttons->button(QDialogButtonBox::Ok)->click();
+        configured = dialog->result() == QDialog::Accepted;
+    });
+    QTimer::singleShot(5000, &view, [&view] {
+        auto *dialog = view.findChild<QDialog *>(QStringLiteral("resultAxisSettingsDialog"));
+        if (dialog)
+            dialog->reject();
+    });
+    QTest::mouseClick(button, Qt::LeftButton);
+    QVERIFY(configured);
+    QVERIFY(view.chart()->hasFixedAxisRanges());
+    auto *plot = view.chart()->findChild<QwtPlot *>();
+    QVERIFY(plot);
+    const auto xTicks = plot->axisScaleDiv(QwtAxis::XBottom).ticks(QwtScaleDiv::MajorTick);
+    QCOMPARE(xTicks.size(), 6);
+    QVERIFY(std::abs(xTicks.at(1) - xTicks.at(0) - 2) < 1e-10);
+    const auto yTicks = plot->axisScaleDiv(QwtAxis::YLeft).ticks(QwtScaleDiv::MajorTick);
+    QVERIFY(yTicks.size() >= 2);
+    QVERIFY(std::abs(yTicks.at(1) - yTicks.at(0) - 0.2) < 1e-10);
+    const auto logTicks = plot->axisScaleDiv(QwtAxis::YRight).ticks(QwtScaleDiv::MajorTick);
+    QVERIFY(logTicks.size() >= 2);
+    QVERIFY(std::abs(std::log10(logTicks.at(1) / logTicks.at(0)) - 2) < 1e-10);
+    QVERIFY(plot->axisScaleDiv(QwtAxis::YLeft).ticks(QwtScaleDiv::MinorTick).isEmpty());
+    QVERIFY(plot->axisScaleDiv(QwtAxis::YLeft).ticks(QwtScaleDiv::MediumTick).isEmpty());
+    QCOMPARE(plot->axisScaleDraw(QwtAxis::YLeft)->label(0.01100871616).text(), QStringLiteral("0.01100871616"));
+
+    const QString plotScreenshot = qEnvironmentVariable("AEROSIM_AXIS_PLOT_SCREENSHOT");
+    if (!plotScreenshot.isEmpty()) {
+        QCoreApplication::processEvents();
+        QVERIFY(view.grab().save(plotScreenshot));
+    }
+
+    auto settings = view.chart()->axisRanges();
+    auto invalid = settings;
+    invalid[0].majorStep = -1;
+    QVERIFY(!view.chart()->setAxisConfiguration(invalid, true));
+    invalid = settings;
+    invalid[0].majorStep = 1e-300;
+    QVERIFY(!view.chart()->setAxisConfiguration(invalid, true));
+    invalid = settings;
+    invalid.last().majorStep = 0.5;
+    QVERIFY(!view.chart()->setAxisConfiguration(invalid, true));
+    QCOMPARE(view.chart()->axisRanges().first().majorStep, 2.0);
+
+    // Granularity also applies with automatic bounds and survives plot rebuilds.
+    bool automatic = false;
+    QTimer::singleShot(0, &view, [&] {
+        auto *dialog = view.findChild<QDialog *>(QStringLiteral("resultAxisSettingsDialog"));
+        QVERIFY(dialog);
+        auto *mode = dialog->findChild<QComboBox *>(QStringLiteral("resultAxisRangeMode"));
+        QVERIFY(mode);
+        mode->setCurrentIndex(0);
+        auto *lower = dialog->findChild<QLineEdit *>(QStringLiteral("axisLower_%1").arg(QwtAxis::XBottom));
+        auto *step = dialog->findChild<QLineEdit *>(QStringLiteral("axisStep_%1").arg(QwtAxis::XBottom));
+        QVERIFY(lower && step);
+        QVERIFY(!lower->isEnabled() && step->isEnabled());
+        auto *buttons = dialog->findChild<QDialogButtonBox *>(QStringLiteral("resultAxisButtons"));
+        QVERIFY(buttons);
+        buttons->button(QDialogButtonBox::Ok)->click();
+        automatic = dialog->result() == QDialog::Accepted;
+    });
+    QTest::mouseClick(button, Qt::LeftButton);
+    QVERIFY(automatic);
+    QVERIFY(!view.chart()->hasFixedAxisRanges());
+    view.replaceSeries(table, {QStringLiteral("CD"), QStringLiteral("residual")}, QStringLiteral("X"));
+    plot = view.chart()->findChild<QwtPlot *>();
+    QVERIFY(plot);
+    QCOMPARE(view.chart()->axisRanges().first().majorStep, 2.0);
+    QCOMPARE(plot->axisMaxMinor(QwtAxis::YLeft), 0);
+    QCOMPARE(plot->axisScaleDraw(QwtAxis::YLeft)->label(0.01100871616).text(), QStringLiteral("0.01100871616"));
+    QWidget *canvas = plot->canvas();
+    const QPoint center = canvas->rect().center();
+    QWheelEvent zoom(center, canvas->mapToGlobal(center), {}, QPoint(0, 120),
+                     Qt::NoButton, Qt::NoModifier, Qt::NoScrollPhase, false);
+    QApplication::sendEvent(canvas, &zoom);
+    const auto zoomed = plot->axisScaleDiv(QwtAxis::XBottom).interval();
+    settings = view.chart()->axisRanges();
+    settings[0].majorStep = 1;
+    QVERIFY(view.chart()->setAxisConfiguration(settings, false));
+    QVERIFY(plot->axisScaleDiv(QwtAxis::XBottom).interval() == zoomed);
+    settings = view.chart()->axisRanges();
+    for (auto &axis : settings) {
+        if (axis.id == QwtAxis::YLeft) {
+            axis.lower = 0.01100871;
+            axis.upper = 0.01100873;
+            axis.majorStep = 1e-9;
+            axis.minorTicks = 4;
+        }
+    }
+    QVERIFY(view.chart()->setAxisConfiguration(settings, true));
+    const auto fineTicks = plot->axisScaleDiv(QwtAxis::YLeft).ticks(QwtScaleDiv::MajorTick);
+    QVERIFY(fineTicks.size() > 10);
+    QVERIFY(std::abs(fineTicks.at(1) - fineTicks.at(0) - 1e-9) < 1e-14);
+    QVERIFY(plot->axisScaleDraw(QwtAxis::YLeft)->label(fineTicks.at(0)).text()
+        != plot->axisScaleDraw(QwtAxis::YLeft)->label(fineTicks.at(1)).text());
+    QVERIFY(!plot->axisScaleDiv(QwtAxis::YLeft).ticks(QwtScaleDiv::MinorTick).isEmpty()
+        || !plot->axisScaleDiv(QwtAxis::YLeft).ticks(QwtScaleDiv::MediumTick).isEmpty());
 }
 
 QTEST_MAIN(ResultAdaptersTest)

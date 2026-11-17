@@ -32,6 +32,8 @@ cd build-machine-learning
 ctest -C Debug --output-on-failure
 ```
 
-工具链使用仓库规定的 VS2017 v141 x64 Debug；Eigen 也可通过标准 `Eigen3` CMake 包提供。独立构建通过后，顶层设置 `AEROSIM_BUILD_MACHINE_LEARNING=ON` 可构建该模块，调用方链接 `aerosim::machine_learning`。
+工具链使用仓库规定的 VS2017 v141 x64 Debug；Eigen 也可通过标准 `Eigen3` CMake 包提供。顶层 GUI 构建默认启用该模块；其他调用方可设置 `AEROSIM_BUILD_MACHINE_LEARNING=ON`，链接 `aerosim::machine_learning`。
+
+`TimeSeriesForecast.h` 的 `forecastRbfKrr` 接收时间坐标、多变量输入及目标数组，返回未来预测、可用的末尾留出回测和误差统计。`ForecastOptions` 配置历史窗口、预测步数、采样步长和模型参数；训练采用最新有限且连续的数据片段，缺失值、重启和跳步会截断片段。每个预测距离使用独立模型，调用方无需提供未来的输入变量。可传入原子取消标志；取消在样本准备及各次拟合之间检查。
 
 测试使用 4 个合成样本验证非线性交互、一个留出查询和已知控制量下的三步递推，并检查无效输入、重复样本和重新训练。该测试用于数值及接口验收，实际求解数据的预测精度需要时间顺序回测。

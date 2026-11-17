@@ -14,6 +14,8 @@ endif()
 include("${CMAKE_CURRENT_LIST_DIR}/../../cmake/EigenDependency.cmake")
 add_library(aerosim_machine_learning STATIC
     src/RbfKrr.cpp
+    src/TimeSeriesForecast.cpp
+    include/aerosim/machine_learning/TimeSeriesForecast.h
     include/aerosim/machine_learning/RbfKrr.h)
 add_library(aerosim::machine_learning ALIAS aerosim_machine_learning)
 target_compile_features(aerosim_machine_learning PUBLIC cxx_std_14)

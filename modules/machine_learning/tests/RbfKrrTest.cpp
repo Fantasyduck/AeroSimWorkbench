@@ -1,4 +1,5 @@
 #include "aerosim/machine_learning/RbfKrr.h"
+#include "aerosim/machine_learning/TimeSeriesForecast.h"
 
 #include <cmath>
 #include <iostream>
@@ -99,6 +100,39 @@ int main()
     check(std::abs(prediction - 8) < 1e-8, "duplicate observations predict their mean");
     check(model.fit({{5}}, {42}, options, &error), "refit a single sample with new dimensions");
     check(model.predict({5}, &prediction, &error) && prediction == 42, "single sample prediction");
+
+    using namespace aerosim::machine_learning;
+    TimeSeriesData series;
+    for (int row = 0; row < 40; ++row) {
+        series.coordinates.push_back(row < 10 ? row : row + 90);
+        const double value = row % 2 ? -1.0 : 1.0;
+        series.inputs.push_back({value, 300});
+        series.targets.push_back(value);
+    }
+    ForecastOptions forecasting;
+    forecasting.horizon = 3;
+    auto forecast = forecastRbfKrr(series, forecasting);
+    check(forecast.error.empty() && forecast.segmentSamples == 30, "forecast uses the last continuous segment");
+    check(forecast.future.size() == 3 && forecast.validation.size() == 3, "future and holdout sizes");
+    if (forecast.future.size() == 3) {
+        check(forecast.future.front().coordinate == 130, "forecast advances the selected coordinate");
+        check(std::abs(forecast.future[0].prediction - 1) < 1e-4, "nonlinear window forecast");
+        check(forecast.meanAbsoluteError < 1e-4, "holdout error is small");
+    }
+    forecasting.horizon = 20;
+    const auto shortHistory = forecastRbfKrr(series, forecasting);
+    check(shortHistory.error.empty() && shortHistory.future.size() == 20
+          && shortHistory.validation.empty(), "short history can forecast without a holdout");
+    forecasting.horizon = 40;
+    check(!forecastRbfKrr(series, forecasting).error.empty(), "reject insufficient continuous history");
+    forecasting.horizon = 3;
+    series.inputs.back()[0] = nan;
+    check(!forecastRbfKrr(series, forecasting).error.empty(), "reject a missing final input");
+    series.inputs.back()[0] = -1;
+    series.coordinates.back() = series.coordinates[series.coordinates.size() - 2];
+    check(!forecastRbfKrr(series, forecasting).error.empty(), "reject a duplicate final coordinate");
+    std::atomic_bool cancelled{true};
+    check(forecastRbfKrr(series, forecasting, &cancelled).cancelled, "forecast can be cancelled");
     if (failures)
         return 1;
     std::cout << "RBF-KRR checks passed\n";

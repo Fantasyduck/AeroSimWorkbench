@@ -11,7 +11,7 @@ endif()
 
 option(AEROSIM_BUILD_GUI "Build the SARibbon main window" ON)
 option(AEROSIM_BUILD_TESTS "Build and register skeleton smoke tests" ON)
-option(AEROSIM_BUILD_MACHINE_LEARNING "Build the Eigen-based machine learning backend" OFF)
+option(AEROSIM_BUILD_MACHINE_LEARNING "Build the Eigen-based machine learning backend" ${AEROSIM_BUILD_GUI})
 
 option(AEROSIM_BUILD_STACK_PROBE "Build the optional Qt/VTK/SARibbon compatibility probe" OFF)
 # Visualization is on by default: the monitor page gets its real curve widget

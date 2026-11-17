@@ -1,4 +1,7 @@
 #include "aerosim/ui/intelligent/ResultSummaryTablePage.h"
+#ifdef AEROSIM_HAS_MACHINE_LEARNING
+#include "aerosim/ui/intelligent/ResultForecastPanel.h"
+#endif
 
 #include <QComboBox>
 #include <QFileDialog>
@@ -10,6 +13,8 @@
 #include <QPushButton>
 #include <QRegularExpression>
 #include <QSignalBlocker>
+#include <QScrollArea>
+#include <QSplitter>
 #include <QTableWidget>
 #include <QVBoxLayout>
 #include <cmath>
@@ -111,7 +116,33 @@ void ResultSummaryTablePage::buildUi()
     tableWidget_->setSelectionBehavior(QAbstractItemView::SelectRows);
     tableWidget_->setSelectionMode(QAbstractItemView::SingleSelection);
     tableWidget_->setAlternatingRowColors(true);
-    outer->addWidget(tableWidget_, 1);
+    auto *split = new QSplitter(Qt::Horizontal, this);
+    split->setObjectName(QStringLiteral("resultSummarySplit"));
+    split->setChildrenCollapsible(false);
+    auto *dataSplit = new QSplitter(Qt::Vertical, split);
+    dataSplit->setObjectName(QStringLiteral("resultSummaryDataSplit"));
+    dataSplit->setChildrenCollapsible(false);
+    dataSplit->addWidget(tableWidget_);
+#ifdef AEROSIM_HAS_MACHINE_LEARNING
+    forecastPanel_ = new ResultForecastPanel(this);
+    dataSplit->addWidget(forecastPanel_->resultsWidget());
+    dataSplit->setStretchFactor(0, 2);
+    dataSplit->setStretchFactor(1, 1);
+    auto *analysisScroll = new QScrollArea(split);
+    analysisScroll->setWidgetResizable(true);
+    analysisScroll->setFrameShape(QFrame::NoFrame);
+    analysisScroll->setMinimumWidth(290);
+    analysisScroll->setWidget(forecastPanel_);
+#else
+    auto *analysisHint = new QLabel(QStringLiteral(u"分析方法\n当前构建未启用机器学习。\n配置 AEROSIM_BUILD_MACHINE_LEARNING=ON 后可用。"), split);
+    analysisHint->setWordWrap(true);
+    analysisHint->setAlignment(Qt::AlignTop | Qt::AlignLeft);
+    analysisHint->setMinimumWidth(220);
+#endif
+    split->setStretchFactor(0, 1);
+    split->setStretchFactor(1, 0);
+    split->setSizes({800, 330});
+    outer->addWidget(split, 1);
 
     status_ = new QLabel(this);
     status_->setObjectName(QStringLiteral("resultSummaryStatus"));
@@ -170,6 +201,7 @@ bool ResultSummaryTablePage::loadHistoryFile(const QString &path, QString *error
     sourceLabel_->setToolTip(QString());
     populateTable();
     updateStatus();
+    updateAnalysisData();
     emit fileLoaded(path);
     return true;
 }
@@ -293,6 +325,7 @@ bool ResultSummaryTablePage::loadCsvFiles(const QStringList &paths, QString *err
         : QStringLiteral(u"已导入 %1 个 CSV 文件").arg(tables.size()));
     sourceLabel_->setToolTip(paths.join(QLatin1Char('\n')));
     showCsvView();
+    updateAnalysisData();
     if (error)
         error->clear();
     for (const QString &path : paths)
@@ -407,6 +440,36 @@ void ResultSummaryTablePage::clearData()
     sourceLabel_->setText(QStringLiteral(u"尚未打开结果文件。"));
     sourceLabel_->setToolTip(QString());
     updateStatus();
+    updateAnalysisData();
+}
+
+void ResultSummaryTablePage::updateAnalysisData()
+{
+#ifdef AEROSIM_HAS_MACHINE_LEARNING
+    if (!csvTables_.isEmpty()) {
+        forecastPanel_->setDatasets(csvTables_);
+        return;
+    }
+    if (table_.isEmpty()) {
+        forecastPanel_->setDatasets({});
+        return;
+    }
+    CsvResultTable data;
+    data.sourcePath = table_.sourcePath;
+    data.columns.append(table_.axisLabel);
+    for (const auto &variable : table_.variables)
+        data.columns.append(variable.key);
+    for (int row = 0; row < table_.sampleCount(); ++row) {
+        QStringList values{QString::number(table_.axisValues.at(row), 'g', 17)};
+        for (const auto &variable : table_.variables) {
+            const auto samples = table_.samples.constFind(variable.key);
+            values.append(samples == table_.samples.constEnd() || row >= samples->size()
+                ? QString() : QString::number(samples->at(row), 'g', 17));
+        }
+        data.rows.append(values);
+    }
+    forecastPanel_->setDatasets({data});
+#endif
 }
 
 void ResultSummaryTablePage::populateTable()
