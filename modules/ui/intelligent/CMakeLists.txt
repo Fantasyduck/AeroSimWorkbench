@@ -80,6 +80,17 @@ if(TARGET aerosim_monitor_charts)
     endif()
 endif()
 
+if(TARGET aerosim_intelligent_source AND TARGET aerosim_intelligent_curve)
+    add_library(aerosim_calculation_monitor STATIC
+        ../src/intelligent/CalculationCurveMonitor.cpp
+        ../include/aerosim/ui/intelligent/CalculationCurveMonitor.h)
+    target_include_directories(aerosim_calculation_monitor PUBLIC "${CMAKE_CURRENT_LIST_DIR}/../include")
+    target_link_libraries(aerosim_calculation_monitor PUBLIC aerosim_intelligent_source aerosim_intelligent_curve)
+    if(MSVC)
+        target_compile_options(aerosim_calculation_monitor PRIVATE /utf-8)
+    endif()
+endif()
+
 if(AEROSIM_BUILD_TESTS)
     find_package(Qt5 5.12.12 EXACT REQUIRED COMPONENTS Test)
     add_executable(aerosim_intelligent_data_test tests/ResultDataPagesTest.cpp)
@@ -106,7 +117,7 @@ endif()
 if(AEROSIM_BUILD_TESTS AND TARGET aerosim_intelligent_source AND TARGET aerosim_intelligent_curve)
     add_executable(aerosim_result_adapters_test tests/ResultAdaptersTest.cpp)
     target_link_libraries(aerosim_result_adapters_test PRIVATE
-        aerosim_intelligent_source aerosim_intelligent_curve Qt5::Test)
+        aerosim_intelligent_source aerosim_intelligent_curve aerosim_calculation_monitor Qt5::Test)
     target_compile_definitions(aerosim_result_adapters_test PRIVATE
         AEROSIM_RESULT_FIXTURE_DIR="${CMAKE_CURRENT_LIST_DIR}/../../../tests/fixtures/postprocess")
     set_target_properties(aerosim_result_adapters_test PROPERTIES AUTOMOC ON)

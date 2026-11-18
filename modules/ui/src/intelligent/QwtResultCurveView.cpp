@@ -20,6 +20,7 @@
 #include <QVBoxLayout>
 
 #include <cmath>
+#include <algorithm>
 
 namespace aerosim {
 namespace {
@@ -653,6 +654,9 @@ void QwtResultCurveView::replaceSeries(const ResultTable &table, const QStringLi
     for (auto &curve : curves)
         curve.groupTitle = (curve.logarithmic ? residualLabels : seriesLabels).join(QStringLiteral(", "));
 
+    if (appendSeries(curves, axisLabel))
+        return;
+
     chart_->setAxisLabel(axisLabel);
     // The title names the quantities, not the count: "残差" and "变量" are what
     // the reader is looking at, and the status line already carries the counts.
@@ -663,11 +667,51 @@ void QwtResultCurveView::replaceSeries(const ResultTable &table, const QStringLi
     else
         chart_->setChartTitle(QStringLiteral(u"变量"));
     chart_->setCurves(curves);
+    seriesMetadata_ = curves;
+    for (auto &curve : seriesMetadata_)
+        curve.points.clear();
+    seriesAxisLabel_ = axisLabel;
     refreshCurveChoices();
+}
+
+bool QwtResultCurveView::appendSeries(const QVector<monitor::MonitorCurve> &curves,
+                                    const QString &axisLabel)
+{
+    if (axisLabel != seriesAxisLabel_ || curves.size() != seriesMetadata_.size()
+        || chart_->curveIds().size() != curves.size())
+        return false;
+    QVector<QVector<QPointF>> additions;
+    for (int index = 0; index < curves.size(); ++index) {
+        const auto &curve = curves.at(index);
+        const auto &previous = seriesMetadata_.at(index);
+        const QString id = monitor::MonitorChartView::curveId(curve);
+        if (id != monitor::MonitorChartView::curveId(previous)
+            || curve.groupKey != previous.groupKey || curve.groupTitle != previous.groupTitle
+            || curve.logarithmic != previous.logarithmic || !chart_->curveIds().contains(id))
+            return false;
+        const auto oldPoints = chart_->curvePoints(id);
+        if (oldPoints.size() > curve.points.size()
+            || !std::equal(oldPoints.cbegin(), oldPoints.cend(), curve.points.cbegin()))
+            return false;
+        // A new nonpositive residual changes the required scale engine.
+        const auto positive = [](const QPointF &point) { return point.y() > 0; };
+        if (curve.logarithmic
+            && std::all_of(oldPoints.cbegin(), oldPoints.cend(), positive)
+                != std::all_of(curve.points.cbegin(), curve.points.cend(), positive))
+            return false;
+        additions.append(curve.points.mid(oldPoints.size()));
+    }
+    for (int index = 0; index < curves.size(); ++index) {
+        if (!additions.at(index).isEmpty())
+            chart_->appendPoints(monitor::MonitorChartView::curveId(curves.at(index)), additions.at(index));
+    }
+    return true;
 }
 
 void QwtResultCurveView::clearSeries()
 {
+    seriesMetadata_.clear();
+    seriesAxisLabel_.clear();
     settingsPanel_->hide();
     defaultLegendNames_.clear();
     chart_->clearCurves();

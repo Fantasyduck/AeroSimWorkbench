@@ -1,4 +1,8 @@
 #include "aerosim/ui/MainWindow.h"
+#ifdef AEROSIM_HAS_CALCULATION_MONITOR
+#include "aerosim/ui/CalculationTaskPage.h"
+#include "aerosim/ui/intelligent/CalculationCurveMonitor.h"
+#endif
 
 #include <QApplication>
 #include <QCheckBox>
@@ -30,6 +34,22 @@ int main(int argc, char **argv)
 {
     QApplication app(argc, argv);
     aerosim::MainWindow window;
+#ifdef AEROSIM_HAS_CALCULATION_MONITOR
+    const auto calculationPages = window.findChildren<aerosim::CalculationTaskPage *>();
+    if (calculationPages.size() != 2) return 19;
+    for (auto *page : calculationPages) {
+        page->attachMonitor(new aerosim::CalculationCurveMonitor);
+        auto *monitor = page->findChild<aerosim::CalculationCurveMonitor *>();
+        if (!monitor) return 20;
+        if (qEnvironmentVariableIsSet("AEROSIM_CALCULATION_MONITOR_FILE")) {
+            QString error;
+            if (!monitor->monitorFile(qEnvironmentVariable("AEROSIM_CALCULATION_MONITOR_FILE"), &error)) {
+                QTextStream(stderr) << error << '\n';
+                return 21;
+            }
+        }
+    }
+#endif
     window.show();
     app.processEvents();
     const auto check = [](bool condition, const char *message) {

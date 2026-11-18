@@ -41,6 +41,19 @@ bool MonitorResultDataSource::load(const QString &path, ResultTable *table, QStr
         return false;
     }
 
+    if (log.sourcePath.isEmpty()) log.sourcePath = path;
+    return fromLog(log, table, error);
+}
+
+bool MonitorResultDataSource::fromLog(const monitor::MonitorLog &log,
+                                    ResultTable *table, QString *error)
+{
+    if (!table) {
+        if (error) *error = QStringLiteral(u"内部错误：未提供结果表。");
+        return false;
+    }
+    const QString path = log.sourcePath;
+    QString message;
     monitor::MonitorSeriesModel model;
     if (!model.setLog(log, &message)) {
         if (error)
@@ -51,7 +64,7 @@ bool MonitorResultDataSource::load(const QString &path, ResultTable *table, QStr
     }
 
     ResultTable result;
-    result.sourcePath = log.sourcePath.isEmpty() ? path : log.sourcePath;
+    result.sourcePath = path;
     result.datasetId = log.datasetId;
     result.axisLabel = axisLabelFor(model);
     result.axisValues.reserve(log.iterationStep.size());

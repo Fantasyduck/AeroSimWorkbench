@@ -41,6 +41,7 @@ protected:
     void hideEvent(QHideEvent *event) override;
 
 private:
+    bool appendSeries(const QVector<monitor::MonitorCurve> &curves, const QString &axisLabel);
     void refreshCurveChoices();
     void loadControls();
     void chooseColor();
@@ -67,6 +68,8 @@ private:
     QHash<QString, monitor::MonitorCurveStyle> styles_;
     QHash<QString, QString> defaultLegendNames_;
     bool loadingControls_ = false;
+    QVector<monitor::MonitorCurve> seriesMetadata_;
+    QString seriesAxisLabel_;
 };
 
 } // namespace aerosim

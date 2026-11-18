@@ -461,10 +461,19 @@ void CalculationTaskPage::removeSelected()
 
 void CalculationTaskPage::attachMonitor(QWidget *widget)
 {
-    if (!widget) return;
+    if (!widget || monitorWidget_ || widget->thread() != thread()
+        || widget == this || widget->isAncestorOf(this)) return;
+    monitorWidget_ = widget;
     emptyChart_->hide();
+    monitorSplitter_->widget(0)->hide();
     curveLayout_->addWidget(widget);
     widget->show();
+    const QPointer<QWidget> emptyChart(emptyChart_);
+    const QPointer<QWidget> observations(monitorSplitter_->widget(0));
+    connect(widget, &QObject::destroyed, this, [emptyChart, observations] {
+        if (emptyChart) emptyChart->show();
+        if (observations) observations->show();
+    });
 }
 
 void CalculationTaskPage::appendLog(const QString &message)

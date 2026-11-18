@@ -1,4 +1,6 @@
 #include "aerosim/ui/intelligent/MonitorResultDataSource.h"
+#include "aerosim/ui/intelligent/CalculationCurveMonitor.h"
+#include <QListWidget>
 #include "aerosim/ui/intelligent/QwtResultCurveView.h"
 #include "aerosim/ui/intelligent/ResultDataTablePage.h"
 #include "aerosim/ui/intelligent/ResultSummaryTablePage.h"
@@ -47,7 +49,92 @@ private slots:
     void forceSummaryComparesCasesByCoefficient();
     void clickingLegendRenamesOnlyThatCurve();
     void axisGranularityCanBeConfiguredFromTheDialog();
+    void calculationMonitorFollowsFileAndKeepsSelection();
+    void calculationMonitorHandlesRestartAndIndependentSubscriptions();
 };
+
+void ResultAdaptersTest::calculationMonitorFollowsFileAndKeepsSelection()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString path = directory.filePath(QStringLiteral("live.csv"));
+    QFile file(path);
+    QVERIFY(file.open(QIODevice::WriteOnly));
+    file.write("Inner_Iter,Temperature,rms[Rho]\n0,300,0.1\n1,301,0.01\n");
+    file.close();
+    aerosim::CalculationCurveMonitor monitor;
+    QString error;
+    QVERIFY2(monitor.monitorFile(path, &error), qPrintable(error));
+    auto *status = monitor.findChild<QLabel *>(QStringLiteral("calculationMonitorStatus"));
+    QVERIFY(status && status->isHidden());
+    QCOMPARE(monitor.table().sampleCount(), 2);
+    QCOMPARE(monitor.curveView()->chart()->visibleCurveCount(), 2);
+    auto *variables = monitor.findChild<QListWidget *>(QStringLiteral("calculationMonitorVariables"));
+    QVERIFY(variables);
+    variables->item(0)->setCheckState(Qt::Unchecked);
+    QCOMPARE(monitor.curveView()->chart()->visibleCurveCount(), 1);
+
+    QVERIFY(file.open(QIODevice::Append));
+    file.write("2,302,");
+    file.close();
+    QVERIFY(monitor.poll(&error));
+    QCOMPARE(monitor.table().sampleCount(), 2);
+    QVERIFY(file.open(QIODevice::Append));
+    file.write("0.001\n");
+    file.close();
+    QTRY_COMPARE(monitor.table().sampleCount(), 3);
+    QCOMPARE(variables->item(0)->checkState(), Qt::Unchecked);
+    const auto id = monitor.curveView()->chart()->curveIds().first();
+    QCOMPARE(monitor.curveView()->chart()->curvePoints(id).size(), 3);
+    monitor.setPaused(true);
+    QVERIFY(file.open(QIODevice::Append));
+    file.write("3,303,0.0001\n");
+    file.close();
+    QVERIFY(monitor.poll(&error));
+    QCOMPARE(monitor.table().sampleCount(), 3);
+    monitor.setPaused(false);
+    QTRY_COMPARE(monitor.table().sampleCount(), 4);
+    QVERIFY(status->isHidden());
+    QVERIFY(!monitor.monitorFile(directory.filePath(QStringLiteral("missing.csv")), &error));
+    QCOMPARE(monitor.table().sampleCount(), 4);
+    if (qEnvironmentVariableIsSet("AEROSIM_CALCULATION_MONITOR_SCREENSHOT")) {
+        monitor.resize(1000, 600);
+        monitor.show();
+        QTest::qWait(150);
+        QVERIFY(monitor.grab().save(qEnvironmentVariable("AEROSIM_CALCULATION_MONITOR_SCREENSHOT")));
+    }
+}
+
+void ResultAdaptersTest::calculationMonitorHandlesRestartAndIndependentSubscriptions()
+{
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QString path = directory.filePath(QStringLiteral("live.csv"));
+    QFile file(path);
+    QVERIFY(file.open(QIODevice::WriteOnly));
+    file.write("Inner_Iter,Temperature\n0,300\n1,301\n2,302\n3,303\n");
+    file.close();
+    aerosim::CalculationCurveMonitor single, multiple;
+    QString error;
+    QVERIFY(single.monitorFile(path, &error));
+    QVERIFY(multiple.monitorFile(path, &error));
+    multiple.setPaused(true);
+    QVERIFY(file.open(QIODevice::WriteOnly | QIODevice::Truncate));
+    file.write("Inner_Iter,Pressure\n0,42\n");
+    file.close();
+    QVERIFY2(single.poll(&error), qPrintable(error));
+    QCOMPARE(single.table().sampleCount(), 1);
+    QCOMPARE(single.table().variables.first().key, QStringLiteral("Pressure"));
+    QCOMPARE(single.curveView()->chart()->visibleCurveCount(), 1);
+    QCOMPARE(multiple.table().sampleCount(), 4);
+    multiple.setPaused(false);
+    QTRY_COMPARE(multiple.table().sampleCount(), 1);
+    QVERIFY(file.open(QIODevice::WriteOnly | QIODevice::Truncate));
+    file.close();
+    QVERIFY(single.poll(&error));
+    QVERIFY(single.table().isEmpty());
+    QCOMPARE(single.curveView()->chart()->visibleCurveCount(), 0);
+}
 
 void ResultAdaptersTest::realReaderFeedsSelectedColumnsAndBothAxes()
 {

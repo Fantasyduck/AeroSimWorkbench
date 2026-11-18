@@ -18,6 +18,10 @@
 #include "aerosim/ui/intelligent/ResultDataTablePage.h"
 #endif
 #include <QPixmap>
+#ifdef AEROSIM_HAS_CALCULATION_MONITOR
+#include "aerosim/ui/CalculationTaskPage.h"
+#include "aerosim/ui/intelligent/CalculationCurveMonitor.h"
+#endif
 
 #ifdef AEROSIM_HAS_MESH_VIEWER
 #include "MeshViewerBinding.h"
@@ -69,6 +73,10 @@ int main(int argc, char *argv[])
         controller.workflow(), controller.tasks(), nullptr, nullptr, nullptr, nullptr};
 #ifndef AEROSIM_POSTPROCESS_STANDALONE
     window.bindServices(bindings);
+#ifdef AEROSIM_HAS_CALCULATION_MONITOR
+    for (auto *page : window.findChildren<aerosim::CalculationTaskPage *>())
+        page->attachMonitor(new aerosim::CalculationCurveMonitor);
+#endif
 #ifdef AEROSIM_HAS_MONITOR_CURVES
     // The curve slot is filled here, in the assembly layer, and not inside the
     // window: the page owns the slot and accepts exactly one widget, so a test

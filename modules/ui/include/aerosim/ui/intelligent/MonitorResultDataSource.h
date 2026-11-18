@@ -3,6 +3,7 @@
 #include "aerosim/ui/intelligent/ResultDataSource.h"
 
 namespace aerosim {
+namespace monitor { struct MonitorLog; }
 
 // Turns a monitor history file (CSV or Tecplot ASCII) into a ResultTable.
 //
@@ -16,6 +17,7 @@ public:
 
     bool load(const QString &path, ResultTable *table, QString *error) override;
     QString fileFilter() const override;
+    static bool fromLog(const monitor::MonitorLog &log, ResultTable *table, QString *error);
 };
 
 } // namespace aerosim

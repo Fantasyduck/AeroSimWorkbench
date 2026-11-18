@@ -31,6 +31,10 @@ if(AEROSIM_BUILD_GUI)
         target_link_libraries(aerosim_gui PRIVATE aerosim_intelligent_curve)
         target_compile_definitions(aerosim_gui PRIVATE AEROSIM_HAS_RESULT_CURVES=1)
     endif()
+    if(TARGET aerosim_calculation_monitor)
+        target_link_libraries(aerosim_gui PRIVATE aerosim_calculation_monitor)
+        target_compile_definitions(aerosim_gui PRIVATE AEROSIM_HAS_CALCULATION_MONITOR=1)
+    endif()
     # Keep the application-level injection point. The scene target is absent
     # while visualization is only a skeleton, and is linked again as soon as
     # the new scene module provides it.

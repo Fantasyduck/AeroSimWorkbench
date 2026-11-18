@@ -4,6 +4,7 @@
 #include <QWidget>
 #include <QVariantMap>
 #include <QVector>
+#include <QPointer>
 
 class QCheckBox;
 class QLabel;
@@ -59,6 +60,7 @@ private:
     QSplitter *monitorSplitter_ = nullptr;
     QVBoxLayout *curveLayout_ = nullptr;
     QWidget *emptyChart_ = nullptr;
+    QPointer<QWidget> monitorWidget_;
 };
 
 } // namespace aerosim
