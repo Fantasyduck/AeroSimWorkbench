@@ -352,8 +352,8 @@ void PostProcessWorkbenchWindow::createActions() {
     auto *isoAction = ribbonAction(this, commandIcon("iso"), uiText(u"等值面"), uiText(u"根据选中字段提取三维等值面"), uiText(u"postProcessIsoAction"));
     auto *streamAction = ribbonAction(this, commandIcon("stream"), uiText(u"流线"), uiText(u"从种子点生成流线或表面流线"), uiText(u"postProcessStreamAction"));
     auto *traceAction = ribbonAction(this, commandIcon("trace"), uiText(u"迹线"), uiText(u"针对时间序结果生成粒子轨迹"), uiText(u"postProcessTraceAction"));
-    auto *focusAction = ribbonAction(this, commandIcon("fit"), uiText(u"聚焦选中对象"), uiText(u"将选中对象调整到视图中心"), QStringLiteral("postProcessFocusAction"));
-    connect(focusAction, &QAction::triggered, this, [this] { emit viewRequested(QStringLiteral("focusSelected")); appendMessage(uiText(u"已请求聚焦选中对象；视图服务尚未接入。")); });
+    auto *focusAction = ribbonAction(this, commandIcon("view-focus"), uiText(u"聚焦选中对象"), uiText(u"聚焦选中对象；薄表面可能自动调整观察方向"), QStringLiteral("postProcessFocusAction"));
+    connect(focusAction, &QAction::triggered, this, [this] { emit viewRequested(QStringLiteral("focusSelected")); });
     auto *centerAction = ribbonAction(this, commandIcon("rotate"), uiText(u"旋转中心…"), uiText(u"设置视图旋转中心"), QStringLiteral("postProcessRotationCenterAction"));
     connect(centerAction, &QAction::triggered, this, [this] {
         auto *dialog = new QDialog(this); dialog->setAttribute(Qt::WA_DeleteOnClose); dialog->setWindowTitle(uiText(u"旋转中心"));
@@ -377,9 +377,15 @@ void PostProcessWorkbenchWindow::createActions() {
     auto *panAction = ribbonAction(this, commandIcon("pan"), uiText(u"平移"), uiText(u"平移当前视图"), uiText(u"postProcessPanAction"));
     auto *zoomAction = ribbonAction(this, commandIcon("zoom"), uiText(u"缩放"), uiText(u"缩放当前视图"), uiText(u"postProcessZoomAction"));
     auto *rotateAction = ribbonAction(this, commandIcon("rotate"), uiText(u"旋转"), uiText(u"旋转三维视图"), uiText(u"postProcessRotateAction"));
-    auto *frontAction = ribbonAction(this, commandIcon("front"), uiText(u"前视"), uiText(u"切换至前视图"), uiText(u"postProcessFrontViewAction"));
-    auto *rightAction = ribbonAction(this, commandIcon("right"), uiText(u"右视"), uiText(u"切换至右视图"), uiText(u"postProcessRightViewAction"));
-    auto *topAction = ribbonAction(this, commandIcon("top"), uiText(u"俯视"), uiText(u"切换至俯视图"), uiText(u"postProcessTopViewAction"));
+    auto *frontAction = ribbonAction(this, commandIcon("camera-front"), uiText(u"前视"), uiText(u"切换至前视图"), uiText(u"postProcessFrontViewAction"));
+    auto *rightAction = ribbonAction(this, commandIcon("camera-right"), uiText(u"右视"), uiText(u"切换至右视图"), uiText(u"postProcessRightViewAction"));
+    auto *topAction = ribbonAction(this, commandIcon("camera-top"), uiText(u"俯视"), uiText(u"切换至俯视图"), uiText(u"postProcessTopViewAction"));
+    auto *backAction = ribbonAction(this, commandIcon("camera-back"), uiText(u"后视"), uiText(u"切换至后视图"), QStringLiteral("postProcessBackViewAction"));
+    auto *leftAction = ribbonAction(this, commandIcon("camera-left"), uiText(u"左视"), uiText(u"切换至左视图"), QStringLiteral("postProcessLeftViewAction"));
+    auto *bottomAction = ribbonAction(this, commandIcon("camera-bottom"), uiText(u"仰视"), uiText(u"切换至仰视图"), QStringLiteral("postProcessBottomViewAction"));
+    connect(backAction, &QAction::triggered, this, [this] { emit viewRequested(QStringLiteral("back")); });
+    connect(leftAction, &QAction::triggered, this, [this] { emit viewRequested(QStringLiteral("left")); });
+    connect(bottomAction, &QAction::triggered, this, [this] { emit viewRequested(QStringLiteral("bottom")); });
     auto *interactionModes = new QActionGroup(this);
     interactionModes->setExclusive(true);
     for (QAction *action : {selectAction, boxSelectAction, panAction, zoomAction, rotateAction, probeAction}) {
@@ -556,6 +562,30 @@ QWidget *PostProcessWorkbenchWindow::createDataPanel() {
         datasetTree_->setCurrentItem(item); updateDataSelection(item,0);
         QMenu menu(this); menu.addAction(styleAction_); menu.addAction(parameterAction_);
         const QString itemKind = item->data(0, Qt::UserRole).toString();
+        QTreeWidgetItem *regionItem = itemKind == QStringLiteral("field") ? item->parent() : item;
+        if (regionItem && !regionItem->data(0, Qt::UserRole+3).toMap().value("regionId").toString().isEmpty()) {
+            auto *only = menu.addAction(uiText(u"仅显示此区域"));
+            connect(only, &QAction::triggered, this, [this, regionItem] {
+                for (int i = 0; i < datasetTree_->topLevelItemCount(); ++i) {
+                    auto *root = datasetTree_->topLevelItem(i);
+                    if (root->data(0, Qt::UserRole).toString() != QStringLiteral("dataset")) continue;
+                    root->setCheckState(0, Qt::Checked);
+                    for (int j = 0; j < root->childCount(); ++j)
+                        root->child(j)->setCheckState(0, root->child(j) == regionItem ? Qt::Checked : Qt::Unchecked);
+                }
+            });
+        }
+        if (itemKind == QStringLiteral("dataset")) {
+            auto *all = menu.addAction(uiText(u"显示所有区域"));
+            auto *none = menu.addAction(uiText(u"隐藏所有区域"));
+            connect(all, &QAction::triggered, this, [item] {
+                item->setCheckState(0, Qt::Checked);
+                for (int i = 0; i < item->childCount(); ++i) item->child(i)->setCheckState(0, Qt::Checked);
+            });
+            connect(none, &QAction::triggered, this, [item] {
+                for (int i = 0; i < item->childCount(); ++i) item->child(i)->setCheckState(0, Qt::Unchecked);
+            });
+        }
         if (!item->parent() && (itemKind == QStringLiteral("exampleFile") || itemKind == QStringLiteral("pendingGroup") || itemKind == QStringLiteral("dataset"))) {
             auto *remove = menu.addAction(uiText(u"移除此项"));
             connect(remove, &QAction::triggered, this, [this, item] {
@@ -600,7 +630,7 @@ void PostProcessWorkbenchWindow::openImportDialog() {
     dialog->setObjectName(QStringLiteral("postProcessImportDataDialog"));
     dialog->setAttribute(Qt::WA_DeleteOnClose); dialog->setWindowTitle(uiText(u"导入可视化数据")); dialog->resize(680, 410);
     auto *layout = new QVBoxLayout(dialog);
-    auto *hint = new QLabel(uiText(u"选择一个或多个数据文件。Plot3D：仅查看网格可只选网格文件；查看流场需同时选择配套的网格（常见 .xyz）和结果（常见 .q）文件。多组文件的配对确认尚未接入。"), dialog); hint->setWordWrap(true); layout->addWidget(hint);
+    auto *hint = new QLabel(dataServiceAvailable_ ? uiText(u"选择一个或多个 CGNS、VTK 或 Tecplot ASCII 网格或流场文件。") : uiText(u"读取服务尚未接入。"), dialog); hint->setWordWrap(true); layout->addWidget(hint);
     auto *files = new QListWidget(dialog); files->setObjectName(QStringLiteral("postProcessImportFileList"));
     files->setSelectionMode(QAbstractItemView::ExtendedSelection); layout->addWidget(files, 1);
     auto *row = new QHBoxLayout; auto *add = new QPushButton(uiText(u"添加文件…"), dialog); auto *remove = new QPushButton(uiText(u"移除所选"), dialog);
@@ -608,7 +638,7 @@ void PostProcessWorkbenchWindow::openImportDialog() {
     row->addWidget(add); row->addWidget(remove); row->addStretch(); layout->addLayout(row);
     connect(add, &QPushButton::clicked, dialog, [dialog, files] {
         const QStringList selected = QFileDialog::getOpenFileNames(dialog, uiText(u"选择可视化数据"), QString(),
-            uiText(u"可视化数据 (*.vtk *.vti *.vtu *.vts *.vtr *.vtp *.vtm *.cgns *.xyz *.q *.p3d *.tec *.dat *.plt);;VTK 文件 (*.vtk *.vti *.vtu *.vts *.vtr *.vtp *.vtm);;CGNS 文件 (*.cgns);;Plot3D 文件 (*.xyz *.q *.p3d);;Tecplot 文件 (*.tec *.dat *.plt);;所有文件 (*)"));
+            uiText(u"可视化数据 (*.cgns *.vtk *.vti *.vtu *.vts *.vtr *.vtp *.vtm *.tec *.dat);;CGNS 文件 (*.cgns);;VTK 文件 (*.vtk *.vti *.vtu *.vts *.vtr *.vtp *.vtm);;Tecplot ASCII (*.tec *.dat);;所有文件 (*)"));
         for (const QString &path : selected) {
             bool duplicate = false;
             for (int i = 0; i < files->count(); ++i) if (files->item(i)->data(Qt::UserRole).toString() == path) { duplicate = true; break; }
@@ -623,7 +653,7 @@ void PostProcessWorkbenchWindow::openImportDialog() {
     for (int i = 0; i < datasetTree_->topLevelItemCount(); ++i)
         if (!datasetTree_->topLevelItem(i)->data(0, Qt::UserRole).toString().startsWith(QStringLiteral("pending"))) { hasData = true; break; }
     modeRow->setVisible(hasData); layout->addWidget(modeRow);
-    auto *status = new QLabel(dataServiceAvailable_ ? uiText(u"选择 CGNS 文件；读取成功后显示数据。") : uiText(u"读取服务尚未接入；提交后文件会显示为等待读取。"), dialog); status->setWordWrap(true); status->setObjectName(QStringLiteral("postProcessImportStatus")); layout->addWidget(status);
+    auto *status = new QLabel(dataServiceAvailable_ ? uiText(u"选择 CGNS、VTK 或 Tecplot ASCII 文件；读取成功后显示数据。") : uiText(u"读取服务尚未接入；提交后文件会显示为等待读取。"), dialog); status->setWordWrap(true); status->setObjectName(QStringLiteral("postProcessImportStatus")); layout->addWidget(status);
     auto *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, dialog); buttons->button(QDialogButtonBox::Ok)->setText(uiText(u"导入")); layout->addWidget(buttons);
     connect(buttons, &QDialogButtonBox::rejected, dialog, &QDialog::reject);
     connect(buttons, &QDialogButtonBox::accepted, dialog, [this, dialog, files, mode, status, hasData] {
@@ -662,16 +692,16 @@ void PostProcessWorkbenchWindow::openExportDialog(const QString &kind) {
         auto *range = new QLineEdit(dialog); range->setPlaceholderText(uiText(u"起止时间待真实帧提供")); form->addRow(uiText(u"时间范围"),range);
         auto *fps = new QSpinBox(dialog); fps->setRange(1,120); fps->setValue(24); fps->setObjectName(QStringLiteral("postProcessExportFps")); form->addRow(uiText(u"帧率"),fps);
     } else {
-        auto *background = new QComboBox(dialog); background->addItems({uiText(u"当前背景"),uiText(u"透明背景（待接入）")}); form->addRow(uiText(u"背景"),background);
+        auto *background = new QComboBox(dialog); background->addItem(uiText(u"当前背景")); form->addRow(uiText(u"背景"),background);
     }
     auto *width = new QSpinBox(dialog); width->setRange(1,8192); width->setValue(1920); width->setObjectName(QStringLiteral("postProcessExportWidth")); form->addRow(uiText(u"宽度"),width);
     auto *height = new QSpinBox(dialog); height->setRange(1,8192); height->setValue(1080); height->setObjectName(QStringLiteral("postProcessExportHeight")); form->addRow(uiText(u"高度"),height);
     layout->addLayout(form);
-    auto *hint = new QLabel(uiText(u"导出服务尚未接入；此窗口只演示操作流程，不会写入文件。"),dialog); hint->setWordWrap(true); layout->addWidget(hint); layout->addStretch();
+    auto *hint = new QLabel(kind == "image" && dataServiceAvailable_ ? uiText(u"保存当前视口及色标，输出尺寸由截图缩放得到。") : uiText(u"导出服务尚未接入；此窗口只演示操作流程，不会写入文件。"),dialog); hint->setWordWrap(true); layout->addWidget(hint); layout->addStretch();
     auto *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel,dialog);
     buttons->button(QDialogButtonBox::Ok)->setText(uiText(u"选择保存位置…")); buttons->button(QDialogButtonBox::Cancel)->setText(uiText(u"取消")); layout->addWidget(buttons);
     connect(buttons,&QDialogButtonBox::rejected,dialog,&QDialog::reject);
-    connect(buttons,&QDialogButtonBox::accepted,dialog,[this,dialog,kind,format] {
+    connect(buttons,&QDialogButtonBox::accepted,dialog,[this,dialog,kind,format,width,height] {
         if (exportDialog_) { exportDialog_->raise(); exportDialog_->activateWindow(); return; }
         auto *picker = new QFileDialog(dialog, uiText(u"选择导出目标（服务待接入）"));
         exportDialog_ = picker; picker->setObjectName(QStringLiteral("postProcessExportDialog")); picker->setAttribute(Qt::WA_DeleteOnClose);
@@ -684,11 +714,14 @@ void PostProcessWorkbenchWindow::openExportDialog(const QString &kind) {
         }
 
         const QString selectedFormat = format->currentText();
-        if (selectedFormat == "PNG") picker->setNameFilter(uiText(u"PNG (*.png)"));
-        else if (selectedFormat == "JPEG") picker->setNameFilter(uiText(u"JPEG (*.jpg *.jpeg)"));
+        if (selectedFormat == "PNG") { picker->setNameFilter(uiText(u"PNG (*.png)")); picker->setDefaultSuffix(QStringLiteral("png")); }
+        else if (selectedFormat == "JPEG") { picker->setNameFilter(uiText(u"JPEG (*.jpg *.jpeg)")); picker->setDefaultSuffix(QStringLiteral("jpg")); }
         else picker->setNameFilter(uiText(u"所有文件 (*)"));
-        connect(picker,&QFileDialog::fileSelected,dialog,[this,dialog,kind](const QString &path) {
+        connect(picker,&QFileDialog::fileSelected,dialog,[this,dialog,kind,width,height](const QString &path) {
             if (path.isEmpty()) return;
+            if (kind == QStringLiteral("image") && dataServiceAvailable_) {
+                emit exportImageRequested(path, width->value(), height->value()); dialog->accept(); return;
+            }
             emit exportFileRequested(kind,path); emit postProcessCommandRequested(QStringLiteral("export:")+kind);
             appendMessage(uiText(u"已选择导出目标；导出服务尚未接入，没有生成文件。")); dialog->accept();
         });
@@ -899,6 +932,20 @@ QWidget *PostProcessWorkbenchWindow::createViewportPanel() {
     caption->addWidget(viewportTitle_); caption->addWidget(viewportHint_);
     headerLayout->addLayout(caption, 1);
     layout->addWidget(header);
+    // Reuse the ribbon actions so both entry points share state and availability.
+    auto *toolbar = new QFrame(frame);
+    toolbar->setObjectName(QStringLiteral("postProcessViewToolbar"));
+    auto *tools = new QHBoxLayout(toolbar); tools->setContentsMargins(8, 3, 8, 3); tools->setSpacing(3);
+    const char *names[] = {"postProcessSelectAction", "postProcessBoxSelectAction", "postProcessPanAction", "postProcessZoomAction", "postProcessRotateAction", "postProcessFitAction", "postProcessFocusAction", "postProcessFrontViewAction", "postProcessBackViewAction", "postProcessRightViewAction", "postProcessLeftViewAction", "postProcessTopViewAction", "postProcessBottomViewAction"};
+    for (const char *name : names) {
+        auto *action = findChild<QAction *>(QString::fromLatin1(name));
+        if (!action) continue;
+        auto *button = new QToolButton(toolbar); button->setDefaultAction(action);
+        button->setObjectName(QStringLiteral("viewToolbar_") + QString::fromLatin1(name));
+        button->setToolButtonStyle(QString::fromLatin1(name).contains(QStringLiteral("ViewAction")) ? Qt::ToolButtonTextBesideIcon : Qt::ToolButtonIconOnly);
+        button->setIconSize(QSize(20, 20)); tools->addWidget(button);
+    }
+    tools->addStretch(); layout->addWidget(toolbar);
     auto *viewportHost = new ViewportHost(frame); viewportHost->setObjectName(uiText(u"postProcessViewportHost")); viewportLayout_ = new QVBoxLayout(viewportHost); viewportLayout_->setContentsMargins(0, 0, 0, 0);
     emptyViewport_ = new ResultPreviewWidget(viewportHost); emptyViewport_->setObjectName(uiText(u"postProcessResultPreview")); viewportLayout_->addWidget(emptyViewport_);
     auto *sphere = new OrientationControl(viewportHost); sphere->setObjectName(QStringLiteral("postProcessOrientationControl")); viewportHost->orientation = sphere;
@@ -1059,7 +1106,18 @@ void PostProcessWorkbenchWindow::updateDataSelection(QTreeWidgetItem *item, int)
     }
 }
 
-void PostProcessWorkbenchWindow::setDataServiceAvailable(bool available) { dataServiceAvailable_ = available; }
+void PostProcessWorkbenchWindow::setDataServiceAvailable(bool available) {
+    dataServiceAvailable_ = available;
+    if (auto *box = findChild<QAction *>(QStringLiteral("postProcessBoxSelectAction"))) {
+        box->setEnabled(!available);
+        if (available) box->setToolTip(uiText(u"视口框选尚未接入"));
+    }
+}
+
+void PostProcessWorkbenchWindow::presentImageExportResult(const QString &path, bool success) {
+    if (success) appendMessage(uiText(u"图片已保存：") + path);
+    else { appendMessage(uiText(u"图片保存失败：") + path); QMessageBox::warning(this, uiText(u"保存失败"), uiText(u"无法保存图片，请检查文件格式和目标路径。")); }
+}
 
 void PostProcessWorkbenchWindow::presentImportError(const QString &message) {
     for (int i=datasetTree_->topLevelItemCount()-1; i>=0; --i)
@@ -1080,11 +1138,12 @@ void PostProcessWorkbenchWindow::presentImportedData(const QVariantList &dataset
         if(!first) first=root;
         root->setData(0,Qt::UserRole,QStringLiteral("dataset")); root->setToolTip(0,dataset.value("path").toString());
         QVariantMap rootContext; rootContext["sourceId"]=dataset.value("id"); root->setData(0,Qt::UserRole+3,rootContext);
+        root->setData(0,Qt::UserRole+1,dataset.value("id").toString());
         root->setFlags(root->flags() | Qt::ItemIsUserCheckable); root->setCheckState(0,Qt::Checked);
         for (const QVariant &rv : dataset.value("regions").toList()) {
             const QVariantMap region=rv.toMap();
             QVariantMap context; context["sourceId"]=dataset.value("id"); context["sourceName"]=dataset.value("name");
-            context["regionId"]=region.value("id"); context["dimension"]=region.value("dimension"); context["topology"]=uiText(u"CGNS 网格"); context["frames"]=1;
+            context["regionId"]=region.value("id"); context["dimension"]=region.value("dimension"); context["topology"]=uiText(u"导入网格"); context["frames"]=1;
             QStringList scalars, vectors;
             for (const QVariant &fv:region.value("fields").toList()) { const auto f=fv.toMap(); if(f.value("components").toInt()==1) scalars << f.value("name").toString(); else if(f.value("components").toInt()==3) vectors << f.value("name").toString(); }
             context["scalars"]=scalars; context["vectors"]=vectors; context["field"]=QString(); context["components"]=0;
@@ -1093,7 +1152,8 @@ void PostProcessWorkbenchWindow::presentImportedData(const QVariantList &dataset
             item->setData(0,Qt::UserRole+1,dataset.value("id").toString()+QStringLiteral("/")+region.value("id").toString()); item->setData(0,Qt::UserRole+3,context);
             item->setFlags(item->flags() | Qt::ItemIsUserCheckable); item->setCheckState(0,Qt::Checked);
             const QString kind=region.value("kind").toString();
-            item->setToolTip(0,kind==QStringLiteral("volume") ? uiText(u"体区域") : kind==QStringLiteral("boundary") ? uiText(u"边界区域") : uiText(u"未归入已识别边界的单元段"));
+            const QString kindLabel = kind==QStringLiteral("volume") ? uiText(u"体区域") : kind==QStringLiteral("boundary") ? uiText(u"边界区域") : uiText(u"未归入已识别边界的单元段");
+            item->setToolTip(0, region.value("name").toString() + QStringLiteral("\n") + kindLabel);
             for (const QVariant &fv:region.value("fields").toList()) {
                 const auto f=fv.toMap(); const QString assoc=f.value("association").toString();
                 auto fc=context; fc["field"]=f.value("name"); fc["association"]=assoc; fc["components"]=f.value("components"); fc["hasRange"]=f.value("hasRange"); fc["minimum"]=f.value("minimum"); fc["maximum"]=f.value("maximum");
@@ -1107,8 +1167,8 @@ void PostProcessWorkbenchWindow::presentImportedData(const QVariantList &dataset
         root->setExpanded(true);
     }
     showNavigationPanel(1); if(first) { datasetTree_->setCurrentItem(first); updateDataSelection(first,0); }
-    if (sessionContext_) sessionContext_->setText(uiText(u"已加载 CGNS 数据"));
-    appendMessage(uiText(u"CGNS 数据读取完成。"));
+    if (sessionContext_) sessionContext_->setText(uiText(u"已加载结果数据"));
+    appendMessage(uiText(u"结果数据读取完成。"));
 }
 
 void PostProcessWorkbenchWindow::updateSelectionActions() {
@@ -1127,7 +1187,7 @@ void PostProcessWorkbenchWindow::updateSelectionActions() {
         action->setEnabled(enabled);
         action->setToolTip(enabled ? action->property("availableToolTip").toString() : reason);
     };
-    enable("postProcessFocusAction",spatial,uiText(u"请先选择空间对象。"));
+    enable("postProcessFocusAction", !selectedContext_.value("regionId").toString().isEmpty(), uiText(u"请先选择可见的空间区域。"));
     enable("postProcessContourAction",spatial && (scalar || vector),uiText(u"请先选择标量或矢量模长进行着色。"));
     enable("postProcessSliceAction",spatial && dimension==3,uiText(u"切片需要三维体网格；不要求存在标量场。"));
     enable("postProcessIsoAction",scalar && dimension==3,uiText(u"等值面需要三维体网格和标量；矢量请先选择模长标量。"));
@@ -1142,7 +1202,7 @@ void PostProcessWorkbenchWindow::updateSelectionActions() {
     enable("postProcessImageExportAction",spatial,uiText(u"请选择要保存的视图。"));
     for (const char *name : {"postProcessAnimationExportAction", "postProcessImageExportAction"}) {
         auto *action = findChild<QAction *>(QString::fromLatin1(name));
-        if (action && action->isEnabled()) action->setToolTip(uiText(u"选择导出目标并提交请求；导出服务尚未接入，不会生成文件。"));
+        if (action && action->isEnabled() && !(dataServiceAvailable_ && QString::fromLatin1(name) == QStringLiteral("postProcessImageExportAction"))) action->setToolTip(uiText(u"选择导出目标并提交请求；导出服务尚未接入，不会生成文件。"));
     }
     enable("postProcessProbeAction",spatial,uiText(u"请先导入并选择可查询的网格或对象。"));
     if (viewportHint_) viewportHint_->setText(spatial
@@ -1358,6 +1418,9 @@ void PostProcessWorkbenchWindow::openObjectStyle() {
     if (styleDialog_) { styleDialog_->raise(); styleDialog_->activateWindow(); return; }
     const QString id = selectedId_;
     const QString name = selectedName_;
+    const QVariantMap regionContext = selectedContext_;
+    const bool realRegion = !regionContext.value("regionId").toString().isEmpty();
+    const bool realDataset = selectedKind_ == QStringLiteral("dataset") && !regionContext.value("sourceId").toString().isEmpty();
     const QVariantMap draft = styleDrafts_.value(id);
     auto *dialog = new QDialog(this);
     styleDialog_ = dialog;
@@ -1375,7 +1438,20 @@ void PostProcessWorkbenchWindow::openObjectStyle() {
     form->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
     auto *visible = new QCheckBox(uiText(u"在当前 Frame 中显示"), dialog);
     visible->setObjectName(QStringLiteral("objectStyleVisible"));
-    visible->setChecked(draft.value("visible", true).toBool());
+    bool regionVisible = draft.value("visible", true).toBool();
+    if (realRegion) for (int i = 0; i < datasetTree_->topLevelItemCount(); ++i) {
+        auto *root = datasetTree_->topLevelItem(i);
+        for (int j = 0; j < root->childCount(); ++j) {
+            auto *item = root->child(j);
+            if (item->data(0, Qt::UserRole+1).toString() == id) regionVisible = item->checkState(0) == Qt::Checked;
+        }
+    }
+    if (realDataset) for (int i = 0; i < datasetTree_->topLevelItemCount(); ++i) {
+        auto *root = datasetTree_->topLevelItem(i);
+        if (root->data(0,Qt::UserRole+3).toMap().value("sourceId") == regionContext.value("sourceId"))
+            regionVisible = root->checkState(0) == Qt::Checked;
+    }
+    visible->setChecked(regionVisible);
     auto *representation = new QComboBox(dialog);
     representation->setObjectName(QStringLiteral("objectStyleRepresentation"));
     representation->addItems({uiText(u"表面"), uiText(u"线框"), uiText(u"表面和边线"), uiText(u"点")});
@@ -1390,16 +1466,49 @@ void PostProcessWorkbenchWindow::openObjectStyle() {
     form->addRow(visible); form->addRow(uiText(u"显示方式"), representation);
     form->addRow(uiText(u"颜色"), color); form->addRow(uiText(u"不透明度"), opacity);
     layout->addLayout(form);
-    auto *hint = new QLabel(uiText(u"当前保存的是此对象的界面草稿。场景服务接入后才会更新实际渲染。"), dialog);
+    auto *hint = new QLabel(realDataset ? uiText(u"设置将应用到此结果集的所有区域；应用后仍可单独调整区域。") : realRegion ? uiText(u"设置将应用到当前区域。") : uiText(u"当前保存的是此对象的界面草稿。"), dialog);
     hint->setObjectName(QStringLiteral("mutedText")); hint->setWordWrap(true);
     layout->addWidget(hint); layout->addStretch();
     auto *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, dialog);
-    buttons->button(QDialogButtonBox::Ok)->setText(uiText(u"保存草稿"));
+    buttons->button(QDialogButtonBox::Ok)->setText((realRegion || realDataset) ? uiText(u"应用") : uiText(u"保存草稿"));
     buttons->button(QDialogButtonBox::Cancel)->setText(uiText(u"取消")); layout->addWidget(buttons);
     connect(buttons, &QDialogButtonBox::rejected, dialog, &QDialog::reject);
-    connect(buttons, &QDialogButtonBox::accepted, dialog, [this, dialog, id, name, visible, color, opacity, representation] {
+    connect(buttons, &QDialogButtonBox::accepted, dialog, [this, dialog, id, name, regionContext, realRegion, realDataset, visible, color, opacity, representation] {
         styleDrafts_[id] = {{"visible", visible->isChecked()}, {"representation", representation->currentIndex()},
                             {"color", color->currentIndex()}, {"opacity", opacity->value()}};
+        if (realDataset) {
+            const QString datasetId = regionContext.value("sourceId").toString();
+            for (int i = 0; i < datasetTree_->topLevelItemCount(); ++i) {
+                auto *root = datasetTree_->topLevelItem(i);
+                if (root->data(0,Qt::UserRole).toString() != QStringLiteral("dataset") ||
+                    root->data(0,Qt::UserRole+3).toMap().value("sourceId").toString() != datasetId) continue;
+                if (visible->isChecked()) root->setCheckState(0,Qt::Checked);
+                for (int j = 0; j < root->childCount(); ++j) {
+                    auto *region = root->child(j);
+                    const QString regionId = region->data(0,Qt::UserRole+3).toMap().value("regionId").toString();
+                    if (regionId.isEmpty()) continue;
+                    styleDrafts_[region->data(0,Qt::UserRole+1).toString()] = styleDrafts_.value(id);
+                    emit regionStyleChanged(datasetId,regionId,styleDrafts_.value(id));
+                    region->setCheckState(0, visible->isChecked() ? Qt::Checked : Qt::Unchecked);
+                }
+                break;
+            }
+            appendMessage(uiText(u"已更新结果集“%1”的所有区域样式。").arg(name));
+            dialog->accept(); return;
+        }
+        if (realRegion) {
+            emit regionStyleChanged(regionContext.value("sourceId").toString(), regionContext.value("regionId").toString(), styleDrafts_.value(id));
+            for (int i = 0; i < datasetTree_->topLevelItemCount(); ++i) {
+                auto *root = datasetTree_->topLevelItem(i);
+                for (int j = 0; j < root->childCount(); ++j) {
+                    auto *region = root->child(j);
+                    if (region->data(0, Qt::UserRole+1).toString() == id)
+                        region->setCheckState(0, visible->isChecked() ? Qt::Checked : Qt::Unchecked);
+                }
+            }
+            appendMessage(uiText(u"已更新“%1”的显示样式。").arg(name));
+            dialog->accept(); return;
+        }
         for (int i = 0; i < sceneList_->count(); ++i) {
             auto *item = sceneList_->item(i);
             if (item->data(Qt::UserRole+1).toString() == id)
@@ -1413,6 +1522,35 @@ void PostProcessWorkbenchWindow::openObjectStyle() {
 
 void PostProcessWorkbenchWindow::openObjectParameters(bool colorOnly) {
     if (!parameterAction_->isEnabled() && selectedContext_.isEmpty()) return;
+    if (!selectedContext_.value("regionId").toString().isEmpty() && !selectedContext_.value("field").toString().isEmpty()) {
+        if (parameterDialog_) { parameterDialog_->raise(); parameterDialog_->activateWindow(); return; }
+        const QVariantMap context = selectedContext_;
+        const QString fieldId = selectedId_;
+        const QVariantMap previousRange = parameterDrafts_.value(fieldId);
+        auto *dialog = new QDialog(this); parameterDialog_ = dialog;
+        dialog->setAttribute(Qt::WA_DeleteOnClose); dialog->setWindowTitle(uiText(u"色标范围"));
+        auto *layout = new QVBoxLayout(dialog); auto *form = new QFormLayout;
+        auto *mode = new QComboBox(dialog); mode->setObjectName(QStringLiteral("fieldRangeMode"));
+        mode->addItems({uiText(u"自动：数据范围"), uiText(u"手动范围")});
+        mode->setCurrentIndex(previousRange.value("rangeMode", 0).toInt());
+        auto *minimum = new QDoubleSpinBox(dialog); auto *maximum = new QDoubleSpinBox(dialog);
+        minimum->setObjectName(QStringLiteral("fieldRangeMinimum")); maximum->setObjectName(QStringLiteral("fieldRangeMaximum"));
+        for (auto *input : {minimum, maximum}) { input->setDecimals(8); input->setRange(-1.e100, 1.e100); }
+        minimum->setValue(previousRange.value("rangeMin", context.value("minimum")).toDouble());
+        maximum->setValue(previousRange.value("rangeMax", context.value("maximum")).toDouble());
+        form->addRow(uiText(u"范围模式"), mode); form->addRow(uiText(u"最小值"), minimum); form->addRow(uiText(u"最大值"), maximum);
+        layout->addLayout(form); auto *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, dialog); layout->addWidget(buttons);
+        connect(buttons, &QDialogButtonBox::rejected, dialog, &QDialog::reject);
+        connect(buttons, &QDialogButtonBox::accepted, dialog, [this, dialog, context, fieldId, mode, minimum, maximum] {
+            if (mode->currentIndex() == 1 && minimum->value() >= maximum->value()) {
+                QMessageBox::warning(dialog, uiText(u"范围无效"), uiText(u"最大值必须大于最小值。")); return;
+            }
+            parameterDrafts_[fieldId] = {{"rangeMode", mode->currentIndex()}, {"rangeMin", minimum->value()}, {"rangeMax", maximum->value()}};
+            emit fieldRangeChanged(context.value("sourceId").toString(), context.value("regionId").toString(), context.value("field").toString(), context.value("association").toString(), mode->currentIndex() == 0, minimum->value(), maximum->value());
+            dialog->accept();
+        });
+        dialog->show(); return;
+    }
     if (parameterDialog_) { parameterDialog_->raise(); parameterDialog_->activateWindow(); return; }
     const QString id = selectedId_;
     const QString kind = colorOnly || selectedKind_=="volume" || selectedKind_=="surface" ? QStringLiteral("field") : selectedKind_;

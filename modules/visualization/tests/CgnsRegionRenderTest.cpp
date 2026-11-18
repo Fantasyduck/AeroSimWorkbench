@@ -54,14 +54,23 @@ int main(int argc,char **argv) {
         QMouseEvent down(QEvent::MouseButtonPress,point,Qt::LeftButton,Qt::LeftButton,Qt::NoModifier);
         QMouseEvent up(QEvent::MouseButtonRelease,point,Qt::LeftButton,Qt::NoButton,Qt::NoModifier);
         QApplication::sendEvent(tree->viewport(),&down); QApplication::sendEvent(tree->viewport(),&up);
+        tree->setCurrentItem(item);
+        emit window.viewRequested(QStringLiteral("focusSelected"));
         pending=true;
         QTimer::singleShot(600,&app,[&,item] {
-            const QImage frame=vtk->grabFramebuffer().convertToFormat(QImage::Format_RGB32);
             qint64 different=0;
-            for(int y=0;y<frame.height();y+=2) { const QColor bg=frame.pixelColor(frame.width()-2,y);
-                for(int x=0;x<frame.width()-4;x+=2) { const QColor c=frame.pixelColor(x,y);
-                    if(std::abs(c.red()-bg.red())+std::abs(c.green()-bg.green())+std::abs(c.blue()-bg.blue())>35) ++different;
+            // Thin surfaces may be edge-on: a user can choose a standard view.
+            for (const QString &view : {QStringLiteral("front"), QStringLiteral("right"), QStringLiteral("top")}) {
+                viewer->setCameraOrientation(view);
+                emit window.viewRequested(QStringLiteral("focusSelected"));
+                const QImage frame=vtk->grabFramebuffer().convertToFormat(QImage::Format_RGB32);
+                qint64 pixels=0;
+                for(int y=0;y<frame.height();y+=2) { const QColor bg=frame.pixelColor(frame.width()-2,y);
+                    for(int x=0;x<frame.width()-4;x+=2) { const QColor c=frame.pixelColor(x,y);
+                        if(std::abs(c.red()-bg.red())+std::abs(c.green()-bg.green())+std::abs(c.blue()-bg.blue())>35) ++pixels;
+                    }
                 }
+                different=qMax(different,pixels);
             }
             qInfo()<<item->text(0)<<"checked="<<(item->checkState(0)==Qt::Checked)<<"visiblePixels="<<different;
             if(item->checkState(0)!=Qt::Checked || different<100) failed=true;

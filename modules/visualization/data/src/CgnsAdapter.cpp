@@ -215,5 +215,27 @@ public:
     }
 };
 }
-std::unique_ptr<DataAdapter> createCgnsAdapter() { return std::unique_ptr<DataAdapter>(new CgnsAdapter); }
+#ifdef AEROSIM_HAS_PARAVIEW_CGNS_READER
+std::unique_ptr<DataAdapter> createParaViewCgnsAdapter();
+#else
+class MissingParaViewCgnsAdapter final : public DataAdapter {
+public:
+    bool accepts(const QString &path) const override { return path.endsWith(QStringLiteral(".cgns"), Qt::CaseInsensitive); }
+    ImportResult read(const QString &path) const override {
+        ImportResult result; result.dataset.path = path;
+        result.error = QStringLiteral("ParaView CGNS backend was not built; set AEROSIM_BUILD_PARAVIEW_CGNS_READER=ON");
+        return result;
+    }
+};
+#endif
+std::unique_ptr<DataAdapter> createCgnsAdapter() {
+    if (qgetenv("AEROSIM_CGNS_BACKEND") == "paraview") {
+#ifdef AEROSIM_HAS_PARAVIEW_CGNS_READER
+        return createParaViewCgnsAdapter();
+#else
+        return std::unique_ptr<DataAdapter>(new MissingParaViewCgnsAdapter);
+#endif
+    }
+    return std::unique_ptr<DataAdapter>(new CgnsAdapter);
+}
 } }

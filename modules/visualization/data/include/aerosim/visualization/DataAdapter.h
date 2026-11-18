@@ -43,5 +43,6 @@ public:
     virtual ImportResult read(const QString &path) const = 0;
 };
 std::unique_ptr<DataAdapter> createCgnsAdapter();
+std::unique_ptr<DataAdapter> createVtkDataAdapter();
 
 } }

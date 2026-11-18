@@ -1,5 +1,13 @@
 <RCC>
  <qresource prefix="/aerosim/postprocess">
+  <file alias="view-focus.svg">icons/view-focus.svg</file>
+  <file alias="camera-front.svg">icons/camera-front.svg</file>
+  <file alias="camera-back.svg">icons/camera-back.svg</file>
+  <file alias="camera-right.svg">icons/camera-right.svg</file>
+  <file alias="camera-left.svg">icons/camera-left.svg</file>
+  <file alias="camera-top.svg">icons/camera-top.svg</file>
+  <file alias="camera-bottom.svg">icons/camera-bottom.svg</file>
+
   <file alias="animation.svg">icons/animation.svg</file>
   <file alias="boxSelect.svg">icons/boxSelect.svg</file>
   <file alias="chart.svg">icons/chart.svg</file>

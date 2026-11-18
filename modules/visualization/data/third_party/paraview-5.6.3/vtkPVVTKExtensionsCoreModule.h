@@ -1,0 +1,2 @@
+#pragma once
+#define VTKPVVTKEXTENSIONSCORE_EXPORT

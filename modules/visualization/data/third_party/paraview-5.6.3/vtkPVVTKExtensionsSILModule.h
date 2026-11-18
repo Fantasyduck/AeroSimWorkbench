@@ -1,0 +1,2 @@
+#pragma once
+#define VTKPVVTKEXTENSIONSSIL_EXPORT
