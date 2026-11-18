@@ -1,5 +1,6 @@
 @echo off
 setlocal
+set "WORKBENCH_TARGET=aerosim_gui"
 
 if /i "%~1"=="full" (
     set "BUILD_CURVES=ON"
@@ -7,6 +8,10 @@ if /i "%~1"=="full" (
 ) else if /i "%~1"=="no-qwt" (
     set "BUILD_CURVES=OFF"
     set "BUILD_TARGETS=aerosim_gui"
+) else if /i "%~1"=="postprocess" (
+    set "BUILD_CURVES=ON"
+    set "WORKBENCH_TARGET=aerosim_postprocess"
+    set "BUILD_TARGETS=aerosim_postprocess aerosim_monitor_charts"
 ) else (
     goto usage
 )
@@ -57,11 +62,13 @@ if defined AEROSIM_QT_ROOT (
 set "SARIBBON_ARGS="
 if defined AEROSIM_SARIBBON_SOURCE_DIR set SARIBBON_ARGS="-DSARIBBON_SOURCE_DIR=%AEROSIM_SARIBBON_SOURCE_DIR%"
 set "QWT_ARGS="
-if defined AEROSIM_QWT_ROOT set QWT_ARGS="-DAEROSIM_QWT_ROOT=%AEROSIM_QWT_ROOT%"
+if defined AEROSIM_QWT_ROOT set QWT_ARGS=-U "AEROSIM_QWT_*" -U Qwt_DIR "-DAEROSIM_QWT_ROOT=%AEROSIM_QWT_ROOT%"
 set "EIGEN_ARGS="
 if defined AEROSIM_EIGEN_ROOT set EIGEN_ARGS="-DAEROSIM_EIGEN_ROOT=%AEROSIM_EIGEN_ROOT%"
 set "VTK_ARGS="
-if defined AEROSIM_VTK_DIR set VTK_ARGS="-DAEROSIM_VTK_DIR=%AEROSIM_VTK_DIR%"
+if defined AEROSIM_VTK_DIR set VTK_ARGS="-DVTK_DIR=%AEROSIM_VTK_DIR%"
+set "CGNS_ARGS="
+if defined AEROSIM_CGNS_ROOT set CGNS_ARGS="-DAEROSIM_CGNS_ROOT=%AEROSIM_CGNS_ROOT%"
 
 rem A seed cache is used only when the caller explicitly requests it.
 set "SEED_ARGS="
@@ -77,11 +84,11 @@ if not exist "%AEROSIM_WINDOWS_BUILD_DIR%\CMakeCache.txt" call :select_generator
 
 "%CMAKE_EXE%" -S "%SOURCE_DIR%" -B "%AEROSIM_WINDOWS_BUILD_DIR%" %GENERATOR_ARGS% %SEED_ARGS% ^
     -DCMAKE_BUILD_TYPE=Debug -DAEROSIM_BUILD_GUI=ON -DAEROSIM_BUILD_VISUALIZATION=ON ^
-    -DAEROSIM_BUILD_MACHINE_LEARNING=ON -DAEROSIM_BUILD_CURVES=%BUILD_CURVES% %QT_ARGS% %SARIBBON_ARGS% %QWT_ARGS% %EIGEN_ARGS% %VTK_ARGS%
-if errorlevel 1 exit /b 1
+    -DAEROSIM_BUILD_MACHINE_LEARNING=ON -DAEROSIM_BUILD_CURVES=%BUILD_CURVES% %QT_ARGS% %SARIBBON_ARGS% %QWT_ARGS% %EIGEN_ARGS% %VTK_ARGS% %CGNS_ARGS%
+if not "%errorlevel%"=="0" exit /b 1
 
 "%CMAKE_EXE%" --build "%AEROSIM_WINDOWS_BUILD_DIR%" --config Debug --target %BUILD_TARGETS%
-if errorlevel 1 (
+if not "%errorlevel%"=="0" (
     if /i "%~1"=="full" echo Full mode requires Qwt and the aerosim_monitor_charts target.
     exit /b 1
 )
@@ -115,13 +122,15 @@ call "%CACHED_VCVARS%" -vcvars_ver=%CACHED_MSVC_VERSION%
 exit /b %errorlevel%
 
 :run_workbench
-set "GUI_EXE=%AEROSIM_WINDOWS_BUILD_DIR%\aerosim_gui.exe"
-if exist "%AEROSIM_WINDOWS_BUILD_DIR%\Debug\aerosim_gui.exe" set "GUI_EXE=%AEROSIM_WINDOWS_BUILD_DIR%\Debug\aerosim_gui.exe"
+set "GUI_DIR=%AEROSIM_WINDOWS_BUILD_DIR%"
+if "%WORKBENCH_TARGET%"=="aerosim_postprocess" set "GUI_DIR=%AEROSIM_WINDOWS_BUILD_DIR%\postprocess"
+set "GUI_EXE=%GUI_DIR%\%WORKBENCH_TARGET%.exe"
+if exist "%GUI_DIR%\Debug\%WORKBENCH_TARGET%.exe" set "GUI_EXE=%GUI_DIR%\Debug\%WORKBENCH_TARGET%.exe"
 "%GUI_EXE%" --workbench
 exit /b %errorlevel%
 
 :usage
-echo Usage: %~nx0 ^<full^|no-qwt^> [run]
+echo Usage: %~nx0 ^<full^|no-qwt^|postprocess^> [run]
 echo Configure dependencies with AEROSIM_QT_ROOT and AEROSIM_SARIBBON_SOURCE_DIR.
 echo Existing build caches are reused. New builds default to Visual Studio 2017 x64 Debug.
 exit /b 2

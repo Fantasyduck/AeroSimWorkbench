@@ -18,7 +18,7 @@ endif()
 set(AEROSIM_QWT_ROOT "" CACHE PATH
     "Root of a Qwt 7.x source tree or installation prefix (contains src/qwt or include/qwt)")
 
-find_package(Qwt 7.5 QUIET)
+find_package(Qwt 7.5 QUIET HINTS "${AEROSIM_QWT_ROOT}/lib/cmake/Qwt")
 if(TARGET Qwt::Plot)
     set(AEROSIM_QWT_TARGET Qwt::Plot)
 elseif(TARGET qwt::plot)

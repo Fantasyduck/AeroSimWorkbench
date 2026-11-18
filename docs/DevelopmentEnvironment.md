@@ -64,6 +64,14 @@ build-windows\Debug\aerosim_gui.exe
 
 ### 工作台快速构建入口
 
+实验室电脑首次配置 Qwt 时运行 `scripts\setup-qwt-windows.cmd`。脚本将固定为 Qwt 7.5.2（提交 `29d0b994b54f92777b8d60e0ebe6c3d62d70db74`）的源码下载到 `third_party\QWT`，校验下载内容，再使用 Qt 5.12.12、项目所选的 MSVC x64 工具链生成 Debug 静态库 `third_party\QWT\lib\qwt7.lib`。默认沿用 `build-windows` 中保存的工具和 Qt 路径；新电脑需先设置 `AEROSIM_QT_ROOT`，在 VS2017 x64 开发者命令提示符中运行，或配置 `AEROSIM_WINDOWS_VS_DIR`。新配置默认选择 v141，现有构建复用其已配置工具集。本机额外验证采用 MSVC 14.44，v141 仍需在对应机器验证。
+
+随后运行 `scripts\run-postprocess-windows.cmd` 会优先使用项目内的 Qwt；首次找不到 Qwt 配置时也会调用安装脚本。源码目录保留上游许可证，下载文件、静态库和 `build-qwt` 构建目录由 Git 忽略。联网下载只在源码缺失时执行，准备好源码后可离线重新编译。
+
+直接运行 Qwt 安装入口后，窗口会保留完成或失败提示，完整日志位于 `build-qwt\setup-last.log`；自动调用可加 `--no-pause`。下载失败会重试并显示原因。实验室网络无法访问 GitHub 时，可把已下载并通过校验的 `build-qwt\downloads\qwt-29d0b994b54f92777b8d60e0ebe6c3d62d70db74.zip` 复制到目标电脑的同一相对位置，再重新运行脚本进行离线配置。
+
+后处理统一使用 `scripts\run-postprocess-windows.cmd` 构建并启动。脚本从现有构建缓存读取 Qwt 路径，支持在脚本顶部配置 `AEROSIM_QWT_ROOT`，也可通过同名环境变量或仓库根目录的 `aerosim-windows.local.cmd` 覆盖。Qt、SARibbon、Eigen 等依赖沿用现有构建配置；首次构建按下方示例设置。已有构建复用生成器与编译器，启动时自动识别 Ninja 和 Visual Studio 的程序目录。
+
 `scripts\build-workbench-windows.cmd full [run]` 构建带曲线的工作台，`no-qwt [run]` 关闭 Qwt 绘图；两种模式都需要分析模块使用的 Eigen。加 `run` 会启动构建后已部署运行库的工作台。
 
 首次构建可在 VS2017 x64 开发者命令提示符中配置本机依赖位置后运行：

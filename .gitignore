@@ -30,3 +30,6 @@ cmake/local*.cmake
 
 # Machine-local Windows dependency paths
 aerosim-windows.local.cmd
+
+# Downloaded Qwt sources and compiled dependency files
+third_party/QWT/
