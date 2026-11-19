@@ -1,4 +1,5 @@
 #include "aerosim/ui/GoverningEquationsPanel.h"
+#include "GoverningEquationsBinding.h"
 
 #include <QCheckBox>
 #include <QButtonGroup>
@@ -8,6 +9,7 @@
 #include <QGroupBox>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QLocale>
 #include <QPair>
 #include <QRadioButton>
 #include <QSpinBox>
@@ -16,6 +18,15 @@
 
 namespace aerosim {
 namespace {
+class ParameterRealSpinBox : public QDoubleSpinBox {
+public:
+    explicit ParameterRealSpinBox(QWidget *parent) : QDoubleSpinBox(parent) {}
+protected:
+    QString textFromValue(double value) const override
+    {
+        return locale().toString(value, 'g', QLocale::FloatingPointShortest);
+    }
+};
 template <size_t N> QString uiText(const char16_t (&text)[N])
 {
     return QString::fromUtf16(reinterpret_cast<const ushort *>(text), int(N) - 1);
@@ -37,11 +48,7 @@ GoverningEquationsPanel::GoverningEquationsPanel(const QVariantMap &draft, QWidg
     setObjectName(QStringLiteral("governingEquationsPanel"));
     setProperty("parameterPanel", true);
     setAttribute(Qt::WA_StyledBackground, true);
-    const QVariantMap defaults = {{"calculationType", "steady"}, {"equation", "navier-stokes"},
-        {"flowRegime", "turbulent"}, {"turbulenceModel", "sa"}, {"rarefiedGas", true},
-        {"collisionEquation", "bgk"}, {"collisionSubmodel", "standard-bgk"},
-        {"knudsenNumber", 1.0}, {"freestreamParticleCount", 100}, {"gridParticleCount", 2},
-        {"collisionModel", "vss"}};
+    const QVariantMap defaults = governingEquationsDraft(XcfProjectDocument::defaultGoverningEquations());
     for (auto it = defaults.cbegin(); it != defaults.cend(); ++it)
         if (!draft_.contains(it.key())) draft_.insert(it.key(), it.value());
     const QString viscousFlow = draft_.value("flowRegime").toString() == "laminar" ? "laminar" : "turbulent";
@@ -76,11 +83,17 @@ GoverningEquationsPanel::GoverningEquationsPanel(const QVariantMap &draft, QWidg
         for (const auto &choice : choices) valid = valid || choice.second == selected;
         if (!valid) selected = choices.first().second;
         draft_.insert(key, selected);
-        const int columns = qMin(3, choices.size());
+        const int columns = key == QStringLiteral("turbulenceModel")
+            ? choices.size() : qMin(3, choices.size());
         int index = 0;
         for (const auto &choice : choices) {
             auto *button = new QRadioButton(choice.first, options);
             button->setObjectName(key + QLatin1Char('_') + choice.second);
+            if (key == QStringLiteral("turbulenceModel")) {
+                button->ensurePolished();
+                button->setMinimumWidth(qMax(button->sizeHint().width(),
+                    button->fontMetrics().horizontalAdvance(choice.first) + 40));
+            }
             buttons->addButton(button);
             button->setChecked(choice.second == selected);
             row->addWidget(button, index / columns, index % columns, Qt::AlignLeft);
@@ -90,6 +103,8 @@ GoverningEquationsPanel::GoverningEquationsPanel(const QVariantMap &draft, QWidg
             });
         }
         row->setColumnStretch(columns, 1);
+        if (key == QStringLiteral("turbulenceModel"))
+            options->setMinimumWidth(row->minimumSize().width());
         form->addRow(label, options);
     };
     addChoice(baseForm, baseFields, uiText(u"计算类型"), "calculationType",
@@ -194,14 +209,13 @@ GoverningEquationsPanel::GoverningEquationsPanel(const QVariantMap &draft, QWidg
     connect(es, &QRadioButton::toggled, this, [this](bool checked) {
         if (checked) updateDraft("collisionSubmodel", "es-bgk");
     });
-    auto *knudsen = new QDoubleSpinBox(rarefiedSettings_);
+    auto *knudsen = new ParameterRealSpinBox(rarefiedSettings_);
     knudsen->setObjectName(QStringLiteral("knudsenNumber"));
-    knudsen->setDecimals(6);
+    knudsen->setDecimals(17);
     knudsen->setRange(0.000001, 1e9);
     knudsen->setMaximumWidth(160);
     knudsen->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Fixed);
     knudsen->setValue(draft_.value("knudsenNumber").toDouble());
-    draft_.insert("knudsenNumber", knudsen->value());
     rarefiedForm->addRow(uiText(u"克努森数（Kn）"), knudsen);
     connect(knudsen, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
             [this](double value) { updateDraft("knudsenNumber", value); });

@@ -6,6 +6,7 @@ class QComboBox;
 class QSpinBox;
 class QTableWidget;
 namespace aerosim {
+class RadioChoice;
 class FixedAxisMotionDialog final : public QDialog {
 public:
     explicit FixedAxisMotionDialog(const QVariantMap &parameters, QWidget *parent = nullptr);
@@ -16,7 +17,7 @@ private:
     QVariantMap parameters_;
     QVariantList forces_;
     QComboBox *force_ = nullptr;
-    QComboBox *frame_ = nullptr;
+    RadioChoice *frame_ = nullptr;
     QSpinBox *points_ = nullptr;
     QTableWidget *table_ = nullptr;
     int selected_ = -1;

@@ -1,4 +1,8 @@
 #include "aerosim/ui/MainWindow.h"
+#include "GoverningEquationsBinding.h"
+#include "CalculationControlBinding.h"
+#include "OutputControlBinding.h"
+#include "SolutionMethodBinding.h"
 #include "aerosim/ui/CalculationTaskPage.h"
 #include "aerosim/ui/GoverningEquationsPanel.h"
 #include "aerosim/ui/BoundaryConditionsPanel.h"
@@ -21,6 +25,9 @@
 #include <QAction>
 #include <QActionGroup>
 #include <QApplication>
+#include <QCloseEvent>
+#include <QFileDialog>
+#include <QFileInfo>
 #include <QBrush>
 #include <QCheckBox>
 #include <QClipboard>
@@ -190,7 +197,8 @@ void MainWindow::createRibbon()
         panel->setObjectName(QString::fromLatin1(id));
         for (const auto &item : items) {
             const QString key = QString::fromLatin1(item.id);
-            const QString path = QStringLiteral(":/aerosim/ribbon/") + key + QStringLiteral(".svg");
+            const QString path = QStringLiteral(":/aerosim/ribbon/")
+                + (key == "save-as-project" ? QStringLiteral("save-project") : key) + QStringLiteral(".svg");
             QIcon icon(path);
             auto *action = new QAction(icon, item.label, this);
             action->setObjectName(key + QStringLiteral("Action"));
@@ -280,8 +288,6 @@ void MainWindow::createRibbon()
     auto *preprocess = ribbonBar()->addCategoryPage(uiText(u"\u524d\u5904\u7406"));
     preprocess->setObjectName(QStringLiteral("preprocessCategory"));
     auto *workspacePanel = addGroup(preprocess, "workspaceGroup", uiText(u"\u5de5\u4f5c\u533a"), {
-        {"open-project", uiText(u"\u6253\u5f00\u5de5\u4f5c\u533a"), false, ""},
-        {"save-project", uiText(u"\u4fdd\u5b58\u5de5\u4f5c\u533a"), false, ""},
         {"help", uiText(u"\u8fd4\u56de\u6b22\u8fce\u9875"), false, "startup"}});
     auto *newProjectMenu = new QMenu(uiText(u"\u65b0\u5efa\u5de5\u4f5c\u533a"), this);
     newProjectMenu->setObjectName(QStringLiteral("newProjectMenu"));
@@ -295,8 +301,26 @@ void MainWindow::createRibbon()
             QIcon(QStringLiteral(":/aerosim/ribbon/") + QString::fromLatin1(entry.icon) + QStringLiteral(".svg")),
             entry.label);
         action->setObjectName(QString::fromLatin1(entry.id));
-        action->setEnabled(false);
-        action->setToolTip(uiText(u"\u7b49\u5f85\u5de5\u4f5c\u533a\u670d\u52a1\u63a5\u5165"));
+        action->setEnabled(QString::fromLatin1(entry.id) == "blankProjectMenuAction");
+        if (action->isEnabled()) {
+            action->setToolTip(uiText(u"新建包含控制方程、计算控制、输出控制与求解方法参数的 XCF 工程"));
+            connect(action, &QAction::triggered, this, [this] {
+                if (!confirmXcfChanges()) return;
+                xcfProject_ = XcfProjectDocument();
+                drafts_.clear();
+                // Every parameter editor belongs to the previous document.
+                const auto ids = workspacePages_.keys();
+                for (const auto &id : ids) if (id.startsWith("parameter-")) {
+                    auto *page = workspacePages_.take(id);
+                    workspaceStack_->removeWidget(page);
+                    workspacePageModules_.remove(id);
+                    delete page;
+                }
+                refreshGoverningEquations();
+                updateXcfCaption();
+            });
+        }
+        if (!action->isEnabled()) action->setToolTip(uiText(u"\u7b49\u5f85\u5de5\u4f5c\u533a\u670d\u52a1\u63a5\u5165"));
     }
     newProjectMenu->menuAction()->setObjectName(QStringLiteral("newProjectMenuAction"));
     newProjectMenu->menuAction()->setProperty("ribbonGroup", QStringLiteral("workspaceGroup"));
@@ -506,26 +530,64 @@ void MainWindow::applyWindowTheme(const QString &requestedId)
         "QWidget[parameterEditor=\"true\"] QTreeWidget::item { padding: 7px 8px; }"
         "QWidget[parameterEditor=\"true\"] QHeaderView::section { background: %1; color: %3; padding: 8px; border: 0; border-bottom: 1px solid %4; }"
         "QWidget[parameterEditor=\"true\"] QPushButton { border-radius: 4px; }"
+        "QWidget[parameterEditor=\"true\"] QWidget[parameterTableCell=\"true\"] { background: transparent; }"
         "QWidget[parameterEditor=\"true\"] QPushButton#applyBoundary { background: #2563b6; border-color: #2563b6; color: white; padding: 7px 24px; }"
         "QWidget[parameterEditor=\"true\"] QPushButton#applyBoundary:disabled { background: %1; color: %6; border-color: %4; }")
         .arg(bg, base, text, border, selected, QStringLiteral("#61748a")));
+    // Reserve a consistent hit area and use the same chevrons for both editor
+    // types. Border origins keep the buttons inside compact 28px controls.
+    const QString arrowTone = dark ? QStringLiteral("light") : QStringLiteral("slate");
+    const QString disabledArrowTone = dark ? QStringLiteral("muted-light") : QStringLiteral("muted");
+    setStyleSheet(styleSheet() + QStringLiteral(
+        "QWidget[parameterEditor=\"true\"] QRadioButton { spacing: 8px; padding: 2px 5px; border: 1px solid transparent; border-radius: 4px; }"
+        "QWidget[parameterEditor=\"true\"] QRadioButton:hover { background: %1; }"
+        "QWidget[parameterEditor=\"true\"] QRadioButton:focus { border-color: #638fc6; }"
+        "QWidget[parameterEditor=\"true\"] QRadioButton:disabled { color: %2; }"
+        "QWidget[parameterEditor=\"true\"] QRadioButton::indicator { width: 14px; height: 14px; border: 1px solid %3; border-radius: 8px; background: %4; }"
+        "QWidget[parameterEditor=\"true\"] QRadioButton::indicator:unchecked:hover { border-color: #638fc6; }"
+        "QWidget[parameterEditor=\"true\"] QRadioButton::indicator:checked { border-color: %5; background: %5; image: url(:/aerosim/ribbon/radio-dot.svg); }"
+        "QWidget[parameterEditor=\"true\"] QRadioButton::indicator:checked:pressed { background: #1e4e8c; border-color: #1e4e8c; }"
+        "QWidget[parameterEditor=\"true\"] QRadioButton::indicator:unchecked:disabled { background: %6; border-color: %3; }"
+        "QWidget[parameterEditor=\"true\"] QRadioButton::indicator:checked:disabled { background: %2; border-color: %2; }")
+        .arg(dark ? QStringLiteral("#344456") : QStringLiteral("#edf3fc"),
+             dark ? QStringLiteral("#748294") : QStringLiteral("#a5b2c2"),
+             dark ? QStringLiteral("#7a8b9f") : QStringLiteral("#a5b5c9"), base,
+             dark ? QStringLiteral("#5c98d8") : QStringLiteral("#3274bf"), bg));
+    setStyleSheet(styleSheet() + QStringLiteral(
+        "QWidget[parameterEditor=\"true\"] QComboBox, QWidget[parameterEditor=\"true\"] QAbstractSpinBox { padding-right: 30px; }"
+        "QWidget[parameterEditor=\"true\"] QComboBox::drop-down { subcontrol-origin: border; subcontrol-position: top right; width: 26px; border: 0; border-left: 1px solid %1; border-top-right-radius: 4px; border-bottom-right-radius: 4px; background: transparent; margin: 1px; }"
+        "QWidget[parameterEditor=\"true\"] QComboBox::drop-down:hover { background: %2; }"
+        "QWidget[parameterEditor=\"true\"] QComboBox::drop-down:on { background: %3; }"
+        "QWidget[parameterEditor=\"true\"] QComboBox::down-arrow { image: url(:/aerosim/ribbon/chevron-down-%4.svg); width: 12px; height: 8px; }"
+        "QWidget[parameterEditor=\"true\"] QComboBox::down-arrow:disabled { image: url(:/aerosim/ribbon/chevron-down-%5.svg); }"
+        "QWidget[parameterEditor=\"true\"] QAbstractSpinBox::up-button, QWidget[parameterEditor=\"true\"] QAbstractSpinBox::down-button { subcontrol-origin: border; width: 24px; border: 0; border-left: 1px solid %1; background: transparent; }"
+        "QWidget[parameterEditor=\"true\"] QAbstractSpinBox::up-button { subcontrol-position: top right; border-top-right-radius: 4px; margin-top: 1px; margin-right: 1px; }"
+        "QWidget[parameterEditor=\"true\"] QAbstractSpinBox::down-button { subcontrol-position: bottom right; border-bottom-right-radius: 4px; margin-bottom: 1px; margin-right: 1px; }"
+        "QWidget[parameterEditor=\"true\"] QAbstractSpinBox::up-button:hover, QWidget[parameterEditor=\"true\"] QAbstractSpinBox::down-button:hover { background: %2; }"
+        "QWidget[parameterEditor=\"true\"] QAbstractSpinBox::up-button:pressed, QWidget[parameterEditor=\"true\"] QAbstractSpinBox::down-button:pressed { background: %3; }"
+        "QWidget[parameterEditor=\"true\"] QAbstractSpinBox::up-button:disabled, QWidget[parameterEditor=\"true\"] QAbstractSpinBox::down-button:disabled, QWidget[parameterEditor=\"true\"] QAbstractSpinBox::up-button:off, QWidget[parameterEditor=\"true\"] QAbstractSpinBox::down-button:off { background: transparent; }"
+        "QWidget[parameterEditor=\"true\"] QAbstractSpinBox::up-arrow { image: url(:/aerosim/ribbon/chevron-up-%4.svg); width: 10px; height: 6px; }"
+        "QWidget[parameterEditor=\"true\"] QAbstractSpinBox::down-arrow { image: url(:/aerosim/ribbon/chevron-down-%4.svg); width: 10px; height: 6px; }"
+        "QWidget[parameterEditor=\"true\"] QAbstractSpinBox::up-arrow:disabled, QWidget[parameterEditor=\"true\"] QAbstractSpinBox::up-arrow:off { image: url(:/aerosim/ribbon/chevron-up-%5.svg); }"
+        "QWidget[parameterEditor=\"true\"] QAbstractSpinBox::down-arrow:disabled, QWidget[parameterEditor=\"true\"] QAbstractSpinBox::down-arrow:off { image: url(:/aerosim/ribbon/chevron-down-%5.svg); }")
+        .arg(border, dark ? QStringLiteral("#3b4c60") : QStringLiteral("#edf3fc"), selected, arrowTone, disabledArrowTone));
     setStyleSheet(styleSheet() + QStringLiteral(
         "QWidget#parameterEditor_control-equations QGroupBox { padding: 12px 16px 10px; }"
         "QWidget#parameterEditor_reference-values QGroupBox { padding: 16px 18px 14px; }"
         "QWidget#parameterEditor_calculation-control QGroupBox { padding: 16px 18px 14px; }"
         "QWidget#parameterEditor_solution-method QGroupBox { padding: 16px 18px 14px; }"
-        "QWidget#parameterEditor_solution-method QAbstractSpinBox, QWidget#parameterEditor_solution-method QComboBox { min-height: 22px; max-height: 22px; padding: 2px 6px; }"
+        "QWidget#parameterEditor_solution-method QAbstractSpinBox, QWidget#parameterEditor_solution-method QComboBox { min-height: 22px; max-height: 22px; padding-top: 2px; padding-bottom: 2px; padding-left: 6px; }"
         "QWidget#parameterEditor_output-control QGroupBox { padding: 12px 16px 10px; }"
         "QWidget#parameterEditor_output-control QCheckBox { min-height: 20px; }"
-        "QWidget#parameterEditor_output-control QAbstractSpinBox { min-height: 22px; max-height: 22px; padding: 2px 6px; }"
+        "QWidget#parameterEditor_output-control QAbstractSpinBox { min-height: 22px; max-height: 22px; padding-top: 2px; padding-bottom: 2px; padding-left: 6px; }"
         "QWidget#parameterEditor_initialization QGroupBox { padding: 16px 18px 14px; }"
-        "QWidget#parameterEditor_initialization QAbstractSpinBox, QWidget#parameterEditor_initialization QComboBox { min-height: 22px; max-height: 22px; padding: 2px 6px; }"
+        "QWidget#parameterEditor_initialization QAbstractSpinBox, QWidget#parameterEditor_initialization QComboBox { min-height: 22px; max-height: 22px; padding-top: 2px; padding-bottom: 2px; padding-left: 6px; }"
         "QWidget#parameterEditor_boundary-conditions QGroupBox { padding: 10px 16px 8px; }"
-        "QWidget#parameterEditor_mesh-motion QAbstractSpinBox, QWidget#parameterEditor_mesh-motion QComboBox, QWidget#parameterEditor_mesh-motion QLineEdit { min-height: 22px; max-height: 22px; padding: 2px 6px; }"
-        "QWidget#parameterEditor_boundary-conditions QAbstractSpinBox, QWidget#parameterEditor_boundary-conditions QComboBox, QWidget#parameterEditor_boundary-conditions QLineEdit { min-height: 22px; max-height: 22px; padding: 2px 6px; }"
-        "QWidget#parameterEditor_calculation-control QAbstractSpinBox, QWidget#parameterEditor_calculation-control QComboBox { min-height: 22px; max-height: 22px; padding: 2px 6px; }"
-        "QWidget#parameterEditor_reference-values QAbstractSpinBox, QWidget#parameterEditor_reference-values QComboBox { min-height: 22px; max-height: 22px; padding: 2px 6px; }"
-        "QWidget#parameterEditor_control-equations QAbstractSpinBox { min-height: 22px; max-height: 22px; padding: 2px 6px; }"
+        "QWidget#parameterEditor_mesh-motion QAbstractSpinBox, QWidget#parameterEditor_mesh-motion QComboBox, QWidget#parameterEditor_mesh-motion QLineEdit { min-height: 22px; max-height: 22px; padding-top: 2px; padding-bottom: 2px; padding-left: 6px; }"
+        "QWidget#parameterEditor_boundary-conditions QAbstractSpinBox, QWidget#parameterEditor_boundary-conditions QComboBox, QWidget#parameterEditor_boundary-conditions QLineEdit { min-height: 22px; max-height: 22px; padding-top: 2px; padding-bottom: 2px; padding-left: 6px; }"
+        "QWidget#parameterEditor_calculation-control QAbstractSpinBox, QWidget#parameterEditor_calculation-control QComboBox { min-height: 22px; max-height: 22px; padding-top: 2px; padding-bottom: 2px; padding-left: 6px; }"
+        "QWidget#parameterEditor_reference-values QAbstractSpinBox, QWidget#parameterEditor_reference-values QComboBox { min-height: 22px; max-height: 22px; padding-top: 2px; padding-bottom: 2px; padding-left: 6px; }"
+        "QWidget#parameterEditor_control-equations QAbstractSpinBox { min-height: 22px; max-height: 22px; padding-top: 2px; padding-bottom: 2px; padding-left: 6px; }"
         "QWidget#parameterEditor_control-equations QRadioButton, QWidget#parameterEditor_control-equations QCheckBox { min-height: 22px; }"));
     const QString editorStyle = QStringLiteral(
         "QPlainTextEdit { background: %1; color: %2; border: 1px solid %3; }")
@@ -1105,6 +1167,9 @@ void MainWindow::showParameterDialog(const QString &pageId, const QString &title
     layout->addWidget(heading);
     auto *note = new QLabel(uiText(u"\u524d\u7aef\u914d\u7f6e\u5360\u4f4d\uff1a\u5f53\u524d\u4e0d\u6267\u884c\u4e1a\u52a1\u6821\u9a8c\u3001\u6301\u4e45\u5316\u6216\u6c42\u89e3\u5668\u66f4\u65b0\u3002"), dialog);
     note->setWordWrap(true);
+    note->setText(pageId == "control-equations" || pageId == "calculation-control" || pageId == "output-control" || pageId == "solution-method"
+        ? uiText(u"控制方程、计算控制、输出控制与求解方法的已确认参数支持 XCF 读取与保存；指定 GPU 暂不写回。")
+        : uiText(u"本页编辑暂不写入 XCF；保存时保留原文件中本页对应内容。"));
     note->setProperty("parameterHint", true);
     layout->addWidget(note);
     auto *scroll = new QScrollArea(dialog);
@@ -1141,7 +1206,13 @@ void MainWindow::showParameterDialog(const QString &pageId, const QString &title
     if (pageId == QStringLiteral("control-equations")) {
         auto *panel = new GoverningEquationsPanel(drafts_.value(draftKey), content);
         connect(panel, &GoverningEquationsPanel::draftChanged, this, [this, draftKey](const QVariantMap &draft) {
+            QString error;
+            if (!xcfProject_.setGoverningEquations(governingEquationsConfig(draft), &error)) {
+                appendLog("ERROR", "XCF", error);
+                return;
+            }
             drafts_[draftKey] = draft; emit parameterDraftChanged(draftKey, draft);
+            updateXcfCaption();
         });
         bindPanel(panel);
     } else if (pageId == QStringLiteral("boundary-conditions")) {
@@ -1159,14 +1230,25 @@ void MainWindow::showParameterDialog(const QString &pageId, const QString &title
     } else if (pageId == QStringLiteral("calculation-control")) {
         auto *panel = new CalculationControlPanel(drafts_.value(draftKey), content);
         connect(panel, &CalculationControlPanel::draftChanged, this, [this, draftKey](const QVariantMap &draft) {
+            QString error;
+            if (!xcfProject_.setCalculationControl(calculationControlConfig(draft), &error)) {
+                appendLog("ERROR", "XCF", error);
+                return;
+            }
             drafts_[draftKey] = draft; emit parameterDraftChanged(draftKey, draft);
+            updateXcfCaption();
         });
         bindPanel(panel);
     } else if (pageId == QStringLiteral("solution-method")) {
         auto *panel = new SolutionMethodPanel(drafts_.value(draftKey), content);
         panel->setUnsteady(drafts_.value("physics").value("calculationType", "steady") == "unsteady");
         connect(panel, &SolutionMethodPanel::draftChanged, this, [this, draftKey](const QVariantMap &draft) {
+            QString error;
+            if (!xcfProject_.setSolutionMethod(solutionMethodConfig(draft), &error)) {
+                appendLog("ERROR", "XCF", error); return;
+            }
             drafts_[draftKey] = draft; emit parameterDraftChanged(draftKey, draft);
+            updateXcfCaption();
         });
         connect(this, &MainWindow::parameterDraftChanged, panel, [panel](const QString &key, const QVariantMap &draft) {
             if (key == "physics") panel->setUnsteady(draft.value("calculationType", "steady") == "unsteady");
@@ -1181,7 +1263,13 @@ void MainWindow::showParameterDialog(const QString &pageId, const QString &title
     } else if (pageId == QStringLiteral("output-control")) {
         auto *panel = new OutputControlPanel(drafts_.value(draftKey), content);
         connect(panel, &OutputControlPanel::draftChanged, this, [this, draftKey](const QVariantMap &draft) {
+            QString error;
+            if (!xcfProject_.setOutputControl(outputControlConfig(draft), &error)) {
+                appendLog("ERROR", "XCF", error);
+                return;
+            }
             drafts_[draftKey] = draft; emit parameterDraftChanged(draftKey, draft);
+            updateXcfCaption();
         });
         bindPanel(panel);
     } else if (pageId == "initialization") {
@@ -1213,6 +1301,34 @@ void MainWindow::showParameterDialog(const QString &pageId, const QString &title
     reset->setObjectName(QStringLiteral("resetParameterDraft"));
     connect(reset, &QPushButton::clicked, this, [this, pageId, draftKey, title, workspaceId, dialog] {
         drafts_.remove(draftKey);
+        if (draftKey == "solution-method") {
+            xcfProject_.setSolutionMethod(defaultSolutionMethod());
+            drafts_[draftKey] = solutionMethodDraft(xcfProject_.solutionMethod());
+            emit parameterDraftChanged(draftKey, drafts_[draftKey]);
+            updateXcfCaption();
+        }
+        if (draftKey == "output-control") {
+            auto config = defaultOutputControl();
+            for (auto entry : xcfProject_.outputControl().entries) if (entry.key.startsWith("boundaryHistory/")) {
+                entry.value = ParameterValue::boolean(false); config.entries.append(entry);
+            }
+            xcfProject_.setOutputControl(config);
+            drafts_[draftKey] = outputControlDraft(xcfProject_.outputControl());
+            emit parameterDraftChanged(draftKey, drafts_[draftKey]);
+            updateXcfCaption();
+        }
+        if (draftKey == "calculation-control") {
+            xcfProject_.setCalculationControl(defaultCalculationControl());
+            drafts_[draftKey] = calculationControlDraft(xcfProject_.calculationControl());
+            emit parameterDraftChanged(draftKey, drafts_[draftKey]);
+            updateXcfCaption();
+        }
+        if (draftKey == "physics") {
+            xcfProject_.setGoverningEquations(XcfProjectDocument::defaultGoverningEquations());
+            drafts_[draftKey] = governingEquationsDraft(xcfProject_.governingEquations());
+            emit parameterDraftChanged(draftKey, drafts_[draftKey]);
+            updateXcfCaption();
+        }
         workspacePages_.remove(workspaceId);
         workspaceStack_->removeWidget(dialog);
         dialog->deleteLater();
@@ -1221,6 +1337,110 @@ void MainWindow::showParameterDialog(const QString &pageId, const QString &title
     footer->addWidget(reset);
     layout->addLayout(footer);
     showWorkspacePage(workspaceId);
+}
+
+void MainWindow::refreshGoverningEquations()
+{
+    const QString id = QStringLiteral("parameter-control-equations");
+    if (auto *page = workspacePages_.take(id)) {
+        workspaceStack_->removeWidget(page);
+        workspacePageModules_.remove(id);
+        delete page;
+    }
+    drafts_["physics"] = governingEquationsDraft(xcfProject_.governingEquations());
+    drafts_["calculation-control"] = calculationControlDraft(xcfProject_.calculationControl());
+    drafts_["output-control"] = outputControlDraft(xcfProject_.outputControl());
+    drafts_["solution-method"] = solutionMethodDraft(xcfProject_.solutionMethod());
+    emit parameterDraftChanged("physics", drafts_.value("physics"));
+    selectNavigationNode(projectTree_, "control-equations");
+    showParameterDialog("control-equations", uiText(u"控制方程"));
+}
+
+void MainWindow::updateXcfCaption()
+{
+    emit xcfProjectChanged(xcfProject_.filePath(), xcfProject_.isModified());
+    const QString name = xcfProject_.filePath().isEmpty() ? uiText(u"未命名 XCF")
+        : QFileInfo(xcfProject_.filePath()).fileName();
+    setWindowTitle(QStringLiteral("AeroSimWorkbench · %1%2 · ").arg(name,
+        xcfProject_.isModified() ? QStringLiteral(" *") : QString())
+        + uiText(u"参数读写（其余业务为 Mock）"));
+    if (projectTree_ && projectTree_->topLevelItemCount())
+        projectTree_->topLevelItem(0)->setText(0, name);
+}
+
+bool MainWindow::openXcfProject(const QString &path, QString *error)
+{
+    XcfProjectDocument candidate;
+    if (!candidate.load(path, error)) return false;
+    xcfProject_ = candidate;
+    drafts_.clear();
+    const auto ids = workspacePages_.keys();
+    for (const auto &id : ids) if (id.startsWith("parameter-")) {
+        auto *page = workspacePages_.take(id);
+        workspaceStack_->removeWidget(page);
+        workspacePageModules_.remove(id);
+        delete page;
+    }
+    refreshGoverningEquations();
+    updateXcfCaption();
+    appendLog("INFO", "XCF", uiText(u"已打开工程（控制方程、计算控制、输出控制与求解方法）：") + path);
+    for (const auto &warning : xcfProject_.warnings()) appendLog("WARN", "XCF", warning);
+    return true;
+}
+
+bool MainWindow::saveXcfProject(const QString &path, QString *error)
+{
+    if (!xcfProject_.save(path, error)) return false;
+    updateXcfCaption();
+    appendLog("INFO", "XCF", uiText(u"已保存控制方程、计算控制、输出控制与求解方法参数，其他 XML 内容保留：") + path);
+    statusBar()->showMessage(uiText(u"XCF 已保存：控制方程、计算控制、输出控制与求解方法的已确认参数。"), 6000);
+    return true;
+}
+
+bool MainWindow::chooseXcfProject(QWidget *dialogParent)
+{
+    QWidget *parent = dialogParent ? dialogParent : this;
+    if (!confirmXcfChanges(parent)) return false;
+    const QString path = QFileDialog::getOpenFileName(parent, uiText(u"打开 XCF 工程"),
+        xcfProject_.filePath(), QStringLiteral("XCF (*.xcf);;All files (*)"));
+    if (path.isEmpty()) return false;
+    QString error;
+    if (openXcfProject(path, &error)) return true;
+    QMessageBox::warning(parent, uiText(u"打开失败"), error);
+    return false;
+}
+
+bool MainWindow::saveXcfProjectDialog(bool saveAs, QWidget *dialogParent)
+{
+    QWidget *parent = dialogParent ? dialogParent : this;
+    QString path = xcfProject_.filePath();
+    if (saveAs || path.isEmpty()) {
+        path = QFileDialog::getSaveFileName(parent, uiText(u"保存 XCF（控制方程、计算控制、输出控制与求解方法）"),
+            path.isEmpty() ? QStringLiteral("Untitled.xcf") : path, QStringLiteral("XCF (*.xcf)"));
+        if (path.isEmpty()) return false;
+        if (!path.endsWith(".xcf", Qt::CaseInsensitive)) path += ".xcf";
+    }
+    QString error;
+    if (saveXcfProject(path, &error)) return true;
+    QMessageBox::warning(parent, uiText(u"保存失败"), error);
+    return false;
+}
+
+bool MainWindow::confirmXcfChanges(QWidget *dialogParent)
+{
+    if (!xcfProject_.isModified()) return true;
+    QWidget *parent = dialogParent ? dialogParent : this;
+    const auto answer = QMessageBox::question(parent, uiText(u"保存参数修改"),
+        uiText(u"控制方程、计算控制、输出控制或求解方法参数尚未保存，是否保存？其他页面编辑及指定 GPU 暂不写回。"),
+        QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel, QMessageBox::Save);
+    if (answer == QMessageBox::Save) return saveXcfProjectDialog(false, parent);
+    return answer == QMessageBox::Discard;
+}
+
+void MainWindow::closeEvent(QCloseEvent *event)
+{
+    if (!confirmXcfChanges()) { event->ignore(); return; }
+    SARibbonMainWindow::closeEvent(event);
 }
 
 void MainWindow::selectNavigationNode(QTreeWidget *tree, const QString &objectId)

@@ -35,6 +35,7 @@ if(AEROSIM_BUILD_TESTS)
 endif()
 
 add_subdirectory(contracts)
+add_subdirectory(modules/configuration)
 add_subdirectory(modules/workflow)
 add_subdirectory(mocks/services)
 

@@ -1,6 +1,7 @@
+#include "aerosim/ui/RadioChoice.h"
 #include "aerosim/ui/SolutionMethodPanel.h"
+#include "SolutionMethodBinding.h"
 #include <QCheckBox>
-#include <QComboBox>
 #include <QDoubleSpinBox>
 #include <QFormLayout>
 #include <QGroupBox>
@@ -20,13 +21,10 @@ template <size_t N> QString text(const char16_t (&s)[N]) {
 class Number final : public QDoubleSpinBox {
 public:
     explicit Number(QWidget *parent) : QDoubleSpinBox(parent) {
-        setDecimals(8); setRange(0, 1e12); setKeyboardTracking(false);
+        setDecimals(17); setRange(0, 1e12); setKeyboardTracking(false);
     }
     QString textFromValue(double value) const override {
-        auto result = QDoubleSpinBox::textFromValue(value);
-        const int point = result.indexOf(locale().decimalPoint());
-        if (point >= 0) while (result.size() > point + 2 && result.endsWith(locale().zeroDigit())) result.chop(1);
-        return result;
+        return locale().toString(value, 'g', QLocale::FloatingPointShortest);
     }
 };
 }
@@ -34,9 +32,7 @@ SolutionMethodPanel::SolutionMethodPanel(const QVariantMap &draft, QWidget *pare
     : QWidget(parent), draft_(draft) {
     setObjectName("solutionMethodPanel"); setProperty("parameterPanel", true);
     setAttribute(Qt::WA_StyledBackground, true);
-    const QVariantMap defaults{{"spatialScheme", "hllc"}, {"limiter", "vanleer"}, {"timeScheme", "bdf1"},
-        {"timeStep", 0.001}, {"subIterations", 10}, {"cflPointCount", 2}, {"strongStability", false},
-        {"cflPoints", QVariantList{QVariantMap{{"iteration", 1}, {"cfl", 0.}}, QVariantMap{{"iteration", 2000}, {"cfl", 5.}}}}};
+    const auto defaults = solutionMethodDraft(defaultSolutionMethod());
     for (auto it = defaults.cbegin(); it != defaults.cend(); ++it)
         if (!draft_.contains(it.key())) draft_[it.key()] = it.value();
     auto *layout = new QGridLayout(this); layout->setContentsMargins(0, 0, 0, 0); layout->setSpacing(16);
@@ -53,18 +49,36 @@ SolutionMethodPanel::SolutionMethodPanel(const QVariantMap &draft, QWidget *pare
     };
     const auto choice = [=](const QString &caption, const QString &key,
                             const QList<QPair<QString, QString>> &options, bool unsteady = false) {
-        auto *editor = new QComboBox(group); editor->setObjectName(key);
-        editor->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
-        editor->setMinimumContentsLength(16);
+        auto *editor = new RadioChoice(group, 3); editor->setObjectName(key);
         for (const auto &option : options) editor->addItem(option.first, option.second);
         editor->setCurrentIndex(qMax(0, editor->findData(draft_.value(key)))); draft_[key] = editor->currentData();
         addRow(caption, editor, unsteady);
-        connect(editor, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [=](int) {
+        connect(editor, &RadioChoice::currentIndexChanged, this, [=](int) {
             draft_[key] = editor->currentData(); emit draftChanged(draft_);
         });
     };
     choice(text(u"空间离散格式"), "spatialScheme", {{text(u"Roe格式"), "roe"}, {"Vanleer", "vanleer"},
         {"AUSM", "ausm"}, {"AUSMPW+", "ausmpw-plus"}, {"HLLC", "hllc"}});
+    auto *entropy = new QCheckBox(text(u"考虑熵修正"), group);
+    entropy->setObjectName("entropyFix");
+    entropy->setChecked(draft_.value("entropyFix").toBool());
+    const auto updateEntropyVisibility = [=]() {
+        if (form->indexOf(entropy) >= 0) {
+            const auto row = form->takeRow(entropy);
+            delete row.labelItem;
+            delete row.fieldItem;
+        }
+        const bool roe = draft_.value("spatialScheme").toString() == "roe";
+        if (roe) form->insertRow(1, entropy);
+        entropy->setVisible(roe);
+    };
+    updateEntropyVisibility();
+    connect(findChild<RadioChoice *>("spatialScheme"), &RadioChoice::currentIndexChanged,
+            this, [=](int) { updateEntropyVisibility(); });
+    connect(entropy, &QCheckBox::toggled, this, [=](bool value) {
+        draft_["entropyFix"] = value;
+        emit draftChanged(draft_);
+    });
     choice(text(u"流场限制器"), "limiter", {{text(u"无"), "none"}, {"vanleer", "vanleer"},
         {"vanalbada", "vanalbada"}, {"hvanleer", "hvanleer"}, {"hvanalbada", "hvanalbada"}});
     choice(text(u"时间离散格式"), "timeScheme", {
@@ -139,7 +153,7 @@ void SolutionMethodPanel::setUnsteady(bool unsteady) {
         }
         label->hide(); editor->hide();
         if (unsteady) {
-            form_->insertRow(2 + i / 2, label, editor);
+            form_->insertRow(2 + (draft_.value("spatialScheme").toString() == "roe" ? 1 : 0) + i / 2, label, editor);
             label->show(); editor->show();
         }
     }

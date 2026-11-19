@@ -2,6 +2,7 @@
 
 #include "aerosim/ui/IntegrationPorts.h"
 #include "aerosim/ui/UiLayoutConfig.h"
+#include "aerosim/configuration/XcfProjectDocument.h"
 #include <SARibbonMainWindow.h>
 #include <QHash>
 #include <QPointer>
@@ -38,7 +39,7 @@ class ComputeMonitorPage;
 class ResultDataTablePage;
 class ResultSummaryTablePage;
 
-// UI shell: business validation and persistence remain in injected services.
+// UI shell: business validation and persistence remain in service modules.
 class MainWindow final : public SARibbonMainWindow, public IWidgetHost {
     Q_OBJECT
 public:
@@ -49,6 +50,13 @@ public:
     void setRunContext(const RunRequest &request);
     void displayWorkflow(const WorkflowViewV2 &view);
     void displayTaskEvent(const TaskEvent &event);
+    // Non-interactive entry points also used by integration tests. UI actions
+    // confirm unsaved edits before calling these document operations.
+    bool openXcfProject(const QString &path, QString *error = nullptr);
+    bool saveXcfProject(const QString &path, QString *error = nullptr);
+    const XcfProjectDocument &xcfProject() const { return xcfProject_; }
+    bool chooseXcfProject(QWidget *dialogParent = nullptr);
+    bool saveXcfProjectDialog(bool saveAs = false, QWidget *dialogParent = nullptr);
 
     // Redirect where the layout/extras preferences are persisted. Defaults to
     // ("AeroSimWorkbench", "UiLayout"); the framework regression tests call
@@ -75,12 +83,17 @@ public:
     ResultSummaryTablePage *resultSummaryTablePage() const { return resultSummaryTablePage_; }
 
 signals:
+    void xcfProjectChanged(const QString &path, bool modified);
     void openPostProcessRequested();
     void showStartupRequested();
     void navigationRequested(const QString &pageId, const QString &objectId, const QString &fieldKey);
     void parameterDraftChanged(const QString &pageId, const QVariantMap &values);
 
 private:
+    bool confirmXcfChanges(QWidget *dialogParent = nullptr);
+    void refreshGoverningEquations();
+    void updateXcfCaption();
+    void closeEvent(QCloseEvent *event) override;
     void createRibbon();
     void applyWindowTheme(const QString &id);
     void createWorkspace();
@@ -179,6 +192,7 @@ private:
     bool propertyDockVisibleBeforeParameter_ = true;
     bool meshOutputInitialCollapseApplied_ = false;
     QHash<QString, QVariantMap> drafts_;
+    XcfProjectDocument xcfProject_;
 };
 
 } // namespace aerosim

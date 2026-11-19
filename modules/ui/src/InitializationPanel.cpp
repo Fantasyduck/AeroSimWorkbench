@@ -1,4 +1,6 @@
+#include "aerosim/ui/RadioChoice.h"
 #include "aerosim/ui/InitializationPanel.h"
+#include "ParameterTableCells.h"
 #include <QComboBox>
 #include <QDialog>
 #include <QDialogButtonBox>
@@ -10,6 +12,7 @@
 #include <QLabel>
 #include <QLocale>
 #include <QPushButton>
+#include <QResizeEvent>
 #include <QScrollArea>
 #include <QSignalBlocker>
 #include <QSpinBox>
@@ -45,14 +48,14 @@ public:
         form_->setHorizontalSpacing(18);
         form_->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
         form_->setRowWrapPolicy(QFormLayout::WrapLongRows);
-        auto *type=new QComboBox(this); type->setObjectName("initialParameterType");
+        auto *type=new RadioChoice(this); type->setObjectName("initialParameterType");
         for(const auto &p:parameterTypes()) type->addItem(p.first,p.second);
         type->setCurrentIndex(qMax(0,type->findData(values.value("parameterType","static-temperature-pressure"))));
-        values["parameterType"]=type->currentData(); form_->addRow(text(u"选择参数"),type);
-        auto *velocity=new QComboBox(this); velocity->setObjectName("initialVelocityDefinition");
+        values["parameterType"]=type->currentData(); form_->addRow(new QLabel(text(u"选择参数"),this)); form_->addRow(type);
+        auto *velocity=new RadioChoice(this); velocity->setObjectName("initialVelocityDefinition");
         velocity->addItem(text(u"马赫数/攻角/侧滑角"),"angles"); velocity->addItem(text(u"马赫数/速度方向"),"direction");
         velocity->setCurrentIndex(values.value("velocityDefinition","angles")=="direction"?1:0);
-        values["velocityDefinition"]=velocity->currentData(); form_->addRow(text(u"速度定义方式"),velocity);
+        values["velocityDefinition"]=velocity->currentData(); form_->addRow(new QLabel(text(u"速度定义方式"),this)); form_->addRow(velocity);
         const auto number=[=](const QString &key,const QString &caption,double fallback,double minimum) {
             auto *v=new Number(this); v->setObjectName(key); v->setMinimum(minimum);
             v->setValue(values.value(key,fallback).toDouble()); values[key]=v->value();
@@ -67,12 +70,15 @@ public:
         number("unitReynoldsNumber",text(u"单位雷诺数 (1/m)"),1.,0.000001);
         number("totalPressure",text(u"总压 (Pa)"),955.,0.000001); number("totalTemperature",text(u"总温 (K)"),60.,0.000001);
         number("altitude",text(u"高度 (m)"),1.,-1e5);
-        connect(type,QOverload<int>::of(&QComboBox::currentIndexChanged),this,[=](int){values["parameterType"]=type->currentData(); updateRows();notify();});
-        connect(velocity,QOverload<int>::of(&QComboBox::currentIndexChanged),this,[=](int){values["velocityDefinition"]=velocity->currentData();updateRows();notify();});
+        connect(type,&RadioChoice::currentIndexChanged,this,[=](int){values["parameterType"]=type->currentData(); updateRows();notify();});
+        connect(velocity,&RadioChoice::currentIndexChanged,this,[=](int){values["velocityDefinition"]=velocity->currentData();updateRows();notify();});
         updateRows();
         if(fixed) {
             for(auto *choice : {type,velocity}) {
-                auto row=form_->takeRow(choice);if(row.labelItem)delete row.labelItem->widget();delete row.labelItem;delete row.fieldItem;
+                int rowIndex=0; QFormLayout::ItemRole role;
+                form_->getWidgetPosition(choice,&rowIndex,&role);
+                auto row=form_->takeRow(choice);delete row.labelItem;delete row.fieldItem;
+                if(rowIndex>0) form_->removeRow(rowIndex-1);
                 delete choice;
             }
         }
@@ -105,30 +111,47 @@ namespace aerosim {
 InitializationPanel::InitializationPanel(const QVariantMap &draft,QWidget *parent) : QWidget(parent),draft_(draft),regions_(draft.value("regions").toList()) {
     setObjectName("initializationPanel");setProperty("parameterPanel",true);setAttribute(Qt::WA_StyledBackground,true);
     auto *layout=new QHBoxLayout(this);layout->setContentsMargins(0,0,0,0);layout->setSpacing(16);
+    layout->setSizeConstraint(QLayout::SetMinAndMaxSize);
+    layout->setAlignment(Qt::AlignTop);
     auto *global=new QGroupBox(text(u"全局初始化"),this);auto *globalLayout=new QVBoxLayout(global);
     auto *form=new QFormLayout; globalForm_=form;globalLayout->addLayout(form);
     global->setObjectName("globalInitializationGroup");
     globalLayout->setSpacing(8);
     form->setHorizontalSpacing(18);
     form->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
-    mode_=new QComboBox(global);mode_->setObjectName("initializationMode");
+    mode_=new RadioChoice(global, 3);mode_->setObjectName("initializationMode");
     mode_->addItem(text(u"自定义输入"),"custom");mode_->addItem(text(u"从边界条件初始化"),"boundary");mode_->addItem(text(u"从参考量初始化"),"reference");
     mode_->setCurrentIndex(qMax(0,mode_->findData(draft_.value("mode","custom"))));draft_["mode"]=mode_->currentData();
-    form->addRow(text(u"初始化方式"),mode_);
-    form->labelForField(mode_)->setMinimumWidth(140);
+    form->addRow(new QLabel(text(u"初始化方式"),global)); form->addRow(mode_);
     source_=new QComboBox(global);source_->setObjectName("initializationBoundary");sourceLabel_=new QLabel(text(u"从边界条件获取"),global);form->addRow(sourceLabel_,source_);
     state_=new QWidget(global);state_->setObjectName("initializationStateHost");auto *stateLayout=new QVBoxLayout(state_);stateLayout->setContentsMargins(0,0,0,0);globalLayout->addWidget(state_);
     sourceHint_=new QLabel(global);sourceHint_->setWordWrap(true);sourceHint_->setProperty("parameterHint",true);globalLayout->addWidget(sourceHint_);globalLayout->addStretch();layout->addWidget(global, 1);
-    connect(mode_,QOverload<int>::of(&QComboBox::currentIndexChanged),this,[=](int){draft_["mode"]=mode_->currentData();updateGlobal();publish();});
+    connect(mode_,&RadioChoice::currentIndexChanged,this,[=](int){draft_["mode"]=mode_->currentData();updateGlobal();publish();});
     connect(source_,QOverload<int>::of(&QComboBox::currentIndexChanged),this,[=](int){draft_["boundaryId"]=source_->currentData();updateGlobal();publish();});
     auto *local=new QGroupBox(text(u"局部初始化"),this);auto *localLayout=new QVBoxLayout(local);auto *countForm=new QFormLayout;
     local->setObjectName("localInitializationGroup");
     auto *count=new QSpinBox(local);count->setObjectName("initializationRegionCount");count->setRange(0,100);count->setMaximumWidth(220);
     count->setValue(draft_.value("regionCount",0).toInt());draft_["regionCount"]=count->value();countForm->addRow(text(u"局部初始化个数"),count);localLayout->addLayout(countForm);
     table_=new QTableWidget(local);table_->setObjectName("initializationRegions");table_->setColumnCount(3);table_->setHorizontalHeaderLabels({text(u"形状"),text(u"参数类型"),text(u"设置")});
-    table_->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);table_->verticalHeader()->setDefaultSectionSize(40);table_->setMinimumHeight(200);localLayout->addWidget(table_, 1);layout->addWidget(local, 1);
+    table_->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
+    table_->horizontalHeader()->setSectionResizeMode(0,QHeaderView::ResizeToContents);
+    table_->horizontalHeader()->setSectionResizeMode(1,QHeaderView::ResizeToContents);
+    parameterTable::configure(table_);
+    table_->horizontalHeader()->setMinimumSectionSize(64);
+    table_->setMinimumHeight(240);localLayout->addWidget(table_, 1);layout->addWidget(local, 1);
+    layout->setStretch(0,3);layout->setStretch(1,5);
     connect(count,QOverload<int>::of(&QSpinBox::valueChanged),this,[=](int n){draft_["regionCount"]=n;rebuildRegions(n);publish();});
     rebuildRegions(count->value());setSources({},{});
+}
+void InitializationPanel::resizeEvent(QResizeEvent *event) {
+    QWidget::resizeEvent(event);
+    auto *boxes=qobject_cast<QBoxLayout *>(layout());
+    const auto direction=event->size().width()<1100 ? QBoxLayout::TopToBottom : QBoxLayout::LeftToRight;
+    if(boxes->direction()!=direction) {
+        boxes->setDirection(direction);
+        boxes->activate();
+        updateGeometry();
+    }
 }
 void InitializationPanel::setSources(const QVariantMap &boundary,const QVariantMap &reference) {
     boundaries_=boundary.value("boundaries").toList();reference_=reference;
@@ -157,17 +180,20 @@ void InitializationPanel::rebuildRegions(int count) {
     while(regions_.size()<count) regions_.append(QVariantMap{{"shape","box"},{"parameterType","static-temperature-pressure"}});
     table_->setRowCount(0);table_->setRowCount(count);
     for(int i=0;i<count;++i) {
-        auto region=regions_[i].toMap();auto *shape=new QComboBox(table_);
+        auto region=regions_[i].toMap();auto *shape=new RadioChoice(table_);
+        shape->setObjectName(QStringLiteral("initializationRegion%1Shape").arg(i));
         shape->addItem(text(u"箱体"),"box");shape->addItem(text(u"圆球"),"sphere");
         shape->addItem(text(u"圆柱体"),"cylinder");shape->addItem(text(u"圆锥体"),"cone");
-        shape->setCurrentIndex(qMax(0,shape->findData(region.value("shape"))));table_->setCellWidget(i,0,shape);
-        connect(shape,QOverload<int>::of(&QComboBox::currentIndexChanged),this,[=](int){auto r=regions_[i].toMap();r["shape"]=shape->currentData();regions_[i]=r;publish();});
-        auto *type=new QComboBox(table_);for(const auto &p:parameterTypes())type->addItem(p.first,p.second);type->setCurrentIndex(qMax(0,type->findData(region.value("parameterType"))));table_->setCellWidget(i,1,type);
-        connect(type,QOverload<int>::of(&QComboBox::currentIndexChanged),this,[=](int){auto r=regions_[i].toMap();r["parameterType"]=type->currentData();auto s=r.value("state").toMap();s["parameterType"]=type->currentData();r["state"]=s;regions_[i]=r;publish();});
-        auto *settings=new QPushButton(text(u"设置"),table_);settings->setObjectName(QStringLiteral("initializationRegion%1Settings").arg(i));table_->setCellWidget(i,2,settings);
+        shape->setCurrentIndex(qMax(0,shape->findData(region.value("shape"))));parameterTable::choiceCell(table_,i,0,shape);
+        connect(shape,&RadioChoice::currentIndexChanged,this,[=](int){auto r=regions_[i].toMap();r["shape"]=shape->currentData();regions_[i]=r;publish();});
+        auto *type=new RadioChoice(table_);type->setObjectName(QStringLiteral("initializationRegion%1ParameterType").arg(i));
+        for(const auto &p:parameterTypes())type->addItem(p.first,p.second);
+        type->setCurrentIndex(qMax(0,type->findData(region.value("parameterType"))));parameterTable::choiceCell(table_,i,1,type);
+        connect(type,&RadioChoice::currentIndexChanged,this,[=](int){auto r=regions_[i].toMap();r["parameterType"]=type->currentData();auto s=r.value("state").toMap();s["parameterType"]=type->currentData();r["state"]=s;regions_[i]=r;publish();});
+        auto *settings=new QPushButton(text(u"设置"),table_);settings->setObjectName(QStringLiteral("initializationRegion%1Settings").arg(i));table_->setCellWidget(i,2,parameterTable::buttonCell(table_,settings));
         connect(settings,&QPushButton::clicked,this,[=]{
             auto r=regions_[i].toMap();QDialog dialog(this);dialog.setObjectName("localInitializationDialog");dialog.setWindowTitle(text(u"局部初始化设置"));dialog.setProperty("parameterEditor",true);dialog.resize(680,680);
-            dialog.setStyleSheet("QAbstractSpinBox { min-height: 22px; max-height: 22px; padding: 2px 6px; }");
+            dialog.setStyleSheet("QAbstractSpinBox { min-height: 22px; max-height: 22px; padding-top: 2px; padding-bottom: 2px; padding-left: 6px; }");
             auto *layout=new QVBoxLayout(&dialog);auto *scroll=new QScrollArea(&dialog);scroll->setWidgetResizable(true);scroll->setFrameShape(QFrame::NoFrame);
             auto *content=new QWidget(scroll);content->setProperty("parameterSurface",true);auto *body=new QVBoxLayout(content);
             auto *box=new QGroupBox(shape->currentText(),content);auto *form=new QFormLayout(box);body->addWidget(box);

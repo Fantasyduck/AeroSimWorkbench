@@ -1,3 +1,4 @@
+#include "aerosim/ui/RadioChoice.h"
 #include "aerosim/ui/FixedAxisMotionDialog.h"
 #include "MotionDialogLayout.h"
 #include <QCheckBox>
@@ -45,7 +46,7 @@ FixedAxisMotionDialog::FixedAxisMotionDialog(const QVariantMap &parameters, QWid
     setProperty("parameterEditor", true);
     setModal(true);
 
-    setStyleSheet(QStringLiteral("QAbstractSpinBox, QComboBox { min-height: 22px; max-height: 22px; padding: 2px 6px; }"));
+    setStyleSheet(QStringLiteral("QAbstractSpinBox, QComboBox { min-height: 22px; max-height: 22px; padding-top: 2px; padding-bottom: 2px; padding-left: 6px; }"));
     auto *layout = new QVBoxLayout(this);
     auto *scroll = new QScrollArea(this);
     scroll->setWidgetResizable(true);
@@ -85,7 +86,7 @@ FixedAxisMotionDialog::FixedAxisMotionDialog(const QVariantMap &parameters, QWid
         }
         return row;
     };
-    auto *definition = new QComboBox(content);
+    auto *definition = new RadioChoice(content);
     definition->setObjectName("axisDefinition");
     definition->addItem(text(u"方向定义"), "direction");
     definition->addItem(text(u"两点定义"), "two-points");
@@ -104,7 +105,7 @@ FixedAxisMotionDialog::FixedAxisMotionDialog(const QVariantMap &parameters, QWid
         axis->setVisible(direction); axisLabel->setVisible(direction);
         point2->setVisible(!direction); pointLabel->setVisible(!direction);
     };
-    connect(definition, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [=](int) {
+    connect(definition, &RadioChoice::currentIndexChanged, this, [=](int) {
         parameters_["axisDefinition"] = definition->currentData(); updateDefinition();
     });
     updateDefinition();
@@ -127,7 +128,7 @@ FixedAxisMotionDialog::FixedAxisMotionDialog(const QVariantMap &parameters, QWid
     auto *forceForm = new QFormLayout;
     groupLayout->addLayout(forceForm);
     force_ = new QComboBox(group); force_->setObjectName("currentExternalForce");
-    frame_ = new QComboBox(group); frame_->setObjectName("externalForceFrame");
+    frame_ = new RadioChoice(group); frame_->setObjectName("externalForceFrame");
     frame_->addItem(text(u"惯性系"), "inertial");
     frame_->addItem(text(u"随体系"), "body");
     points_ = new QSpinBox(group); points_->setObjectName("externalForcePointCount");
