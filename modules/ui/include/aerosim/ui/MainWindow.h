@@ -86,6 +86,9 @@ signals:
     void xcfProjectChanged(const QString &path, bool modified);
     void openPostProcessRequested();
     void showStartupRequested();
+    void saveAuxiliaryLayoutsRequested();
+    void restoreAuxiliaryLayoutsRequested();
+    void restoreDefaultAuxiliaryLayoutsRequested();
     void navigationRequested(const QString &pageId, const QString &objectId, const QString &fieldKey);
     void parameterDraftChanged(const QString &pageId, const QVariantMap &values);
 
@@ -153,6 +156,7 @@ private:
     QHash<QString, QWidget *> workspacePages_;
     QHash<QString, QString> workspacePageModules_;
     QHash<QString, QString> moduleLastPages_;
+    QString currentWorkspacePage_;
     QTableWidget *outputLogTable_ = nullptr;
     QDockWidget *projectDock_ = nullptr;
     QDockWidget *propertyDock_ = nullptr;

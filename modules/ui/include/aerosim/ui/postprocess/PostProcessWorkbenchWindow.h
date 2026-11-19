@@ -18,6 +18,8 @@ class QLabel;
 class QListWidget;
 class QDockWidget;
 class QSlider;
+class QSplitter;
+class QTabWidget;
 class QTextEdit;
 class QTreeWidget;
 class QTreeWidgetItem;
@@ -36,6 +38,7 @@ public:
     QWidget *windowWidget() override { return this; }
     bool insertWidget(WidgetSlot slot, QWidget *widget) override;
     void bindServices(const ServiceBindings &services) override;
+    void setLayoutSettingsScope(const QString &organization, const QString &application);
 
 public slots:
     // GUI-thread presentation endpoint; no picking or numerical work is done here.
@@ -43,6 +46,9 @@ public slots:
     void setDataServiceAvailable(bool available);
     void presentImportedData(const QVariantList &datasets, bool replace);
     void presentImportError(const QString &message);
+    void saveUserLayout();
+    void restoreUserLayout();
+    void restoreDefaultLayout();
 
 signals:
     void viewRequested(const QString &orientation);
@@ -85,6 +91,8 @@ private:
     void updateSelectionDetails();
 
     QVBoxLayout *viewportLayout_ = nullptr;
+    QSplitter *contentSplitter_ = nullptr;
+    QTabWidget *navigationTabs_ = nullptr;
     QWidget *emptyViewport_ = nullptr;
     QTreeWidget *datasetTree_ = nullptr;
     QListWidget *sceneList_ = nullptr;
@@ -119,6 +127,8 @@ private:
     ServiceBindings services_;
     bool bound_ = false;
     bool dataServiceAvailable_ = false;
+    QString layoutSettingsOrg_ = QStringLiteral("AeroSimWorkbench");
+    QString layoutSettingsApp_ = QStringLiteral("PostProcessUiLayout");
 };
 
 } // namespace aerosim

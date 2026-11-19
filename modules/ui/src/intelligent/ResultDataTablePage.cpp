@@ -23,6 +23,29 @@ namespace {
 // not a data store, so the sample columns stop here and the status line says so
 // rather than silently hiding the tail.
 constexpr int kMaxSampleColumns = 400;
+constexpr double kDefaultTreeRatio = 260.0 / 1160.0;
+constexpr double kDefaultTableRatio = 160.0 / 600.0;
+
+double splitterRatio(const QSplitter *splitter)
+{
+    const QList<int> sizes = splitter ? splitter->sizes() : QList<int>();
+    if (sizes.size() != 2 || sizes.at(0) + sizes.at(1) <= 0)
+        return 0.0;
+    return double(sizes.at(0)) / double(sizes.at(0) + sizes.at(1));
+}
+
+void restoreSplitterRatio(QSplitter *splitter, double ratio, double fallback,
+                          double minimum, double maximum)
+{
+    if (!std::isfinite(ratio)) ratio = fallback;
+    ratio = qBound(minimum, ratio, maximum);
+    const QList<int> currentSizes = splitter->sizes();
+    int extent = currentSizes.size() == 2 ? currentSizes.at(0) + currentSizes.at(1) : 0;
+    if (extent <= 0)
+        extent = splitter->orientation() == Qt::Horizontal ? splitter->width() : splitter->height();
+    if (extent <= 0) extent = 1000;
+    splitter->setSizes({qRound(extent * ratio), qRound(extent * (1.0 - ratio))});
+}
 
 QString numberText(double value)
 {
@@ -79,10 +102,10 @@ void ResultDataTablePage::buildUi()
     });
     outer->addLayout(bar);
 
-    auto *split = new QSplitter(Qt::Horizontal, this);
-    split->setObjectName(QStringLiteral("resultDataSplit"));
+    mainSplitter_ = new QSplitter(Qt::Horizontal, this);
+    mainSplitter_->setObjectName(QStringLiteral("resultDataSplit"));
 
-    tree_ = new QTreeWidget(split);
+    tree_ = new QTreeWidget(mainSplitter_);
     tree_->setObjectName(QStringLiteral("resultDataVariableTree"));
     tree_->setHeaderLabels({QStringLiteral(u"变量"), QStringLiteral(u"单位")});
     tree_->setColumnWidth(0, 220);
@@ -93,12 +116,12 @@ void ResultDataTablePage::buildUi()
         updateCurveView();
         updateStatus();
     });
-    split->addWidget(tree_);
+    mainSplitter_->addWidget(tree_);
 
-    auto *right = new QSplitter(Qt::Vertical, split);
-    right->setObjectName(QStringLiteral("resultDataRightSplit"));
+    rightSplitter_ = new QSplitter(Qt::Vertical, mainSplitter_);
+    rightSplitter_->setObjectName(QStringLiteral("resultDataRightSplit"));
 
-    curveHost_ = new QWidget(right);
+    curveHost_ = new QWidget(rightSplitter_);
     curveLayout_ = new QVBoxLayout(curveHost_);
     curveLayout_->setContentsMargins(0, 0, 0, 0);
     curveHint_ = new QLabel(
@@ -109,7 +132,7 @@ void ResultDataTablePage::buildUi()
     curveHint_->setAlignment(Qt::AlignCenter);
     curveLayout_->addWidget(curveHint_);
 
-    tableWidget_ = new QTableWidget(right);
+    tableWidget_ = new QTableWidget(rightSplitter_);
     tableWidget_->setObjectName(QStringLiteral("resultDataTable"));
     tableWidget_->setMinimumHeight(96);
     tableWidget_->verticalHeader()->hide();
@@ -121,20 +144,21 @@ void ResultDataTablePage::buildUi()
         updateStatus();
     });
     tableWidget_->setAlternatingRowColors(true);
-    right->addWidget(tableWidget_);
+    rightSplitter_->addWidget(tableWidget_);
     // Selecting rows above immediately draws the corresponding curves below.
-    right->addWidget(curveHost_);
-    right->setChildrenCollapsible(false);
-    right->setStretchFactor(0, 0);
-    right->setStretchFactor(1, 1);
-    right->setSizes({160, 440});
+    rightSplitter_->addWidget(curveHost_);
+    rightSplitter_->setChildrenCollapsible(false);
+    rightSplitter_->setStretchFactor(0, 0);
+    rightSplitter_->setStretchFactor(1, 1);
+    rightSplitter_->setSizes({160, 440});
 
-    split->addWidget(right);
-    split->setStretchFactor(0, 0);
-    split->setStretchFactor(1, 1);
-    split->setSizes({260, 900});
+    mainSplitter_->addWidget(rightSplitter_);
+    mainSplitter_->setChildrenCollapsible(false);
+    mainSplitter_->setStretchFactor(0, 0);
+    mainSplitter_->setStretchFactor(1, 1);
+    mainSplitter_->setSizes({260, 900});
     contentLayout_ = new QHBoxLayout;
-    contentLayout_->addWidget(split, 1);
+    contentLayout_->addWidget(mainSplitter_, 1);
     outer->addLayout(contentLayout_, 1);
 
     status_ = new QLabel(this);
@@ -144,6 +168,28 @@ void ResultDataTablePage::buildUi()
     outer->addWidget(status_);
 
     updateStatus();
+}
+
+QVariantMap ResultDataTablePage::layoutState() const
+{
+    QVariantMap state;
+    state.insert(QStringLiteral("treeRatio"), splitterRatio(mainSplitter_));
+    state.insert(QStringLiteral("tableRatio"), splitterRatio(rightSplitter_));
+    return state;
+}
+
+void ResultDataTablePage::restoreLayoutState(const QVariantMap &state)
+{
+    restoreSplitterRatio(mainSplitter_, state.value(QStringLiteral("treeRatio"), kDefaultTreeRatio).toDouble(),
+                         kDefaultTreeRatio, 0.15, 0.45);
+    restoreSplitterRatio(rightSplitter_, state.value(QStringLiteral("tableRatio"), kDefaultTableRatio).toDouble(),
+                         kDefaultTableRatio, 0.15, 0.75);
+}
+
+void ResultDataTablePage::restoreDefaultLayout()
+{
+    restoreSplitterRatio(mainSplitter_, kDefaultTreeRatio, kDefaultTreeRatio, 0.15, 0.45);
+    restoreSplitterRatio(rightSplitter_, kDefaultTableRatio, kDefaultTableRatio, 0.15, 0.75);
 }
 
 void ResultDataTablePage::setDataSource(ResultDataSource *source)

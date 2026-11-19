@@ -112,6 +112,12 @@ int main(int argc, char *argv[])
         postprocess.raise();
         postprocess.activateWindow();
     });
+    QObject::connect(&window, &aerosim::MainWindow::saveAuxiliaryLayoutsRequested,
+                     &postprocess, &aerosim::PostProcessWorkbenchWindow::saveUserLayout);
+    QObject::connect(&window, &aerosim::MainWindow::restoreAuxiliaryLayoutsRequested,
+                     &postprocess, &aerosim::PostProcessWorkbenchWindow::restoreUserLayout);
+    QObject::connect(&window, &aerosim::MainWindow::restoreDefaultAuxiliaryLayoutsRequested,
+                     &postprocess, &aerosim::PostProcessWorkbenchWindow::restoreDefaultLayout);
     QObject::connect(&landing, &aerosim::StartupLandingPage::enterWorkbenchRequested,
                      &window, [&landing, &window](const QString &) {
         landing.setReturnAvailable(true);

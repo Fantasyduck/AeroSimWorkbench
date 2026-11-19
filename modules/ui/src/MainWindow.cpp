@@ -68,6 +68,7 @@
 #include <QScrollArea>
 #include <QScrollBar>
 #include <QScreen>
+#include <QSet>
 #include <QSignalBlocker>
 #include <QSplitter>
 #include <QSpinBox>
@@ -91,6 +92,13 @@ static QWidget *initializeRibbonResources(QWidget *parent)
 
 namespace aerosim {
 namespace {
+constexpr int kUserLayoutVersion = 2;
+
+bool isSupportedUserLayoutVersion(int version)
+{
+    return version == 1 || version == kUserLayoutVersion;
+}
+
 enum NavigationRole {
     PageRole = Qt::UserRole,
     ObjectIdRole,
@@ -152,6 +160,43 @@ QTreeWidgetItem *addNavigationItem(QTreeWidgetItem *parent, const QString &text,
     item->setData(0, ObjectIdRole, objectId);
     item->setData(0, NodeTypeRole, nodeType);
     return item;
+}
+
+QTreeWidgetItem *findNavigationItem(QTreeWidget *tree, const QString &pageId,
+                                    const QString &objectId)
+{
+    if (!tree) return nullptr;
+    for (QTreeWidgetItemIterator it(tree); *it; ++it) {
+        QTreeWidgetItem *item = *it;
+        if ((!objectId.isEmpty() && item->data(0, ObjectIdRole).toString() == objectId)
+            || (objectId.isEmpty() && !pageId.isEmpty()
+                && item->data(0, PageRole).toString() == pageId))
+            return item;
+    }
+    return nullptr;
+}
+
+QStringList expandedNavigationIds(QTreeWidget *tree)
+{
+    QStringList ids;
+    if (!tree) return ids;
+    for (QTreeWidgetItemIterator it(tree); *it; ++it) {
+        QTreeWidgetItem *item = *it;
+        const QString id = item->data(0, ObjectIdRole).toString();
+        if (item->isExpanded() && !id.isEmpty()) ids.append(id);
+    }
+    return ids;
+}
+
+void restoreExpandedNavigationIds(QTreeWidget *tree, const QStringList &ids)
+{
+    if (!tree) return;
+    const QSet<QString> expanded = QSet<QString>::fromList(ids);
+    for (QTreeWidgetItemIterator it(tree); *it; ++it) {
+        QTreeWidgetItem *item = *it;
+        const QString id = item->data(0, ObjectIdRole).toString();
+        if (!id.isEmpty()) item->setExpanded(expanded.contains(id));
+    }
 }
 
 
@@ -248,7 +293,8 @@ void MainWindow::createRibbon()
             } else if (route == "layout-restore") {
                 action->setObjectName(QStringLiteral("restoreUserLayoutAction"));
                 QSettings settings(layoutSettingsOrg_, layoutSettingsApp_);
-                action->setEnabled(settings.value(QStringLiteral("UserLayout/version")).toInt() == 1);
+                action->setEnabled(isSupportedUserLayoutVersion(
+                    settings.value(QStringLiteral("UserLayout/version")).toInt()));
                 restoreUserLayoutAction_ = action;
                 connect(action, &QAction::triggered, this, &MainWindow::restoreUserLayout);
             } else if (route == "help-usage") {
@@ -1023,6 +1069,7 @@ void MainWindow::handleNavigationSelection(QTreeWidgetItem *item)
 void MainWindow::showWorkspacePage(const QString &pageId)
 {
     if (auto *target = workspacePages_.value(pageId, nullptr)) {
+        currentWorkspacePage_ = pageId;
         const bool calculation = target == singleCalculationPage_ || target == batchCalculationPage_;
         if (!calculation) setCalculationWorkspaceActive(false);
         workspaceStack_->setCurrentWidget(target);
@@ -1068,6 +1115,11 @@ void MainWindow::setLayoutSettingsScope(const QString &organization, const QStri
 {
     layoutSettingsOrg_ = organization;
     layoutSettingsApp_ = application;
+    if (restoreUserLayoutAction_) {
+        QSettings settings(layoutSettingsOrg_, layoutSettingsApp_);
+        restoreUserLayoutAction_->setEnabled(isSupportedUserLayoutVersion(
+            settings.value(QStringLiteral("UserLayout/version")).toInt()));
+    }
 }
 
 void MainWindow::showModuleWorkspace(const QString &moduleId)
@@ -1570,6 +1622,7 @@ void MainWindow::restoreLayout()
         meshPage->restoreDefaultLayout();
     singleCalculationPage_->restoreDefaultLayout();
     batchCalculationPage_->restoreDefaultLayout();
+    resultDataTablePage_->restoreDefaultLayout();
     if (meshWorkspaceActive_) {
         propertyDock_->hide();
         resizeDocks({projectDock_}, {uimetrics::projectDockWidth()}, Qt::Horizontal);
@@ -1577,6 +1630,7 @@ void MainWindow::restoreLayout()
     }
     setOutputCollapsed(true);
     if (status_) statusBar()->showMessage(uiText(u"\u5df2\u6062\u590d\u9ed8\u8ba4\u754c\u9762\u5e03\u5c40\uff1b\u5df2\u4fdd\u5b58\u7684\u7528\u6237\u5e03\u5c40\u672a\u5220\u9664"), 4000);
+    emit restoreDefaultAuxiliaryLayoutsRequested();
 }
 
 void MainWindow::saveUserLayout()
@@ -1584,7 +1638,7 @@ void MainWindow::saveUserLayout()
     QSettings settings(layoutSettingsOrg_, layoutSettingsApp_);
     settings.beginGroup(QStringLiteral("UserLayout"));
     settings.remove(QString());
-    settings.setValue(QStringLiteral("version"), 1);
+    settings.setValue(QStringLiteral("version"), kUserLayoutVersion);
     settings.setValue(QStringLiteral("geometry"), saveGeometry());
     settings.setValue(QStringLiteral("mainWindowState"), saveState(1));
     settings.setValue(QStringLiteral("maximized"), isMaximized());
@@ -1596,8 +1650,26 @@ void MainWindow::saveUserLayout()
     settings.setValue(QStringLiteral("outputCollapsed"), outputCollapsed_);
     settings.setValue(QStringLiteral("singleCalculationLayout"), singleCalculationPage_->layoutState());
     settings.setValue(QStringLiteral("multipleCalculationLayout"), batchCalculationPage_->layoutState());
+    settings.setValue(QStringLiteral("resultDataLayout"), resultDataTablePage_->layoutState());
     if (auto *meshPage = qobject_cast<MeshManagementPage *>(viewportPage_))
         settings.setValue(QStringLiteral("meshLayout"), meshPage->layoutState());
+
+    settings.setValue(QStringLiteral("currentWorkspacePage"), currentWorkspacePage_);
+    QVariantMap lastPages;
+    for (auto it = moduleLastPages_.cbegin(); it != moduleLastPages_.cend(); ++it)
+        lastPages.insert(it.key(), it.value());
+    settings.setValue(QStringLiteral("moduleLastPages"), lastPages);
+    if (projectTree_) {
+        QTreeWidgetItem *current = projectTree_->currentItem();
+        settings.setValue(QStringLiteral("navigationPage"),
+                          current ? current->data(0, PageRole).toString() : QString());
+        settings.setValue(QStringLiteral("navigationObject"),
+                          current ? current->data(0, ObjectIdRole).toString() : QString());
+        settings.setValue(QStringLiteral("expandedNavigationIds"), expandedNavigationIds(projectTree_));
+        settings.setValue(QStringLiteral("navigationScroll"), projectTree_->verticalScrollBar()->value());
+    }
+    if (SARibbonCategory *category = ribbonBar()->categoryByIndex(ribbonBar()->currentIndex()))
+        settings.setValue(QStringLiteral("ribbonCategory"), category->objectName());
 
     if (uimetrics::screenOf(this)) {
         const QRect available = uimetrics::availableRect(this);
@@ -1610,6 +1682,7 @@ void MainWindow::saveUserLayout()
     settings.endGroup();
     settings.sync();
     if (restoreUserLayoutAction_) restoreUserLayoutAction_->setEnabled(settings.status() == QSettings::NoError);
+    if (settings.status() == QSettings::NoError) emit saveAuxiliaryLayoutsRequested();
     statusBar()->showMessage(settings.status() == QSettings::NoError
         ? uiText(u"\u5f53\u524d\u5e03\u5c40\u5df2\u4fdd\u5b58")
         : uiText(u"\u5e03\u5c40\u4fdd\u5b58\u5931\u8d25\uff0c\u8bf7\u68c0\u67e5\u7528\u6237\u914d\u7f6e\u76ee\u5f55"), 4000);
@@ -1619,7 +1692,8 @@ void MainWindow::restoreUserLayout()
 {
     QSettings settings(layoutSettingsOrg_, layoutSettingsApp_);
     settings.beginGroup(QStringLiteral("UserLayout"));
-    if (settings.value(QStringLiteral("version")).toInt() != 1) {
+    const int layoutVersion = settings.value(QStringLiteral("version")).toInt();
+    if (!isSupportedUserLayoutVersion(layoutVersion)) {
         settings.endGroup();
         statusBar()->showMessage(uiText(u"\u6682\u65e0\u5df2\u4fdd\u5b58\u7684\u7528\u6237\u5e03\u5c40"), 4000);
         if (restoreUserLayoutAction_) restoreUserLayoutAction_->setEnabled(false);
@@ -1641,6 +1715,14 @@ void MainWindow::restoreUserLayout()
     const QVariantMap meshLayout = settings.value(QStringLiteral("meshLayout")).toMap();
     const QVariantMap singleCalculationLayout = settings.value(QStringLiteral("singleCalculationLayout")).toMap();
     const QVariantMap multipleCalculationLayout = settings.value(QStringLiteral("multipleCalculationLayout")).toMap();
+    const QVariantMap resultDataLayout = settings.value(QStringLiteral("resultDataLayout")).toMap();
+    const QString savedWorkspacePage = settings.value(QStringLiteral("currentWorkspacePage")).toString();
+    const QVariantMap savedLastPages = settings.value(QStringLiteral("moduleLastPages")).toMap();
+    const QString navigationPage = settings.value(QStringLiteral("navigationPage")).toString();
+    const QString navigationObject = settings.value(QStringLiteral("navigationObject")).toString();
+    const QStringList expandedIds = settings.value(QStringLiteral("expandedNavigationIds")).toStringList();
+    const int navigationScroll = settings.value(QStringLiteral("navigationScroll"), 0).toInt();
+    const QString ribbonCategory = settings.value(QStringLiteral("ribbonCategory")).toString();
     const double widthRatio = qBound(0.45, settings.value(QStringLiteral("windowWidthRatio"), 0.75).toDouble(), 1.0);
     const double heightRatio = qBound(0.50, settings.value(QStringLiteral("windowHeightRatio"), 0.88).toDouble(), 1.0);
     const double xRatio = qBound(0.0, settings.value(QStringLiteral("windowXRatio"), 0.1).toDouble(), 0.95);
@@ -1679,7 +1761,22 @@ void MainWindow::restoreUserLayout()
         meshPage->restoreLayoutState(meshLayout);
     singleCalculationPage_->restoreLayoutState(singleCalculationLayout);
     batchCalculationPage_->restoreLayoutState(multipleCalculationLayout);
-    QTimer::singleShot(0, this, [this, projectRatio, propertyRatio, outputRatio, outputCollapsed] {
+    resultDataTablePage_->restoreLayoutState(resultDataLayout);
+    for (auto it = savedLastPages.cbegin(); it != savedLastPages.cend(); ++it) {
+        if (workspacePages_.contains(it.value().toString()))
+            moduleLastPages_.insert(it.key(), it.value().toString());
+    }
+    if (workspacePages_.contains(savedWorkspacePage))
+        showWorkspacePage(savedWorkspacePage);
+    if (layoutVersion >= 2) {
+        restoreExpandedNavigationIds(projectTree_, expandedIds);
+        if (QTreeWidgetItem *item = findNavigationItem(projectTree_, navigationPage, navigationObject)) {
+            const QSignalBlocker blocker(projectTree_);
+            projectTree_->setCurrentItem(item);
+        }
+    }
+    QTimer::singleShot(0, this, [this, projectRatio, propertyRatio, outputRatio, outputCollapsed,
+                                navigationScroll, ribbonCategory, layoutVersion] {
         // Older saved layouts may contain a floating/closed property dock.
         // Normalize it once so the editor remains part of the left workbench
         // and the project/property splitter is always available.
@@ -1691,14 +1788,21 @@ void MainWindow::restoreUserLayout()
         }
         if (!meshWorkspaceActive_) propertyDock_->show();
         resizeDocks({projectDock_, propertyDock_},
-                    {qMax(220, qRound(width() * projectRatio)), qMax(300, qRound(width() * propertyRatio))},
+                    {qMax(uimetrics::projectDockMinimumWidth(), qRound(width() * projectRatio)),
+                     qMax(uimetrics::propertyDockMinimumWidth(), qRound(width() * propertyRatio))},
                     Qt::Horizontal);
         projectDockWidth_ = qMax(220, projectDock_->width());
         if (!outputCollapsed)
             resizeDocks({outputDock_}, {qMax(120, qRound(height() * outputRatio))}, Qt::Vertical);
         constrainToAvailableScreen();
         if (calculationWorkspaceActive_) setCalculationWorkspaceActive(true);
+        if (layoutVersion >= 2) {
+            projectTree_->verticalScrollBar()->setValue(navigationScroll);
+            if (SARibbonCategory *category = findChild<SARibbonCategory *>(ribbonCategory))
+                ribbonBar()->raiseCategory(category);
+        }
     });
+    emit restoreAuxiliaryLayoutsRequested();
     statusBar()->showMessage(uiText(u"\u5df2\u6062\u590d\u4e0a\u6b21\u4fdd\u5b58\u7684\u7528\u6237\u5e03\u5c40"), 4000);
 }
 
