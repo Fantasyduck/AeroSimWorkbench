@@ -76,6 +76,8 @@ Eigen 由 `cmake/EigenDependency.cmake` 统一查找。优先使用标准 Eigen3
 
 `scripts\build-workbench-windows.cmd full [run]` 构建带曲线的工作台，`no-qwt [run]` 关闭 Qwt 绘图；两种模式都需要分析模块使用的 Eigen。加 `run` 会启动构建后已部署运行库的工作台。
 
+`full` 与统一后处理入口使用的 `postprocess` 模式会显式设置 `AEROSIM_BUILD_CHARTS=ON` 和 `AEROSIM_BUILD_CURVES=ON`，覆盖旧缓存中的关闭设置；`no-qwt` 模式将这两个选项设为 `OFF`。
+
 首次构建可在 VS2017 x64 开发者命令提示符中配置本机依赖位置后运行：
 
 ```bat
