@@ -19,6 +19,35 @@ function Run-CMake([string[]] $Arguments) {
     if ($LASTEXITCODE -ne 0) { throw "CMake failed with exit code $LASTEXITCODE." }
 }
 
+function Download-Archive([string] $Url, [string] $Destination) {
+    $curl = Get-Command curl.exe -ErrorAction SilentlyContinue
+    if ($curl) {
+        Write-Host '[INFO] Downloading with curl.exe...'
+        $info = New-Object System.Diagnostics.ProcessStartInfo
+        $info.FileName = $curl.Source
+        $info.Arguments = "--fail --location --silent --show-error --connect-timeout 15 --max-time 180 --output `"$Destination`" `"$Url`""
+        $info.UseShellExecute = $false
+        $info.CreateNoWindow = $true
+        $info.RedirectStandardError = $true
+        $process = New-Object System.Diagnostics.Process
+        $process.StartInfo = $info
+        try {
+            if (-not $process.Start()) { throw 'Could not start curl.exe.' }
+            $errorText = $process.StandardError.ReadToEnd()
+            $process.WaitForExit()
+            if ($process.ExitCode -eq 0) { return }
+            Write-Warning "curl.exe failed ($($process.ExitCode)): $errorText"
+        } catch {
+            Write-Warning "curl.exe could not complete the download: $($_.Exception.Message)"
+        } finally {
+            $process.Dispose()
+        }
+    }
+    Write-Host '[INFO] Downloading with Windows PowerShell...'
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+    Invoke-WebRequest -UseBasicParsing -Uri $Url -OutFile $Destination -TimeoutSec 180
+}
+
 try {
     Import-Module Microsoft.PowerShell.Utility, Microsoft.PowerShell.Archive
     $projectRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
@@ -98,11 +127,10 @@ try {
         if (-not (Test-Path -LiteralPath $archive)) {
             $downloadUrl = "https://codeload.github.com/czyt1988/QWT/zip/$revision"
             Write-Host "[INFO] Downloading Qwt 7.5.2 from $downloadUrl"
-            [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
             for ($attempt = 1; $attempt -le 3; $attempt++) {
                 try {
                     Write-Host "[INFO] Download attempt $attempt/3..."
-                    Invoke-WebRequest -UseBasicParsing -Uri $downloadUrl -OutFile "$archive.part" -TimeoutSec 180
+                    Download-Archive $downloadUrl "$archive.part"
                     break
                 } catch {
                     Write-Warning "Download failed: $($_.Exception.Message)"
