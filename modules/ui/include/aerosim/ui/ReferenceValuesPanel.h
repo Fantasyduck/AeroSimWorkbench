@@ -9,6 +9,7 @@ class QComboBox;
 class QFormLayout;
 
 namespace aerosim {
+class RadioChoice;
 
 // Window-local reference settings; boundary flow data is not yet supplied by a service.
 class ReferenceValuesPanel final : public QWidget {
@@ -23,8 +24,8 @@ private:
     void updateVisibility();
     void publish();
     QVariantMap draft_;
-    QComboBox *inputMode_ = nullptr;
-    QComboBox *parameterType_ = nullptr;
+    RadioChoice *inputMode_ = nullptr;
+    RadioChoice *parameterType_ = nullptr;
     QWidget *boundarySource_ = nullptr;
     QFormLayout *flowForm_ = nullptr;
     QMap<QString, QPair<QWidget *, QWidget *>> conditionalRows_;

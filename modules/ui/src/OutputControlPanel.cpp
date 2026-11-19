@@ -1,4 +1,5 @@
 #include "aerosim/ui/OutputControlPanel.h"
+#include "OutputControlBinding.h"
 #include <QCheckBox>
 #include <QGridLayout>
 #include <QGroupBox>
@@ -14,13 +15,17 @@ template <size_t N> QString text(const char16_t (&s)[N]) { return QString::fromU
 namespace aerosim {
 OutputControlPanel::OutputControlPanel(const QVariantMap &draft, QWidget *parent) : QWidget(parent), draft_(draft) {
     setObjectName("outputControlPanel"); setProperty("parameterPanel", true); setAttribute(Qt::WA_StyledBackground, true);
-    const QStringList flowNames{"压力","密度","速度u","速度v","速度w","温度","湍流动能","湍流耗散率","组分"};
-    const QStringList flowKeys{"pressure","density","velocity-u","velocity-v","velocity-w","temperature","turbulence-k","turbulence-dissipation","species"};
-    const QStringList wallNames{"马赫数","节点状态","部件编号","初始化状态","热流","x方向摩擦力","y方向摩擦力","z方向摩擦力","摩擦力值","总温","总压"};
-    const QStringList wallKeys{"mach","node-status","component-id","initialization-status","heat-flux","friction-x","friction-y","friction-z","friction-magnitude","total-temperature","total-pressure"};
-    const QStringList variableNames = flowNames + wallNames;
-    const QStringList variableKeys = flowKeys + wallKeys;
-    const QStringList boundaryNames{"farfield","symmetry","wing_down","wing_edge","wing_up"};
+    const QStringList flowNames{"压力","密度","速度u","速度v","速度w","温度","马赫数","节点状态","部件编号","初始化状态","涡量值","x方向涡量","y方向涡量","z方向涡量","总温","总压","Q准则涡量"};
+    const QStringList flowKeys = outputFlowVariableKeys();
+    const QStringList wallNames{"压力","密度","速度u","速度v","速度w","温度","马赫数","节点状态","部件编号","初始化状态","热流","x方向摩擦力","y方向摩擦力","z方向摩擦力","摩擦力值","总温","总压"};
+    const QStringList wallKeys = outputWallVariableKeys();
+    const auto defaults = outputControlDraft(defaultOutputControl());
+    for (auto it = defaults.cbegin(); it != defaults.cend(); ++it)
+        if (!draft_.contains(it.key())) draft_[it.key()] = it.value();
+    QStringList boundaryNames = draft_.value("boundaryNames").toStringList();
+    for (const auto &name : draft_.value("boundaryHistory").toStringList())
+        if (!boundaryNames.contains(name)) boundaryNames.append(name);
+    draft_["boundaryNames"] = boundaryNames;
     auto *layout = new QVBoxLayout(this); layout->setContentsMargins(0,0,0,0); layout->setSpacing(14);
     auto *file = new QGroupBox(text(u"输出文件控制"), this);
     auto *intervals = new QGridLayout(file);
@@ -45,8 +50,8 @@ OutputControlPanel::OutputControlPanel(const QVariantMap &draft, QWidget *parent
         });
     };
     addInterval(0, text(u"续算文件输出间隔"), "restartInterval", 100, 0);
-    addInterval(1, text(u"壁面结果输出间隔"), "wallInterval", -1, -1);
-    addInterval(2, text(u"流场结果输出间隔"), "flowInterval", -1, -1);
+    addInterval(1, text(u"壁面结果输出间隔"), "wallInterval", -1, -1000000000);
+    addInterval(2, text(u"流场结果输出间隔"), "flowInterval", -1, -1000000000);
     layout->addWidget(file);
 
     auto *columns = new QHBoxLayout;
@@ -115,8 +120,8 @@ OutputControlPanel::OutputControlPanel(const QVariantMap &draft, QWidget *parent
         connect(invert, &QPushButton::clicked, this, [bulkSelect] { bulkSelect(true); });
         columns->addWidget(group, columnCount);
     };
-    addChoices(text(u"流场输出变量"), variableNames, variableKeys, "flowVariables", 2);
-    addChoices(text(u"壁面输出变量"), variableNames, variableKeys, "wallVariables", 2);
+    addChoices(text(u"流场输出变量"), flowNames, flowKeys, "flowVariables", 2);
+    addChoices(text(u"壁面输出变量"), wallNames, wallKeys, "wallVariables", 2);
     addChoices(text(u"边界条件收敛历史"), boundaryNames, boundaryNames, "boundaryHistory", 1);
     layout->addLayout(columns);
 }

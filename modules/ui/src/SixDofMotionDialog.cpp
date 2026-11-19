@@ -1,3 +1,4 @@
+#include "aerosim/ui/RadioChoice.h"
 #include "aerosim/ui/SixDofMotionDialog.h"
 #include "MotionDialogLayout.h"
 #include <QGridLayout>
@@ -47,7 +48,7 @@ public:
         auto *form = new QFormLayout;
         layout->addLayout(form);
         current_ = new QComboBox(this); current_->setObjectName(prefix + "Current");
-        frame_ = new QComboBox(this); frame_->setObjectName(prefix + "Frame");
+        frame_ = new RadioChoice(this); frame_->setObjectName(prefix + "Frame");
         frame_->addItem(text(u"惯性系"), "inertial"); frame_->addItem(text(u"随体系"), "body");
         points_ = new QSpinBox(this); points_->setObjectName(prefix + "PointCount"); points_->setRange(1, 1000);
         form->addRow(moment ? text(u"当前力矩") : text(u"当前外力"), current_);
@@ -126,7 +127,7 @@ private:
     bool moment_;
     int selected_ = -1;
     QComboBox *current_ = nullptr;
-    QComboBox *frame_ = nullptr;
+    RadioChoice *frame_ = nullptr;
     QSpinBox *points_ = nullptr;
     QTableWidget *table_ = nullptr;
 };
@@ -138,7 +139,7 @@ SixDofMotionDialog::SixDofMotionDialog(const QVariantMap &parameters, QWidget *p
     setObjectName(release ? "rotationReleaseMotionDialog" : "sixDofMotionDialog");
     setWindowTitle(release ? text(u"旋转抛置参数设置") : text(u"六自由度运动参数设置"));
     setProperty("parameterEditor", true); setModal(true);
-    setStyleSheet(QStringLiteral("QAbstractSpinBox, QComboBox { min-height: 22px; max-height: 22px; padding: 2px 6px; }"));
+    setStyleSheet(QStringLiteral("QAbstractSpinBox, QComboBox { min-height: 22px; max-height: 22px; padding-top: 2px; padding-bottom: 2px; padding-left: 6px; }"));
     auto *layout = new QVBoxLayout(this);
     auto *scroll = new QScrollArea(this); scroll->setObjectName("sixDofScroll");
     scroll->setWidgetResizable(true); scroll->setFrameShape(QFrame::NoFrame);
@@ -179,7 +180,7 @@ SixDofMotionDialog::SixDofMotionDialog(const QVariantMap &parameters, QWidget *p
     if (release) {
         axisGroup = new QGroupBox(text(u"旋转抛置参数"), content);
         auto *axisForm = new QFormLayout(axisGroup); rightLayout->addWidget(axisGroup);
-        auto *definition = new QComboBox(axisGroup); definition->setObjectName("axisDefinition");
+        auto *definition = new RadioChoice(axisGroup); definition->setObjectName("axisDefinition");
         definition->addItem(text(u"方向定义"), "direction"); definition->addItem(text(u"两点定义"), "two-points");
         definition->setCurrentIndex(parameters_.value("axisDefinition") == "two-points" ? 1 : 0);
         parameters_["axisDefinition"] = definition->currentData();
@@ -196,7 +197,7 @@ SixDofMotionDialog::SixDofMotionDialog(const QVariantMap &parameters, QWidget *p
             point2->setVisible(!direction); pointLabel->setVisible(!direction);
             parameters_["axisDefinition"] = definition->currentData();
         };
-        connect(definition, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [=](int) { updateAxis(); });
+        connect(definition, &RadioChoice::currentIndexChanged, this, [=](int) { updateAxis(); });
         updateAxis();
         axisForm->addRow(text(u"转动惯量 (kg·m²)"), number(axisGroup, "momentOfInertia", 1., 0.000001));
         axisForm->addRow(text(u"最大旋转角 (°)"), number(axisGroup, "maximumRotationAngle", 0., 0.));

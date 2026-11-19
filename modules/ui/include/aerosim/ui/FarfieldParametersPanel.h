@@ -10,6 +10,7 @@ class QDoubleSpinBox;
 class QFormLayout;
 
 namespace aerosim {
+class RadioChoice;
 
 class FarfieldParametersPanel final : public QWidget {
     Q_OBJECT
@@ -23,7 +24,7 @@ signals:
 
 private:
     void updateFields();
-    QComboBox *type_ = nullptr;
+    RadioChoice *type_ = nullptr;
     QFormLayout *form_ = nullptr;
     QVariantMap parameters_;
     QMap<QString, QDoubleSpinBox *> numbers_;

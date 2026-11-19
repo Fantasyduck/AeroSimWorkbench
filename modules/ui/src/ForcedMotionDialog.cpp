@@ -1,3 +1,4 @@
+#include "aerosim/ui/RadioChoice.h"
 #include "aerosim/ui/ForcedMotionDialog.h"
 #include "MotionDialogLayout.h"
 #include <QGroupBox>
@@ -36,7 +37,7 @@ ForcedMotionDialog::ForcedMotionDialog(const QVariantMap &parameters, QWidget *p
     setObjectName("forcedMotionDialog");
     setWindowTitle(text(u"强迫运动参数设置"));
     setProperty("parameterEditor", true);
-    setStyleSheet(QStringLiteral("QAbstractSpinBox, QComboBox, QLineEdit { min-height: 22px; max-height: 22px; padding: 2px 6px; }"));
+    setStyleSheet(QStringLiteral("QAbstractSpinBox, QComboBox, QLineEdit { min-height: 22px; max-height: 22px; padding-top: 2px; padding-bottom: 2px; padding-left: 6px; }"));
     setModal(true);
 
     auto *layout = new QVBoxLayout(this);
@@ -81,12 +82,12 @@ ForcedMotionDialog::ForcedMotionDialog(const QVariantMap &parameters, QWidget *p
         return row;
     };
     const auto choice = [this](QWidget *owner, const QString &key, const QStringList &labels, const QStringList &ids) {
-        auto *box = new QComboBox(owner);
+        auto *box = new RadioChoice(owner);
         box->setObjectName(key);
         for (int i = 0; i < labels.size(); ++i) box->addItem(labels[i], ids[i]);
         box->setCurrentIndex(qMax(0, box->findData(parameters_.value(key, ids.first()))));
         parameters_[key] = box->currentData();
-        connect(box, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
+        connect(box, &RadioChoice::currentIndexChanged, this,
                 [this, box, key](int) { parameters_[key] = box->currentData(); });
         return box;
     };
@@ -143,11 +144,11 @@ ForcedMotionDialog::ForcedMotionDialog(const QVariantMap &parameters, QWidget *p
         reduced->setVisible(frequencyType->currentData() == "reduced");
         reducedLabel->setVisible(!reduced->isHidden());
     };
-    connect(rotation, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [=](int) {
+    connect(rotation, &RadioChoice::currentIndexChanged, this, [=](int) {
         update();
         motionLayout::fit(this, rotation->currentData() == "none" ? QSize(600, 260) : QSize(1080, 440));
     });
-    connect(frequencyType, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [update](int) { update(); });
+    connect(frequencyType, &RadioChoice::currentIndexChanged, this, [update](int) { update(); });
     update();
     auto *error = new QLabel(this);
     error->setWordWrap(true);

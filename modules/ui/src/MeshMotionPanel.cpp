@@ -2,9 +2,10 @@
 #include "aerosim/ui/ForcedMotionDialog.h"
 #include "aerosim/ui/FixedAxisMotionDialog.h"
 #include "aerosim/ui/SixDofMotionDialog.h"
+#include "ParameterTableCells.h"
 
 #include <QCheckBox>
-#include <QComboBox>
+#include "aerosim/ui/RadioChoice.h"
 #include <QFormLayout>
 #include <QHeaderView>
 #include <QHBoxLayout>
@@ -55,13 +56,10 @@ MeshMotionPanel::MeshMotionPanel(const QVariantMap &draft, QWidget *parent)
     table_->setColumnCount(4);
     table_->setHorizontalHeaderLabels({uiText(u"运动体名称"), uiText(u"指定运动体"), uiText(u"运动类型"), uiText(u"参数设置")});
     table_->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
-    table_->horizontalHeader()->setMinimumSectionSize(120);
-    table_->verticalHeader()->hide();
-    table_->verticalHeader()->setDefaultSectionSize(42);
-    table_->setMinimumHeight(200);
-    table_->setSelectionBehavior(QAbstractItemView::SelectRows);
-    table_->setSelectionMode(QAbstractItemView::SingleSelection);
-    table_->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    table_->horizontalHeader()->setSectionResizeMode(2, QHeaderView::ResizeToContents);
+    table_->horizontalHeader()->setSectionResizeMode(3, QHeaderView::ResizeToContents);
+    parameterTable::configure(table_);
+    table_->setMinimumHeight(260);
     table_->setEnabled(enabled_->isChecked());
     layout->addWidget(table_);
     auto *hint = new QLabel(uiText(u"运动体和参数为本地配置草稿；指定运动体填写网格或对象名称，真实对象绑定与动网格求解尚未接入。"), this);
@@ -107,10 +105,11 @@ void MeshMotionPanel::rebuildTable()
             edit->setObjectName(QStringLiteral("motionBody%1_%2").arg(row).arg(key));
             edit->setMaxLength(128);
             if (column == 1) edit->setPlaceholderText(uiText(u"填写网格 / 对象名称"));
-            table_->setCellWidget(row, column, edit);
+            edit->setMinimumWidth(96);
+            table_->setCellWidget(row, column, parameterTable::cell(table_, edit));
             connect(edit, &QLineEdit::textChanged, this, [this, row, key](const QString &value) { updateBody(row, key, value); });
         }
-        auto *type = new QComboBox(table_);
+        auto *type = new RadioChoice(table_);
         type->setObjectName(QStringLiteral("motionBody%1_type").arg(row));
         type->addItem(uiText(u"强迫运动"), QStringLiteral("forced"));
         type->addItem(uiText(u"定轴转动"), QStringLiteral("fixed-axis"));
@@ -123,13 +122,13 @@ void MeshMotionPanel::rebuildTable()
             updatedBody["type"] = type->currentData();
             bodies_[row] = updatedBody;
         }
-        table_->setCellWidget(row, 2, type);
-        connect(type, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this, row, type] {
+        parameterTable::choiceCell(table_, row, 2, type);
+        connect(type, &RadioChoice::currentIndexChanged, this, [this, row, type] {
             updateBody(row, "type", type->currentData());
         });
         auto *settings = new QPushButton(uiText(u"设置参数"), table_);
         settings->setObjectName(QStringLiteral("motionBody%1_settings").arg(row));
-        table_->setCellWidget(row, 3, settings);
+        table_->setCellWidget(row, 3, parameterTable::buttonCell(table_, settings));
         connect(settings, &QPushButton::clicked, this, [this, row] {
             table_->setCurrentCell(row, 3);
             if (bodies_.at(row).toMap().value("type") == "forced") {

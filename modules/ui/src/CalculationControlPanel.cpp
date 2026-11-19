@@ -1,7 +1,10 @@
+#include "aerosim/ui/RadioChoice.h"
 #include "aerosim/ui/CalculationControlPanel.h"
+#include "CalculationControlBinding.h"
 
-#include <QComboBox>
 #include <QDoubleSpinBox>
+#include <QComboBox>
+#include <QLineEdit>
 #include <QFormLayout>
 #include <QGroupBox>
 #include <QGridLayout>
@@ -24,12 +27,7 @@ public:
 protected:
     QString textFromValue(double value) const override
     {
-        QString text = QDoubleSpinBox::textFromValue(value);
-        if (text.contains(locale().decimalPoint())) {
-            while (text.endsWith(locale().zeroDigit())) text.chop(1);
-            if (text.endsWith(locale().decimalPoint())) text.chop(1);
-        }
-        return text;
+        return locale().toString(value, 'g', QLocale::FloatingPointShortest);
     }
 };
 }
@@ -40,9 +38,8 @@ CalculationControlPanel::CalculationControlPanel(const QVariantMap &draft, QWidg
     setObjectName(QStringLiteral("calculationControlPanel"));
     setProperty("parameterPanel", true);
     setAttribute(Qt::WA_StyledBackground, true);
-    const QVariantMap defaults = {{"firstOrderIterations", 2000}, {"maximumIterations", 30000},
-        {"convergenceResidual", -10.0}, {"residualMonitorThreshold", 100.0},
-        {"useGpu", false}, {"processCount", 4}};
+    QVariantMap defaults = calculationControlDraft(defaultCalculationControl());
+    defaults["gpuIndex"] = QString();
     for (auto it = defaults.cbegin(); it != defaults.cend(); ++it)
         if (!draft_.contains(it.key())) draft_.insert(it.key(), it.value());
 
@@ -90,11 +87,10 @@ CalculationControlPanel::CalculationControlPanel(const QVariantMap &draft, QWidg
     const auto residual = [this, convergence, addRow](const QString &label, const QString &key, double minimum) {
         auto *editor = new ResidualSpinBox(convergence->parentWidget());
         editor->setObjectName(key);
-        editor->setDecimals(6);
+        editor->setDecimals(17);
         editor->setRange(minimum, 1e9);
         editor->setValue(draft_.value(key).toDouble());
         editor->setKeyboardTracking(false);
-        draft_[key] = editor->value();
         connect(editor, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this, key](double value) {
             draft_[key] = value;
             emit draftChanged(draft_);
@@ -112,7 +108,7 @@ CalculationControlPanel::CalculationControlPanel(const QVariantMap &draft, QWidg
     resourceLayout->setColumnStretch(0, 1);
     resourceLayout->setColumnStretch(1, 1);
     layout->addWidget(resources, 1, 0, 1, 2);
-    auto *gpu = new QComboBox(resources);
+    auto *gpu = new RadioChoice(resources);
     gpu->setObjectName(QStringLiteral("useGpu"));
     gpu->addItem(uiText(u"不使用GPU计算"), false);
     gpu->addItem(uiText(u"使用GPU计算"), true);
@@ -121,16 +117,44 @@ CalculationControlPanel::CalculationControlPanel(const QVariantMap &draft, QWidg
     gpuLabel->setBuddy(gpu);
     resourceLayout->addWidget(gpuLabel, 0, 0);
     resourceLayout->addWidget(gpu, 1, 0);
-    connect(gpu, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this, gpu](int) {
-        draft_["useGpu"] = gpu->currentData();
-        emit draftChanged(draft_);
-    });
 
     auto *processes = integer(resources, "processCount", 1, 65536);
     auto *processLabel = new QLabel(uiText(u"计算进程数"), resources);
     processLabel->setBuddy(processes);
     resourceLayout->addWidget(processLabel, 0, 1);
     resourceLayout->addWidget(processes, 1, 1);
+
+    auto *gpuSettings = new QGroupBox(uiText(u"GPU 计算设置"), resources);
+    gpuSettings->setObjectName(QStringLiteral("gpuSettingsGroup"));
+    auto *gpuForm = new QFormLayout(gpuSettings);
+    gpuForm->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
+    gpuForm->setRowWrapPolicy(QFormLayout::WrapLongRows);
+    gpuForm->setHorizontalSpacing(18);
+    gpuForm->setVerticalSpacing(8);
+    addRow(gpuForm, uiText(u"GPU 卡数"), integer(gpuSettings, "gpuCount", 1, 65536));
+    auto *gpuIndex = new QComboBox(gpuSettings);
+    gpuIndex->setObjectName(QStringLiteral("gpuIndex"));
+    gpuIndex->setEditable(true);
+    gpuIndex->setInsertPolicy(QComboBox::NoInsert);
+    gpuIndex->setCurrentText(draft_.value("gpuIndex").toString());
+    gpuIndex->lineEdit()->setPlaceholderText(uiText(u"填写 GPU 编号"));
+    gpuIndex->setToolTip(uiText(u"当前未接入设备枚举，请填写指定 GPU 编号；文件编码待确认。"));
+    auto *gpuHint = new QLabel(uiText(u"指定 GPU 编码待确认，此项暂不读取或写入 XCF。"), gpuSettings);
+    gpuHint->setWordWrap(true);
+    gpuHint->setProperty("parameterHint", true);
+    addRow(gpuForm, uiText(u"指定计算 GPU"), gpuIndex);
+    gpuForm->addRow(gpuHint);
+    connect(gpuIndex, &QComboBox::currentTextChanged, this, [this](const QString &value) {
+        draft_["gpuIndex"] = value;
+        emit draftChanged(draft_);
+    });
+    resourceLayout->addWidget(gpuSettings, 2, 0, 1, 2);
+    gpuSettings->setVisible(draft_.value("useGpu").toBool());
+    connect(gpu, &RadioChoice::currentIndexChanged, this, [this, gpu, gpuSettings](int) {
+        draft_["useGpu"] = gpu->currentData();
+        gpuSettings->setVisible(gpu->currentData().toBool());
+        emit draftChanged(draft_);
+    });
 }
 
 } // namespace aerosim
