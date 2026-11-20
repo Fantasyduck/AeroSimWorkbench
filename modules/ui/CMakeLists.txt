@@ -16,6 +16,9 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
     add_subdirectory("${CMAKE_CURRENT_LIST_DIR}/../../contracts" contracts)
 endif()
 include("${CMAKE_CURRENT_LIST_DIR}/../../cmake/SARibbonDependency.cmake")
+if(NOT TARGET aerosim_configuration)
+    add_subdirectory("${CMAKE_CURRENT_LIST_DIR}/../configuration" configuration)
+endif()
 find_package(Qt5 5.12.12 EXACT REQUIRED COMPONENTS Svg)
 add_subdirectory(monitor)
 # The two result pages under 智能数据处理. Created before aerosim_ui so the
@@ -23,6 +26,8 @@ add_subdirectory(monitor)
 # only exist when the visualization module was configured.
 add_subdirectory(intelligent)
 add_library(aerosim_ui STATIC
+    src/ParameterTableCells.h
+    src/RadioChoice.cpp include/aerosim/ui/RadioChoice.h
     resources/PostProcessIcons.qrc
     src/CalculationTaskPage.cpp include/aerosim/ui/CalculationTaskPage.h
     src/CalculationTaskInputDialog.cpp include/aerosim/ui/CalculationTaskInputDialog.h
@@ -49,6 +54,7 @@ set_target_properties(aerosim_ui PROPERTIES AUTORCC ON)
 add_library(aerosim::ui ALIAS aerosim_ui)
 target_include_directories(aerosim_ui PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
 target_link_libraries(aerosim_ui PUBLIC aerosim_contracts aerosim_monitor_ui
+    aerosim_configuration
     aerosim_intelligent_data Qt5::Widgets Qt5::Svg SARibbonBar::SARibbonBar)
 if(MSVC)
     # Keep Chinese UI source literals UTF-8 when this module is configured as
@@ -57,6 +63,16 @@ if(MSVC)
 endif()
 if(AEROSIM_BUILD_TESTS)
     find_package(Qt5 5.12.12 EXACT REQUIRED COMPONENTS Test)
+    add_executable(aerosim_xcf_ui_test tests/XcfProjectUiTest.cpp)
+    target_link_libraries(aerosim_xcf_ui_test PRIVATE aerosim_ui)
+    add_test(NAME xcf_project_ui COMMAND aerosim_xcf_ui_test)
+    # Exercise the real modal Save/Cancel buttons. This bundled Qt 5.12 Windows
+    # offscreen plugin crashes while painting QMessageBox (native plugin works).
+    if(WIN32)
+        set_tests_properties(xcf_project_ui PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=windows")
+    else()
+        set_tests_properties(xcf_project_ui PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+    endif()
     add_executable(aerosim_parameter_layout_test tests/ParameterLayoutRegression.cpp)
     target_link_libraries(aerosim_parameter_layout_test PRIVATE aerosim_ui)
     add_test(NAME parameter_layout_regression COMMAND aerosim_parameter_layout_test)

@@ -1,3 +1,4 @@
+#include "aerosim/ui/RadioChoice.h"
 #include "aerosim/ui/ReferenceValuesPanel.h"
 
 #include <QComboBox>
@@ -108,7 +109,7 @@ ReferenceValuesPanel::ReferenceValuesPanel(const QVariantMap &draft, QWidget *pa
     flow->setObjectName(QStringLiteral("referenceFlowGroup"));
     flowForm_ = makeForm(flow);
     layout->addWidget(flow, 1);
-    inputMode_ = new QComboBox(flow);
+    inputMode_ = new RadioChoice(flow);
     inputMode_->setObjectName(QStringLiteral("referenceInputMode"));
     inputMode_->addItem(uiText(u"从边界条件获取"), "boundary");
     inputMode_->addItem(uiText(u"自定义输入"), "custom");
@@ -133,7 +134,7 @@ ReferenceValuesPanel::ReferenceValuesPanel(const QVariantMap &draft, QWidget *pa
     flowForm_->addRow(uiText(u"从边界条件获取"), boundarySource_);
     conditionalRows_.insert("boundary", qMakePair(flowForm_->labelForField(boundarySource_), boundarySource_));
 
-    parameterType_ = new QComboBox(flow);
+    parameterType_ = new RadioChoice(flow);
     parameterType_->setObjectName(QStringLiteral("referenceParameterType"));
     parameterType_->addItem(uiText(u"单位雷诺数和静温"), "reynolds-temperature");
     parameterType_->addItem(uiText(u"静温和静压"), "static-temperature-pressure");
@@ -157,8 +158,8 @@ ReferenceValuesPanel::ReferenceValuesPanel(const QVariantMap &draft, QWidget *pa
         conditionalRows_.insert(key, qMakePair(flowForm_->labelForField(editor), static_cast<QWidget *>(editor)));
     }
     const auto changed = [this](int) { updateVisibility(); publish(); };
-    connect(inputMode_, QOverload<int>::of(&QComboBox::currentIndexChanged), this, changed);
-    connect(parameterType_, QOverload<int>::of(&QComboBox::currentIndexChanged), this, changed);
+    connect(inputMode_, &RadioChoice::currentIndexChanged, this, changed);
+    connect(parameterType_, &RadioChoice::currentIndexChanged, this, changed);
     updateVisibility();
 }
 

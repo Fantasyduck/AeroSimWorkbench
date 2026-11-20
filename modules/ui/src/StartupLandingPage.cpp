@@ -2,6 +2,7 @@
 
 #include <QButtonGroup>
 #include <QFrame>
+#include <QDir>
 #include <QGridLayout>
 #include <QHeaderView>
 #include <QLabel>
@@ -89,19 +90,30 @@ StartupLandingPage::StartupLandingPage(QWidget *parent) : QWidget(initializeLand
     contentStack_->setObjectName(QStringLiteral("landingContentStack"));
     contentStack_->addWidget(createStartPage());
     contentStack_->addWidget(createNewPage());
-    contentStack_->addWidget(createPlaceholderPage(QStringLiteral("landingOpenPage"), uiText(u"\u6253\u5f00"),
-        uiText(u"\u9009\u62e9\u5df2\u6709\u5de5\u4f5c\u533a\u6587\u4ef6\uff0c\u6216\u4ece\u6700\u8fd1\u8def\u5f84\u4e2d\u7ee7\u7eed\u3002\u672c\u671f\u4ec5\u63d0\u4f9b Mock \u5165\u53e3\u3002"), true));
-    contentStack_->addWidget(createPlaceholderPage(QStringLiteral("landingSavePage"), uiText(u"\u4fdd\u5b58\u5de5\u4f5c\u533a"),
-        uiText(u"\u5f53\u524d\u672a\u6253\u5f00\u5de5\u4f5c\u533a\u3002\u8fdb\u5165\u5de5\u4f5c\u533a\u540e\u53ef\u6267\u884c\u4fdd\u5b58\u64cd\u4f5c\u3002")));
+    contentStack_->addWidget(createFilePage("landingOpenPage", uiText(u"打开工作区"),
+        uiText(u"选择 XCF 工程文件，打开后进入工作台。当前支持控制方程、计算控制、输出控制与求解方法的已确认参数。"),
+        "openWorkspaceButton", uiText(u"选择 XCF 工程文件"), "open-project"));
+    contentStack_->addWidget(createFilePage("landingSavePage", uiText(u"保存工作区"),
+        uiText(u"保存控制方程、计算控制、输出控制与求解方法的已确认参数，保留其他 XML 内容。指定 GPU 及其他页面编辑暂不写回。"),
+        "saveWorkspaceButton", uiText(u"保存工作区"), "save-project"));
     contentStack_->addWidget(createPlaceholderPage(QStringLiteral("landingSaveTemplatePage"), uiText(u"\u4fdd\u5b58\u6a21\u677f"),
         uiText(u"\u5c06\u5f53\u524d\u5de5\u4f5c\u533a\u7684\u53c2\u6570\u4e0e\u914d\u7f6e\u4fdd\u5b58\u4e3a\u6a21\u677f\u3002\u6a21\u677f\u6301\u4e45\u5316\u5c1a\u672a\u63a5\u5165\u3002")));
-    contentStack_->addWidget(createPlaceholderPage(QStringLiteral("landingSaveAsPage"), uiText(u"\u53e6\u5b58\u4e3a"),
-        uiText(u"\u4e3a\u5f53\u524d\u5de5\u4f5c\u533a\u9009\u62e9\u65b0\u4f4d\u7f6e\u6216\u65b0\u540d\u79f0\u3002\u672c\u671f\u4e0d\u6267\u884c\u6587\u4ef6\u5199\u5165\u3002")));
+    contentStack_->addWidget(createFilePage("landingSaveAsPage", uiText(u"另存为"),
+        uiText(u"将当前工程保存为新的 XCF 文件。当前写入控制方程、计算控制、输出控制与求解方法的已确认参数。"),
+        "saveWorkspaceAsButton", uiText(u"选择保存位置"), "save-project"));
     contentStack_->addWidget(createPlaceholderPage(QStringLiteral("landingClosePage"), uiText(u"\u5173\u95ed\u5de5\u4f5c\u533a"),
         uiText(u"\u5f53\u524d\u672a\u6253\u5f00\u5de5\u4f5c\u533a\u3002\u771f\u5b9e\u5173\u95ed\u4e0e\u672a\u4fdd\u5b58\u68c0\u67e5\u5c06\u7531\u5de5\u4f5c\u533a\u670d\u52a1\u63d0\u4f9b\u3002")));
     rootLayout->addWidget(contentStack_, 1);
     navigationGroup_->button(0)->setChecked(true);
     contentStack_->setCurrentIndex(0);
+    connect(findChild<QPushButton *>("openWorkspaceButton"), &QPushButton::clicked,
+            this, &StartupLandingPage::openWorkspaceRequested);
+    connect(findChild<QPushButton *>("saveWorkspaceButton"), &QPushButton::clicked,
+            this, &StartupLandingPage::saveWorkspaceRequested);
+    connect(findChild<QPushButton *>("saveWorkspaceAsButton"), &QPushButton::clicked,
+            this, &StartupLandingPage::saveWorkspaceAsRequested);
+    setReturnAvailable(false);
+    setWorkspaceStatus(QString(), false);
 
     setStyleSheet(QStringLiteral(
         "QWidget#startupLandingPage { background: #eef2f7; color: #25364c; }"
@@ -131,8 +143,36 @@ StartupLandingPage::StartupLandingPage(QWidget *parent) : QWidget(initializeLand
 void StartupLandingPage::setReturnAvailable(bool available)
 {
     returnButton_->setEnabled(available);
+    findChild<QPushButton *>("saveWorkspaceButton")->setEnabled(available);
+    findChild<QPushButton *>("saveWorkspaceAsButton")->setEnabled(available);
     returnButton_->setToolTip(available ? uiText(u"\u8fd4\u56de\u5f53\u524d\u4e3b\u5de5\u4f5c\u53f0")
                                     : uiText(u"\u5f53\u524d\u5c1a\u672a\u8fdb\u5165\u4e3b\u5de5\u4f5c\u53f0"));
+}
+
+void StartupLandingPage::setWorkspaceStatus(const QString &path, bool modified)
+{
+    const QString description = (path.isEmpty() ? uiText(u"未命名 XCF") : QDir::toNativeSeparators(path))
+        + (modified ? uiText(u" · 有未保存的修改") : uiText(u" · 无未保存修改"));
+    for (auto *label : findChildren<QLabel *>("landingWorkspaceStatus")) label->setText(description);
+}
+
+QWidget *StartupLandingPage::createFilePage(const QString &name, const QString &title,
+    const QString &description, const QString &buttonName, const QString &buttonText, const QString &icon)
+{
+    auto *page = createPlaceholderPage(name, title, description);
+    auto *panel = page->findChild<QFrame *>("landingPlaceholderPanel");
+    auto *layout = qobject_cast<QVBoxLayout *>(panel->layout());
+    if (buttonName != "openWorkspaceButton") {
+        auto *status = new QLabel(panel);
+        status->setObjectName("landingWorkspaceStatus");
+        status->setWordWrap(true);
+        status->setTextInteractionFlags(Qt::TextSelectableByMouse);
+        layout->insertWidget(1, status);
+    }
+    auto *button = createCardButton(buttonName, buttonText, QString(), icon);
+    button->setMaximumWidth(360);
+    layout->insertWidget(layout->count() - 1, button);
+    return page;
 }
 
 QPushButton *StartupLandingPage::createNavButton(const QString &objectName, const QString &text,

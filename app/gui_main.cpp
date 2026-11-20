@@ -120,6 +120,12 @@ int main(int argc, char *argv[])
         postprocess.raise();
         postprocess.activateWindow();
     });
+    QObject::connect(&window, &aerosim::MainWindow::saveAuxiliaryLayoutsRequested,
+                     &postprocess, &aerosim::PostProcessWorkbenchWindow::saveUserLayout);
+    QObject::connect(&window, &aerosim::MainWindow::restoreAuxiliaryLayoutsRequested,
+                     &postprocess, &aerosim::PostProcessWorkbenchWindow::restoreUserLayout);
+    QObject::connect(&window, &aerosim::MainWindow::restoreDefaultAuxiliaryLayoutsRequested,
+                     &postprocess, &aerosim::PostProcessWorkbenchWindow::restoreDefaultLayout);
     QObject::connect(&landing, &aerosim::StartupLandingPage::enterWorkbenchRequested,
                      &window, [&landing, &window](const QString &) {
         landing.setReturnAvailable(true);
@@ -135,6 +141,21 @@ int main(int argc, char *argv[])
         window.raise();
         window.activateWindow();
     });
+    QObject::connect(&window, &aerosim::MainWindow::xcfProjectChanged,
+                     &landing, &aerosim::StartupLandingPage::setWorkspaceStatus);
+    QObject::connect(&landing, &aerosim::StartupLandingPage::openWorkspaceRequested,
+                     &window, [&landing, &window] {
+        if (!window.chooseXcfProject(&landing)) return;
+        landing.setReturnAvailable(true);
+        window.show();
+        landing.hide();
+        window.raise();
+        window.activateWindow();
+    });
+    QObject::connect(&landing, &aerosim::StartupLandingPage::saveWorkspaceRequested,
+                     &window, [&landing, &window] { window.saveXcfProjectDialog(false, &landing); });
+    QObject::connect(&landing, &aerosim::StartupLandingPage::saveWorkspaceAsRequested,
+                     &window, [&landing, &window] { window.saveXcfProjectDialog(true, &landing); });
     QObject::connect(&window, &aerosim::MainWindow::showStartupRequested,
                      &landing, [&landing, &window] {
         window.hide();

@@ -20,6 +20,7 @@
 #include <QMenu>
 #include <QMouseEvent>
 #include <QPushButton>
+#include <QSettings>
 #include <QSlider>
 #include <QSpinBox>
 #include <QSplitter>
@@ -40,6 +41,11 @@ int main(int argc, char *argv[])
     QApplication::setAttribute(Qt::AA_UseHighDpiPixmaps);
     QApplication app(argc,argv);
     aerosim::PostProcessWorkbenchWindow window;
+    window.setLayoutSettingsScope(QStringLiteral("AeroSimWorkbenchPostProcessTest"),
+                                  QStringLiteral("PostProcessLayoutTest"));
+    QSettings layoutSettings(QStringLiteral("AeroSimWorkbenchPostProcessTest"),
+                             QStringLiteral("PostProcessLayoutTest"));
+    layoutSettings.clear();
     const auto action = [&window](const char *name) { return window.findChild<QAction *>(QString::fromLatin1(name)); };
     auto *tree = window.findChild<QTreeWidget *>("postProcessDatasetTree");
     auto *layers = window.findChild<QListWidget *>("sceneLayerList");
@@ -79,6 +85,26 @@ int main(int argc, char *argv[])
     window.show(); flush();
     for (auto *dock : window.findChildren<QDockWidget *>()) CHECK(!dock->isVisible());
     for (auto *toolbar : window.findChildren<QToolBar *>()) CHECK(window.toolBarArea(toolbar) == Qt::NoToolBarArea);
+
+    content->setSizes({390, 610});
+    nav->setCurrentIndex(1);
+    flush();
+    const QList<int> savedContentSizes = content->sizes();
+    window.saveUserLayout();
+    CHECK(layoutSettings.value(QStringLiteral("UserLayout/version")).toInt() == 1);
+    content->setSizes({180, 820});
+    nav->setCurrentIndex(0);
+    window.restoreUserLayout();
+    flush();
+    const QList<int> restoredContentSizes = content->sizes();
+    const double savedContentRatio = double(savedContentSizes.at(0))
+        / (savedContentSizes.at(0) + savedContentSizes.at(1));
+    const double restoredContentRatio = double(restoredContentSizes.at(0))
+        / (restoredContentSizes.at(0) + restoredContentSizes.at(1));
+    CHECK(qAbs(savedContentRatio - restoredContentRatio) < 0.03);
+    CHECK(nav->currentIndex() == 1);
+    window.restoreDefaultLayout();
+    CHECK(nav->currentIndex() == 0);
 
     CHECK(window.windowTitle().contains(QString::fromUtf8("可视化分析台")));
     auto *sphere = window.findChild<QWidget *>("postProcessOrientationControl"); CHECK(sphere && sphere->isVisible());

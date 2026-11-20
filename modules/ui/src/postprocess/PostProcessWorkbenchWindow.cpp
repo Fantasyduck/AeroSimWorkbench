@@ -43,6 +43,7 @@
 #include <QPixmap>
 #include <QSlider>
 #include <QScrollArea>
+#include <QSettings>
 #include <QSvgRenderer>
 #include <QTimer>
 #include <QThread>
@@ -275,17 +276,17 @@ PostProcessWorkbenchWindow::PostProcessWorkbenchWindow(QWidget *parent)
     createActions();
     auto *workbench = new QWidget(this); auto *root = new QVBoxLayout(workbench); root->setContentsMargins(0, 0, 0, 0); root->setSpacing(0);
     workbench->setObjectName(QStringLiteral("postProcessWorkspace"));
-    auto *content = new QSplitter(Qt::Horizontal, workbench); content->setObjectName(uiText(u"postProcessContent"));
-    auto *tabs = new QTabWidget(content); tabs->setObjectName(uiText(u"postProcessNavigator")); tabs->setMinimumWidth(250);
+    contentSplitter_ = new QSplitter(Qt::Horizontal, workbench); contentSplitter_->setObjectName(uiText(u"postProcessContent"));
+    navigationTabs_ = new QTabWidget(contentSplitter_); navigationTabs_->setObjectName(uiText(u"postProcessNavigator")); navigationTabs_->setMinimumWidth(250);
     navigationPanels_[1] = createDataPanel(); navigationPanels_[2] = createObjectPanel();
-    tabs->addTab(navigationPanels_[1], uiText(u"数据")); tabs->addTab(navigationPanels_[2], uiText(u"对象"));
-    tabs->setTabsClosable(true);
-    connect(tabs, &QTabWidget::tabCloseRequested, this, [tabs](int index) {
-        tabs->removeTab(index);
-        if (tabs->count() == 0) tabs->hide();
+    navigationTabs_->addTab(navigationPanels_[1], uiText(u"数据")); navigationTabs_->addTab(navigationPanels_[2], uiText(u"对象"));
+    navigationTabs_->setTabsClosable(true);
+    connect(navigationTabs_, &QTabWidget::tabCloseRequested, this, [this](int index) {
+        navigationTabs_->removeTab(index);
+        if (navigationTabs_->count() == 0) navigationTabs_->hide();
     });
-    content->addWidget(tabs); content->addWidget(createViewportPanel()); content->setStretchFactor(1, 1); content->setSizes({270, 1170}); content->setChildrenCollapsible(false);
-    root->addWidget(content, 1); root->addWidget(createTimeline()); setCentralWidget(workbench);
+    contentSplitter_->addWidget(navigationTabs_); contentSplitter_->addWidget(createViewportPanel()); contentSplitter_->setStretchFactor(1, 1); contentSplitter_->setSizes({270, 1170}); contentSplitter_->setChildrenCollapsible(false);
+    root->addWidget(contentSplitter_, 1); root->addWidget(createTimeline()); setCentralWidget(workbench);
     statusBar()->showMessage(uiText(u"请选择可视化数据；读取服务尚未接入。"));
     // Scope workspace styling so SARibbon's buttons, tabs and window controls
     // retain their own metrics. Native inputs use the same style as MainWindow.
@@ -337,10 +338,89 @@ PostProcessWorkbenchWindow::PostProcessWorkbenchWindow(QWidget *parent)
         findChild<QToolButton *>(name)->setEnabled(false);
     timeLabel_->setText(uiText(u"无时间数据"));
     updateSelectionActions();
-    connect(tabs, &QTabWidget::currentChanged, this, [this, tabs](int index) {
-        if (tabs->widget(index) == navigationPanels_[1]) updateDataSelection(datasetTree_->currentItem(), 0);
-        if (tabs->widget(index) == navigationPanels_[2]) updateSelectionDetails();
+    connect(navigationTabs_, &QTabWidget::currentChanged, this, [this](int index) {
+        if (navigationTabs_->widget(index) == navigationPanels_[1]) updateDataSelection(datasetTree_->currentItem(), 0);
+        if (navigationTabs_->widget(index) == navigationPanels_[2]) updateSelectionDetails();
     });
+}
+
+void PostProcessWorkbenchWindow::setLayoutSettingsScope(const QString &organization,
+                                                        const QString &application)
+{
+    layoutSettingsOrg_ = organization;
+    layoutSettingsApp_ = application;
+}
+
+void PostProcessWorkbenchWindow::saveUserLayout()
+{
+    QSettings settings(layoutSettingsOrg_, layoutSettingsApp_);
+    settings.beginGroup(QStringLiteral("UserLayout"));
+    settings.remove(QString());
+    settings.setValue(QStringLiteral("version"), 1);
+    settings.setValue(QStringLiteral("geometry"), saveGeometry());
+    const QList<int> sizes = contentSplitter_->sizes();
+    const int total = sizes.size() == 2 ? sizes.at(0) + sizes.at(1) : 0;
+    settings.setValue(QStringLiteral("navigatorRatio"),
+                      total > 0 ? double(sizes.at(0)) / total : 270.0 / 1440.0);
+    settings.setValue(QStringLiteral("dataPanelVisible"),
+                      navigationTabs_->indexOf(navigationPanels_[1]) >= 0);
+    settings.setValue(QStringLiteral("objectPanelVisible"),
+                      navigationTabs_->indexOf(navigationPanels_[2]) >= 0);
+    settings.setValue(QStringLiteral("navigatorPanel"),
+                      navigationTabs_->currentWidget() == navigationPanels_[2] ? 2 : 1);
+    settings.setValue(QStringLiteral("probeVisible"), probeDock_ && probeDock_->isVisible());
+    settings.setValue(QStringLiteral("deepSeekVisible"),
+                      deepSeekHarnessDock_ && deepSeekHarnessDock_->isVisible());
+    settings.endGroup();
+    settings.sync();
+}
+
+void PostProcessWorkbenchWindow::restoreUserLayout()
+{
+    QSettings settings(layoutSettingsOrg_, layoutSettingsApp_);
+    settings.beginGroup(QStringLiteral("UserLayout"));
+    if (settings.value(QStringLiteral("version")).toInt() != 1) {
+        settings.endGroup();
+        return;
+    }
+    const QByteArray geometry = settings.value(QStringLiteral("geometry")).toByteArray();
+    const double ratio = qBound(0.15, settings.value(QStringLiteral("navigatorRatio"), 270.0 / 1440.0).toDouble(), 0.45);
+    const bool dataPanelVisible = settings.value(QStringLiteral("dataPanelVisible"), true).toBool();
+    const bool objectPanelVisible = settings.value(QStringLiteral("objectPanelVisible"), true).toBool();
+    const int navigatorPanel = settings.value(QStringLiteral("navigatorPanel"), 1).toInt();
+    const bool probeVisible = settings.value(QStringLiteral("probeVisible"), false).toBool();
+    const bool deepSeekVisible = settings.value(QStringLiteral("deepSeekVisible"), false).toBool();
+    settings.endGroup();
+    if (!geometry.isEmpty()) restoreGeometry(geometry);
+    const int extent = qMax(1, contentSplitter_->width());
+    contentSplitter_->setSizes({qRound(extent * ratio), qRound(extent * (1.0 - ratio))});
+    for (int panel = 1; panel <= 2; ++panel) {
+        const bool visible = panel == 1 ? dataPanelVisible : objectPanelVisible;
+        const int index = navigationTabs_->indexOf(navigationPanels_[panel]);
+        if (visible && index < 0) showNavigationPanel(panel);
+        else if (!visible && index >= 0) navigationTabs_->removeTab(index);
+    }
+    if (navigationTabs_->count() > 0) {
+        navigationTabs_->show();
+        const int index = navigationTabs_->indexOf(navigationPanels_[navigatorPanel == 2 ? 2 : 1]);
+        if (index >= 0) navigationTabs_->setCurrentIndex(index);
+    } else {
+        navigationTabs_->hide();
+    }
+    if (probeVisible) showProbePanel();
+    else if (probeDock_) probeDock_->hide();
+    if (deepSeekVisible) openDeepSeekHarness();
+    else if (deepSeekHarnessDock_) deepSeekHarnessDock_->hide();
+}
+
+void PostProcessWorkbenchWindow::restoreDefaultLayout()
+{
+    contentSplitter_->setSizes({270, 1170});
+    showNavigationPanel(1);
+    showNavigationPanel(2);
+    navigationTabs_->setCurrentWidget(navigationPanels_[1]);
+    if (probeDock_) probeDock_->hide();
+    if (deepSeekHarnessDock_) deepSeekHarnessDock_->hide();
 }
 
 void PostProcessWorkbenchWindow::createActions() {

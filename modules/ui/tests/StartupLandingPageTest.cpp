@@ -45,10 +45,25 @@ int main(int argc, char **argv)
     if (!check(entered && source == "recent-mock", "Recent workspace did not request workbench entry")) return 6;
     landing.findChild<QPushButton *>("landingOpenNav")->click();
     if (!check(stack->currentWidget()->objectName() == "landingOpenPage"
-               && landing.findChild<QPushButton *>("openWorkspaceMockButton"),
-               "Open workspace placeholder is incomplete")) return 7;
+               && landing.findChild<QPushButton *>("openWorkspaceButton"),
+               "Open workspace entry is incomplete")) return 7;
+    bool openRequested = false, saveRequested = false, saveAsRequested = false;
+    QObject::connect(&landing, &aerosim::StartupLandingPage::openWorkspaceRequested,
+                     [&] { openRequested = true; });
+    QObject::connect(&landing, &aerosim::StartupLandingPage::saveWorkspaceRequested,
+                     [&] { saveRequested = true; });
+    QObject::connect(&landing, &aerosim::StartupLandingPage::saveWorkspaceAsRequested,
+                     [&] { saveAsRequested = true; });
+    landing.findChild<QPushButton *>("openWorkspaceButton")->click();
+    auto *save = landing.findChild<QPushButton *>("saveWorkspaceButton");
+    auto *saveAs = landing.findChild<QPushButton *>("saveWorkspaceAsButton");
+    if (!check(openRequested && !save->isEnabled() && !saveAs->isEnabled(),
+               "File actions must disable saving before entering a workspace")) return 9;
     landing.setReturnAvailable(true);
     if (!check(returnButton->isEnabled(), "Return button state was not updated")) return 8;
+    save->click();
+    saveAs->click();
+    if (!check(saveRequested && saveAsRequested, "Landing save actions not connected")) return 10;
     QTextStream(stdout) << "Startup landing navigation and Mock entry interactions passed\n";
     return 0;
 }

@@ -231,36 +231,106 @@ void testMainWindow()
     QApplication::processEvents();
     check(QSettings(QStringLiteral("AeroSimWorkbenchFrameworkTest"),
                     QStringLiteral("UiLayoutFrameworkTest"))
-              .value(QStringLiteral("UserLayout/version")).toInt() != 1,
+              .value(QStringLiteral("UserLayout/version")).toInt() != 2,
           "no layout record persists before any save");
 
-    // (b) Save a user layout -> a single record exists.
+    // (b) Save a deliberately changed page layout and navigation context.
+    QTreeWidgetItem *resultDataItem = nullptr;
+    if (tree) {
+        QList<QTreeWidgetItem *> pending;
+        for (int i = 0; i < tree->topLevelItemCount(); ++i) pending.append(tree->topLevelItem(i));
+        while (!pending.isEmpty()) {
+            QTreeWidgetItem *item = pending.takeFirst();
+            if (item->data(0, Qt::UserRole + 1).toString() == QStringLiteral("result-data-table")) {
+                resultDataItem = item;
+                break;
+            }
+            for (int i = 0; i < item->childCount(); ++i) pending.append(item->child(i));
+        }
+        if (resultDataItem) tree->setCurrentItem(resultDataItem);
+    }
+    QApplication::processEvents();
+    auto *resultSplit = window.findChild<QSplitter *>(QStringLiteral("resultDataSplit"));
+    auto *resultRightSplit = window.findChild<QSplitter *>(QStringLiteral("resultDataRightSplit"));
+    // Keep the tree ratio above its effective minimum at the narrowest CI
+    // window; otherwise QSplitter must legitimately clamp it after docks are
+    // restored and an exact ratio comparison would be meaningless.
+    if (resultSplit) resultSplit->setSizes({500, 500});
+    if (resultRightSplit) resultRightSplit->setSizes({300, 500});
+    QApplication::processEvents();
+    const QList<int> savedResultSizes = resultSplit ? resultSplit->sizes() : QList<int>();
+    const QList<int> savedRightSizes = resultRightSplit ? resultRightSplit->sizes() : QList<int>();
     if (saveAction) saveAction->trigger();
     QApplication::processEvents();
     check(QSettings(QStringLiteral("AeroSimWorkbenchFrameworkTest"),
                     QStringLiteral("UiLayoutFrameworkTest"))
-              .value(QStringLiteral("UserLayout/version")).toInt() == 1,
+              .value(QStringLiteral("UserLayout/version")).toInt() == 2,
           "save creates a layout record");
+    check(!QSettings(QStringLiteral("AeroSimWorkbenchFrameworkTest"),
+                     QStringLiteral("UiLayoutFrameworkTest"))
+               .value(QStringLiteral("UserLayout/resultDataLayout")).toMap().isEmpty(),
+          "save records result-data splitters");
 
     // (c) Overwrite: save again keeps exactly one versioned record.
     if (saveAction) saveAction->trigger();
     QApplication::processEvents();
     check(QSettings(QStringLiteral("AeroSimWorkbenchFrameworkTest"),
                     QStringLiteral("UiLayoutFrameworkTest"))
-              .value(QStringLiteral("UserLayout/version")).toInt() == 1,
+              .value(QStringLiteral("UserLayout/version")).toInt() == 2,
           "save overwrites the single record");
 
-    // (d) Restore last saved layout is safe.
+    // (d) Mutate both page and splitters, then verify restore changes them back.
+    if (resultSplit) resultSplit->setSizes({150, 850});
+    if (resultRightSplit) resultRightSplit->setSizes({600, 200});
+    QApplication::processEvents();
+    const QList<int> mutatedResultSizes = resultSplit ? resultSplit->sizes() : QList<int>();
+    if (auto *compareAction = window.findChild<QAction *>(QStringLiteral("compareAction")))
+        compareAction->trigger();
+    QApplication::processEvents();
     if (restoreAction) { restoreAction->setEnabled(true); restoreAction->trigger(); }
     QApplication::processEvents();
+    QApplication::processEvents();
+    auto *intelligentStack = window.findChild<QStackedWidget *>(QStringLiteral("intelligentDataStack"));
+    check(intelligentStack && intelligentStack->currentIndex() == 0,
+          "restore returns to the saved result-data page");
+    if (resultSplit && savedResultSizes.size() == 2) {
+        const QList<int> restored = resultSplit->sizes();
+        const double savedRatio = double(savedResultSizes.at(0)) / (savedResultSizes.at(0) + savedResultSizes.at(1));
+        const double restoredRatio = double(restored.at(0)) / (restored.at(0) + restored.at(1));
+        const double mutatedRatio = mutatedResultSizes.size() == 2
+            ? double(mutatedResultSizes.at(0)) / (mutatedResultSizes.at(0) + mutatedResultSizes.at(1)) : restoredRatio;
+        check(qAbs(savedRatio - restoredRatio) + 0.03 < qAbs(savedRatio - mutatedRatio),
+              "restore applies result tree splitter preference within active size constraints");
+    }
+    if (resultRightSplit && savedRightSizes.size() == 2) {
+        const QList<int> restored = resultRightSplit->sizes();
+        const double savedRatio = double(savedRightSizes.at(0)) / (savedRightSizes.at(0) + savedRightSizes.at(1));
+        const double restoredRatio = double(restored.at(0)) / (restored.at(0) + restored.at(1));
+        check(qAbs(savedRatio - restoredRatio) < 0.03, "restore applies result table splitter ratio");
+    }
+    check(tree && tree->currentItem()
+              && tree->currentItem()->data(0, Qt::UserRole + 1).toString() == QStringLiteral("result-data-table"),
+          "restore applies saved workspace-tree selection");
 
     // (e) Restore default must not delete the saved personal layout.
     if (defaultAction) defaultAction->trigger();
     QApplication::processEvents();
     check(QSettings(QStringLiteral("AeroSimWorkbenchFrameworkTest"),
                     QStringLiteral("UiLayoutFrameworkTest"))
-              .value(QStringLiteral("UserLayout/version")).toInt() == 1,
+              .value(QStringLiteral("UserLayout/version")).toInt() == 2,
           "restore-default keeps the saved user layout");
+
+    // A real v1 record contains the geometry/dock state but none of the v2
+    // navigation keys. It remains readable and must not collapse the tree.
+    QSettings legacy(QStringLiteral("AeroSimWorkbenchFrameworkTest"),
+                     QStringLiteral("UiLayoutFrameworkTest"));
+    legacy.setValue(QStringLiteral("UserLayout/version"), 1);
+    legacy.remove(QStringLiteral("UserLayout/currentWorkspacePage"));
+    legacy.remove(QStringLiteral("UserLayout/expandedNavigationIds"));
+    legacy.sync();
+    if (restoreAction) { restoreAction->setEnabled(true); restoreAction->trigger(); }
+    QApplication::processEvents();
+    check(restoreAction && restoreAction->isEnabled(), "legacy v1 layout remains supported");
 
     // (f) A corrupt/corrupted-version record falls back safely (no crash).
     QSettings corrupt(QStringLiteral("AeroSimWorkbenchFrameworkTest"),

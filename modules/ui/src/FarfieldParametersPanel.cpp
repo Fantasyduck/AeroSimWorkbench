@@ -1,6 +1,6 @@
+#include "aerosim/ui/RadioChoice.h"
 #include "aerosim/ui/FarfieldParametersPanel.h"
 
-#include <QComboBox>
 #include <QDoubleSpinBox>
 #include <QFormLayout>
 #include <QLocale>
@@ -37,7 +37,7 @@ FarfieldParametersPanel::FarfieldParametersPanel(QWidget *parent) : QWidget(pare
     form_->setLabelAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     form_->setHorizontalSpacing(16);
     form_->setVerticalSpacing(8);
-    type_ = new QComboBox(this);
+    type_ = new RadioChoice(this);
     type_->setObjectName(QStringLiteral("farfieldParameterType"));
     type_->addItem(uiText(u"单位雷诺数和静温"), "reynolds-temperature");
     type_->addItem(uiText(u"静压和静温"), "static-temperature-pressure");
@@ -72,7 +72,7 @@ FarfieldParametersPanel::FarfieldParametersPanel(QWidget *parent) : QWidget(pare
         auto *editor = numbers_.value(key);
         conditionalRows_.insert(key, qMakePair(form_->labelForField(editor), static_cast<QWidget *>(editor)));
     }
-    connect(type_, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int) {
+    connect(type_, &RadioChoice::currentIndexChanged, this, [this](int) {
         parameters_["parameterType"] = type_->currentData();
         updateFields();
         emit parametersChanged();
