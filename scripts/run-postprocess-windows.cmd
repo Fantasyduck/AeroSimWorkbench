@@ -37,16 +37,6 @@ if errorlevel 1 exit /b %errorlevel%
 call "%~dp0build-workbench-windows.cmd" postprocess
 if errorlevel 1 exit /b %errorlevel%
 
-rem Locate either the Visual Studio or single-configuration executable.
-if exist "%POSTPROCESS_DIR%\Debug\aerosim_postprocess.exe" set "POSTPROCESS_EXE=%POSTPROCESS_DIR%\Debug\aerosim_postprocess.exe"
-if not exist "%POSTPROCESS_EXE%" (
-    echo [ERROR] Postprocess executable was not found: "%POSTPROCESS_EXE%"
-    exit /b 2
-)
-rem Qt runtime deployment is performed by the executable's CMake build target.
-if defined AEROSIM_VTK_BIN set "PATH=%AEROSIM_VTK_BIN%;%PATH%"
-if defined AEROSIM_CGNS_ROOT set "PATH=%AEROSIM_CGNS_ROOT%\bin;%PATH%"
-
 rem Session 0 has no interactive desktop.
 powershell.exe -NoProfile -Command "if ((Get-Process -Id $PID).SessionId -eq 0) { exit 1 }"
 if errorlevel 1 (
@@ -54,7 +44,5 @@ if errorlevel 1 (
     exit /b 0
 )
 
-rem Use the deployed runtime next to the executable when launching the GUI.
-set "AEROSIM_POSTPROCESS_EXECUTABLE=%POSTPROCESS_EXE%"
-powershell.exe -NoProfile -WindowStyle Hidden -Command "$info=New-Object System.Diagnostics.ProcessStartInfo; $info.FileName=$env:AEROSIM_POSTPROCESS_EXECUTABLE; $info.WorkingDirectory=[System.IO.Path]::GetDirectoryName($info.FileName); $info.UseShellExecute=$false; [System.Diagnostics.Process]::Start($info) | Out-Null"
+call "%~dp0run-gui-windows.cmd" -Postprocess
 exit /b %errorlevel%

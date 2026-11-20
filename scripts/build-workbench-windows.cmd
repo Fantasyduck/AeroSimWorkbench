@@ -125,11 +125,9 @@ call "%CACHED_VCVARS%" -vcvars_ver=%CACHED_MSVC_VERSION%
 exit /b %errorlevel%
 
 :run_workbench
-set "GUI_DIR=%AEROSIM_WINDOWS_BUILD_DIR%"
-if "%WORKBENCH_TARGET%"=="aerosim_postprocess" set "GUI_DIR=%AEROSIM_WINDOWS_BUILD_DIR%\postprocess"
-set "GUI_EXE=%GUI_DIR%\%WORKBENCH_TARGET%.exe"
-if exist "%GUI_DIR%\Debug\%WORKBENCH_TARGET%.exe" set "GUI_EXE=%GUI_DIR%\Debug\%WORKBENCH_TARGET%.exe"
-"%GUI_EXE%" --workbench
+set "LAUNCH_MODE=-Workbench"
+if "%WORKBENCH_TARGET%"=="aerosim_postprocess" set "LAUNCH_MODE=-Postprocess"
+call "%~dp0run-gui-windows.cmd" %LAUNCH_MODE%
 exit /b %errorlevel%
 
 :usage

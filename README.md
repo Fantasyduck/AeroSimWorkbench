@@ -17,7 +17,7 @@ set "AEROSIM_QT_ROOT=C:\Qt\5.12.12\msvc2017_64"
 set "AEROSIM_SARIBBON_SOURCE_DIR=<本机 SARibbon 2.9.3 源码目录>"
 scripts\build-windows.cmd all Debug
 build-windows\Debug\aerosim_cli.exe --mock-once
-build-windows\Debug\aerosim_gui.exe
+scripts\run-gui-windows.cmd
 ```
 
 GUI 构建默认带监控曲线模块，因此配置阶段需要 Qwt 7.5 与 Eigen 3；指向本地副本即可（缺失时 CMake 会直接说明缺哪一个）：
@@ -37,8 +37,10 @@ scripts\build-windows.cmd all Debug
 set "AEROSIM_VTK_DIR=D:\Project\VTK\lib\cmake\vtk-8.2"
 set "AEROSIM_VTK_BIN=D:\Project\VTK\bin"
 set "AEROSIM_ENABLE_VTK_VIEWER=1"
-build-postprocess\Debug\aerosim_gui.exe --postprocess
+scripts\run-gui-windows.cmd
 ```
+
+在主界面打开“后处理 → 后处理工作台”。
 
 Linux（需自行准备同版本 Qt；当前尚未实机验证）：
 

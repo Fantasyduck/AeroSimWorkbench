@@ -94,11 +94,3 @@ if(AEROSIM_BUILD_MESH_VIEWER)
         add_test(NAME mesh_boundary_geometry COMMAND aerosim_mesh_boundary_tests)
     endif()
 endif()
-
-if(WIN32 AND TARGET vtkCommonCore)
-    # Evaluate the imported target here, where VTK's targets are visible.
-    set(vtk_runtime_file "${CMAKE_CURRENT_BINARY_DIR}/vtk-runtime-$<CONFIG>.cmake")
-    file(GENERATE OUTPUT "${vtk_runtime_file}"
-        CONTENT "list(APPEND EXTRA_RUNTIME_DIRECTORIES [==[$<TARGET_FILE_DIR:vtkCommonCore>]==])\n")
-    set_property(GLOBAL PROPERTY AEROSIM_VTK_RUNTIME_FILE "${vtk_runtime_file}")
-endif()

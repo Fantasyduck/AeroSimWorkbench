@@ -3,8 +3,6 @@ setlocal EnableDelayedExpansion
 set "ROOT=%~dp0.."
 rem Optional machine-local dependency paths; never committed.
 if exist "%ROOT%\aerosim-windows.local.cmd" call "%ROOT%\aerosim-windows.local.cmd"
-rem Set this to the directory containing the matching VTK x64 Debug DLLs.
-rem Example: set "AEROSIM_VTK_BIN=F:\Dependencies\VTK\bin"
 if not defined AEROSIM_QT_ROOT (
     echo Set AEROSIM_QT_ROOT to the Qt 5.12.12 msvc2017_64 directory.
     exit /b 2
@@ -65,8 +63,6 @@ set "VTK_ARGS="
 if defined AEROSIM_VTK_DIR set VTK_ARGS=-DVTK_DIR="%AEROSIM_VTK_DIR%"
 set "CGNS_ARGS="
 if defined AEROSIM_CGNS_ROOT set CGNS_ARGS=-DAEROSIM_CGNS_ROOT="%AEROSIM_CGNS_ROOT%"
-set "VTK_BIN_ARGS="
-if defined AEROSIM_VTK_BIN set VTK_BIN_ARGS="-DAEROSIM_VTK_BIN:PATH=%AEROSIM_VTK_BIN%"
 
 cmake -S "%ROOT%" -B "%AEROSIM_BUILD_DIR%" -G "Visual Studio 15 2017 Win64" ^
     "-DCMAKE_PREFIX_PATH=%AEROSIM_QT_ROOT%" ^
@@ -74,7 +70,7 @@ cmake -S "%ROOT%" -B "%AEROSIM_BUILD_DIR%" -G "Visual Studio 15 2017 Win64" ^
     "-DAEROSIM_BUILD_STACK_PROBE=%AEROSIM_BUILD_STACK_PROBE%" ^
     "-DAEROSIM_BUILD_MESH_VIEWER=%AEROSIM_BUILD_MESH_VIEWER%" ^
     "-DSARIBBON_SOURCE_DIR=%AEROSIM_SARIBBON_SOURCE_DIR%" ^
-    %VIS_ARGS% %QWT_ARGS% %EIGEN_ARGS% %VTK_ARGS% %CGNS_ARGS% %VTK_BIN_ARGS%
+    %VIS_ARGS% %QWT_ARGS% %EIGEN_ARGS% %VTK_ARGS% %CGNS_ARGS%
 if errorlevel 1 exit /b %errorlevel%
 
 if /I "%TARGET%"=="all" (

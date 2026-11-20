@@ -1,16 +1,19 @@
 # Windows 第一阶段骨架部署
 
-## 构建目录直接启动
+## 从源码构建和启动
 
-Windows 下构建 `aerosim_gui` 或 `aerosim_postprocess` 后，会自动调用所选 Qt SDK 的 `windeployqt`，按当前 Debug/Release 配置将 Qt DLL、平台及图像插件部署到 EXE 所在目录，同时生成相对路径的 `qt.conf` 和复制可用的 Qt 中文翻译。构建完成后可从该目录双击 EXE。Visual Studio 多配置构建的程序位于对应的 `Debug` 或 `Release` 子目录。
+在已配置依赖的 VS2017 x64 开发者命令提示符中构建，随后用启动脚本打开主界面。
 
-部署步骤会从所选 Qt SDK 补齐对应配置的 Qt OpenGL DLL，例如 Debug 使用 `Qt5OpenGLd.dll`。启用 VTK/CGNS 时，还会使用 MSVC 的 `dumpbin` 递归解析 EXE 的运行库依赖，将所需的第三方 DLL 复制到程序旁边。VTK 目录优先取已导入的 `vtkCommonCore` 目标，额外搜索位置可通过 `AEROSIM_VTK_BIN` 和 `AEROSIM_CGNS_ROOT` 提供。缺失 DLL 会在部署时报告。下载云端构建产物时应保留整个部署目录。
+```bat
+scripts\build-windows.cmd all Debug
+scripts\run-gui-windows.cmd
+```
 
-可在 `scripts/build-windows.cmd` 顶部或 `aerosim-windows.local.cmd` 中设置 `AEROSIM_VTK_BIN`，其值为实际 VTK DLL 目录。构建入口会将该目录传入 CMake 并保存，后续 `aerosim_gui_deploy`、`aerosim_postprocess_deploy` 可复用。这里的运行库目录与 `AEROSIM_VTK_DIR` 指定的 VTK CMake 配置目录分别设置。
+构建只生成程序和编译产物。启动脚本从本机依赖目录加载 DLL 和 Qt 插件，环境变量只传给本次启动的进程。它从默认的 `build-windows` 或 `AEROSIM_BUILD_DIR` 指定的构建目录定位 EXE，兼容工作台入口使用的 `AEROSIM_WINDOWS_BUILD_DIR`。使用 `scripts\run-gui-windows.cmd -Postprocess` 可打开已编译的独立后处理程序。
 
-如果 CMake 已找到 CGNS 导入库，部署也会检查该库所在目录和相邻的 `bin` 目录，包括对应构建配置的子目录。可通过 `AEROSIM_CGNS_ROOT` 补充 CGNS 安装目录或构建目录。下载构建产物后，从完整部署目录启动以加载 CGNS 及其依赖。
+依赖路径优先读取环境变量或仓库根目录下的 `aerosim-windows.local.cmd`，缺省时复用构建目录下的 CMake 缓存。Qt 使用 `AEROSIM_QT_ROOT` 或缓存中的 `Qt5_DIR`。启用 VTK 时，可用 `AEROSIM_VTK_BIN` 指定 DLL 目录，或由 VTK 的 CMake 包位置查找标准 `bin` 目录。CGNS 使用 `AEROSIM_CGNS_ROOT` 或已链接导入库附近的目录，也支持直接指定 `AEROSIM_CGNS_BIN`。若 HDF5 DLL 单独安装，可设置 `AEROSIM_HDF5_BIN`。相对路径以仓库根目录为基准。
 
-若运行库文件被移走，可执行 `cmake --build <构建目录> --config Debug --target aerosim_gui_deploy` 重新部署；独立后处理窗口使用 `aerosim_postprocess_deploy`。部署工具随所选 Qt SDK 提供，构建环境应包含对应的 Visual Studio 编译器环境，以便部署编译器运行库。Debug 构建用于开发机验证，完整 Release 技术栈仍需匹配的 VTK Release 依赖和目标机验收。
+从其他电脑取得构建产物时，运行机器也需要相同架构和配置的依赖。用全新的构建目录可避免旧构建留下的 DLL 优先加载。完整 Release 技术栈仍需匹配的 VTK Release 依赖和目标机验收。
 
 ## 历史 Release 骨架打包流程
 

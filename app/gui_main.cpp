@@ -225,5 +225,9 @@ int main(int argc, char *argv[])
     }
     const int code = app.exec();
     controller.shutdown();
-    return smoke && !smokePassed ? 7 : code;
+    if (smoke && !smokePassed) {
+        QTextStream(stderr) << "GUI smoke failed: mock task did not report completion before the event loop exited\n";
+        return 7;
+    }
+    return code;
 }

@@ -57,7 +57,7 @@ set "AEROSIM_QT_ROOT=C:\Qt\5.12.12\msvc2017_64"
 set "AEROSIM_SARIBBON_SOURCE_DIR=<本机 SARibbon 2.9.3 源码目录>"
 scripts\build-windows.cmd all Debug
 build-windows\Debug\aerosim_cli.exe --mock-once
-build-windows\Debug\aerosim_gui.exe
+scripts\run-gui-windows.cmd
 ```
 
 默认脚本配置、编译全部当前模块并运行 CTest。
@@ -74,7 +74,7 @@ Eigen 由 `cmake/EigenDependency.cmake` 统一查找。优先使用标准 Eigen3
 
 后处理统一使用 `scripts\run-postprocess-windows.cmd` 构建并启动。脚本从现有构建缓存读取 Qwt 路径，支持在脚本顶部配置 `AEROSIM_QWT_ROOT`，也可通过同名环境变量或仓库根目录的 `aerosim-windows.local.cmd` 覆盖。Qt、SARibbon、Eigen 等依赖沿用现有构建配置；首次构建按下方示例设置。已有构建复用生成器与编译器，启动时自动识别 Ninja 和 Visual Studio 的程序目录。
 
-`scripts\build-workbench-windows.cmd full [run]` 构建带曲线的工作台，`no-qwt [run]` 关闭 Qwt 绘图；两种模式都需要分析模块使用的 Eigen。加 `run` 会启动构建后已部署运行库的工作台。
+`scripts\build-workbench-windows.cmd full [run]` 构建带曲线的工作台，`no-qwt [run]` 关闭 Qwt 绘图。两种模式都需要分析模块使用的 Eigen。加 `run` 会通过 GUI 启动脚本设置运行库路径并打开工作台。
 
 `full` 与统一后处理入口使用的 `postprocess` 模式会显式设置 `AEROSIM_BUILD_CHARTS=ON` 和 `AEROSIM_BUILD_CURVES=ON`，覆盖旧缓存中的关闭设置；`no-qwt` 模式将这两个选项设为 `OFF`。
 

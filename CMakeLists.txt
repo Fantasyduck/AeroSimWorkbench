@@ -71,11 +71,17 @@ if(AEROSIM_BUILD_TESTS)
     add_test(NAME cli_mock_roundtrip COMMAND aerosim_cli --mock-once)
     if(AEROSIM_BUILD_GUI)
         add_test(NAME gui_mock_smoke COMMAND aerosim_gui --smoke)
-        set_tests_properties(gui_mock_smoke PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
         add_test(NAME postprocess_gui_mock_smoke COMMAND aerosim_gui --postprocess --smoke)
-        set_tests_properties(postprocess_gui_mock_smoke PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
         add_test(NAME postprocess_standalone_mock_smoke COMMAND aerosim_postprocess --smoke)
-        set_tests_properties(postprocess_standalone_mock_smoke PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+        set(smoke_environment "QT_QPA_PLATFORM=offscreen")
+        if(WIN32)
+            # CTest uses the offscreen plugin from the configured Qt SDK.
+            list(APPEND smoke_environment
+                "QT_QPA_PLATFORM_PLUGIN_PATH=$<TARGET_FILE_DIR:Qt5::qmake>/../plugins/platforms"
+                "QT_FORCE_STDERR_LOGGING=1")
+        endif()
+        set_tests_properties(gui_mock_smoke postprocess_gui_mock_smoke
+            postprocess_standalone_mock_smoke PROPERTIES ENVIRONMENT "${smoke_environment}")
     endif()
     add_test(NAME postprocess_fixture_check
         COMMAND "${CMAKE_COMMAND}"
