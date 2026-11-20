@@ -668,7 +668,7 @@ bool assembleLog(MonitorLog *log, const QVector<QVector<double>> &raw,
         // A registered convention's own step column, tried before giving up and
         // using the row index: a row index is a fabrication, the column is data.
         log->iterationStep = asIntegers(primaryAxisIndex);
-        log->warnings.append(QStringLiteral("迭代步横轴取自注册规则识别的列 %1。")
+        log->warnings.append(QStringLiteral(u"迭代步横轴取自注册规则识别的列 %1。")
                                  .arg(log->columns.at(primaryAxisIndex).key));
     } else {
         log->iterationStep.reserve(rowCount);

@@ -300,7 +300,7 @@ bool MonitorFileTailSource::poll(MonitorUpdate *update, QString *error)
     // A NUL is never part of valid UTF-8, so this test needs no text decoding and
     // cannot be fooled by a multi-byte character split across two polls.
     if (chunk.contains('\0')) {
-        fatalError_ = QStringLiteral("文件包含二进制内容，不是纯文本监控日志。");
+        fatalError_ = QStringLiteral(u"文件包含二进制内容，不是纯文本监控日志。");
         if (error)
             *error = fatalError_;
         return false;
@@ -431,7 +431,7 @@ void MonitorFileTailSource::resolveAxis(MonitorUpdate *update)
         // iteration columns are absent or still, exactly as the offline chain does.
         chosen = primaryAxisIndex_;
         certain = true;
-        warning = QStringLiteral("迭代步横轴取自注册规则识别的列 %1。")
+        warning = QStringLiteral(u"迭代步横轴取自注册规则识别的列 %1。")
                       .arg(columns_.at(primaryAxisIndex_).key);
     } else if (outer >= 0) {
         // Nothing has moved yet, so the offline rule has nothing to go on either.

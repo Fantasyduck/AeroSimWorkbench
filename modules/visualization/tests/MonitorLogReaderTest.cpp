@@ -278,7 +278,7 @@ void testRegisteredColumnRules()
           QStringLiteral("the registered primary axis supplies the step values"));
     bool mentionedAxis = false;
     for (const QString &warning : log.warnings)
-        if (warning.contains(QStringLiteral("注册规则")))
+        if (warning.contains(QStringLiteral(u"注册规则")))
             mentionedAxis = true;
     check(mentionedAxis, QStringLiteral("using a registered axis is recorded, not silent"));
 
@@ -814,7 +814,7 @@ void testLiveRefusesNonText()
     check(source.start(&error), QStringLiteral("the tail source starts on that file: ") + error);
     MonitorUpdate update;
     check(!source.poll(&update, &error), QStringLiteral("the live path refuses the same binary file"));
-    check(error.contains(QStringLiteral("二进制")),
+    check(error.contains(QStringLiteral(u"二进制")),
           QStringLiteral("the live refusal names the binary content, like the offline one"));
     check(update.rowCount() == 0, QStringLiteral("nothing is delivered from a refused file"));
 
@@ -915,7 +915,7 @@ void testLiveRegisteredPrimaryAxis()
                          "not the row-index fallback"));
     bool mentionedRule = false;
     for (const QString &warning : update.warnings) {
-        if (warning.contains(QStringLiteral("注册规则")))
+        if (warning.contains(QStringLiteral(u"注册规则")))
             mentionedRule = true;
     }
     check(mentionedRule, QStringLiteral("the live path records that a registered column became the axis"));

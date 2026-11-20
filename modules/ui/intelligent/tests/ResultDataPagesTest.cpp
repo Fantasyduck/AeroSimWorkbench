@@ -333,8 +333,8 @@ void ResultDataPagesTest::summaryReadsArbitraryCsvFields()
     QVERIFY(file.open(QIODevice::WriteOnly));
     const QByteArray contents = QByteArray::fromHex("efbbbf")
         + QStringLiteral(u"\"温度 (K)\",\"Pressure, Pa\",备注,状态\r\n"
-                         "300,1.01e5,\"位置 A, 入口\",正常\r\n"
-                         "310,,\"第一行\r\n第二行 \"\"引号\"\"\",\r\n").toUtf8();
+                         u"300,1.01e5,\"位置 A, 入口\",正常\r\n"
+                         u"310,,\"第一行\r\n第二行 \"\"引号\"\"\",\r\n").toUtf8();
     QCOMPARE(file.write(contents), qint64(contents.size()));
     file.close();
 
