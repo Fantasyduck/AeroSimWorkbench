@@ -8,6 +8,8 @@ Windows 下构建 `aerosim_gui` 或 `aerosim_postprocess` 后，会自动调用�
 
 可在 `scripts/build-windows.cmd` 顶部或 `aerosim-windows.local.cmd` 中设置 `AEROSIM_VTK_BIN`，其值为实际 VTK DLL 目录。构建入口会将该目录传入 CMake 并保存，后续 `aerosim_gui_deploy`、`aerosim_postprocess_deploy` 可复用。这里的运行库目录与 `AEROSIM_VTK_DIR` 指定的 VTK CMake 配置目录分别设置。
 
+如果 CMake 已找到 CGNS 导入库，部署也会检查该库所在目录和相邻的 `bin` 目录，包括对应构建配置的子目录。可通过 `AEROSIM_CGNS_ROOT` 补充 CGNS 安装目录或构建目录。下载构建产物后，从完整部署目录启动以加载 CGNS 及其依赖。
+
 若运行库文件被移走，可执行 `cmake --build <构建目录> --config Debug --target aerosim_gui_deploy` 重新部署；独立后处理窗口使用 `aerosim_postprocess_deploy`。部署工具随所选 Qt SDK 提供，构建环境应包含对应的 Visual Studio 编译器环境，以便部署编译器运行库。Debug 构建用于开发机验证，完整 Release 技术栈仍需匹配的 VTK Release 依赖和目标机验收。
 
 ## 历史 Release 骨架打包流程

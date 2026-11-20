@@ -24,8 +24,18 @@ function(aerosim_deploy_qt_runtime target)
     if(AEROSIM_VTK_BIN)
         list(APPEND runtime_directories "${AEROSIM_VTK_BIN}")
     endif()
+    # CGNS may be found through CMake's search paths with no SDK root set.
+    if(IS_ABSOLUTE "${AEROSIM_CGNS_LIBRARY}" AND EXISTS "${AEROSIM_CGNS_LIBRARY}")
+        get_filename_component(cgns_library_directory "${AEROSIM_CGNS_LIBRARY}" DIRECTORY)
+        get_filename_component(cgns_library_parent "${cgns_library_directory}" DIRECTORY)
+        list(APPEND runtime_directories
+            "${cgns_library_directory}"
+            "${cgns_library_parent}/bin/$<CONFIG>"
+            "${cgns_library_parent}/bin")
+    endif()
     if(AEROSIM_CGNS_ROOT)
-        list(APPEND runtime_directories "${AEROSIM_CGNS_ROOT}/bin"
+        list(APPEND runtime_directories "${AEROSIM_CGNS_ROOT}/bin/$<CONFIG>"
+            "${AEROSIM_CGNS_ROOT}/bin"
             "${AEROSIM_CGNS_ROOT}/src/$<CONFIG>")
     endif()
     set(runtime_config_file "${CMAKE_CURRENT_BINARY_DIR}/${target}-runtime-$<CONFIG>.cmake")
